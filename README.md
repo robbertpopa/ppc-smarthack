@@ -29,10 +29,10 @@ Pick a day and a half-hour slot. The screen shows the station state (voltage, tr
 `python -m src.grid.compare_station` compares pandapower and OpenDSS voltages on the synthetic station. To generate a provisional label file:
 
 ```sh
-python -m src.grid.labels --source "PATH_TO/Solar home 2012-2013.csv" --output labels.parquet --days 1
+python -m src.grid.labels --source "PATH_TO/Solar home 2012-2013.csv" --output labels.parquet --days 1 --workers 4
 ```
 
-The input data must be obtained separately; do not commit it. Add `--pv-scale 4` for a synthetic stress scenario, not measured generation. The label schema and battery sign convention still require agreement with P2 and P1, and one day of labels is not enough for model training. `python -m src.grid.audit_labels --source PATH_TO_AUSGRID_CSV --labels PATH_TO_LABELS` audits sampled boundaries; null labels must not be treated as zero. `python -m src.grid.compare_recorded PATH_TO/simulare-case-detalii.csv` compares voltage against OpenDSS at five recorded intervals.
+The input data must be obtained separately; do not commit it. `--workers` runs power flows in parallel and gives the same file as one worker. Add `--pv-scale 4` for a synthetic stress scenario, not measured generation. The label schema and battery sign convention still require agreement with P2 and P1, and one day of labels is not enough for model training. `python -m src.grid.audit_labels --source PATH_TO_AUSGRID_CSV --labels PATH_TO_LABELS` audits sampled boundaries; null labels must not be treated as zero. `python -m src.grid.compare_recorded PATH_TO/simulare-case-detalii.csv` compares voltage against OpenDSS at five recorded intervals.
 
 The default twin is a synthetic three-feeder station. `build_grid({'topology': 'simbench', 'houses': [...]})` gives a separate SimBench benchmark (its 150-degree transformer phase shift needs DC initialization; this is regression tested). Limitations and every assumed parameter are in [src/grid/ASSUMPTIONS.md](src/grid/ASSUMPTIONS.md).
 
