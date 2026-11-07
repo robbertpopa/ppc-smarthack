@@ -10,6 +10,7 @@ from pandapower.auxiliary import LoadflowNotConverged  # noqa: E402
 from src.common.contract import GridState, GuardResult  # noqa: E402
 from src.grid import build_grid, guard, power_flow, safe_share  # noqa: E402
 from src.grid.battery import step  # noqa: E402
+from src.grid.twin import solve  # noqa: E402
 
 
 class TwinTests(unittest.TestCase):
@@ -31,9 +32,10 @@ class TwinTests(unittest.TestCase):
                     {**self.injections["houses"][0], "export_limit_kw": (share + offset) * 100}
                 ],
             }
-            state = power_flow(self.grid, data)
+            state = solve(self.grid, data)
             safe = (
-                state["v_max_pu"] <= 1.05
+                state["v_min_pu"] >= 0.90
+                and state["v_max_pu"] <= 1.05
                 and state["line_loading_max_pct"] <= 100
                 and state["trafo_loading_pct"] <= 100
             )
@@ -112,7 +114,7 @@ class TwinTests(unittest.TestCase):
             "line_loading_max_pct": 0,
             "trafo_loading_pct": 1,
         }
-        with patch("src.grid.guard.power_flow", return_value=state):
+        with patch("src.grid.guard.solve", return_value=state):
             result = guard(self.grid, plan, self.injections)
         self.assertFalse(result["passed"])
         self.assertIn("Voltage below configured minimum", result["violations"])
@@ -130,7 +132,7 @@ class TwinTests(unittest.TestCase):
             "interval_start": "2025-01-01T00:00:00Z",
             "houses": [{"house_id": "H1", "load_kw": 0, "pv_kw": 0, "export_limit_kw": 0}],
         }
-        state = power_flow(grid, data, include_internal=True)
+        state = solve(grid, data)
         self.assertTrue(state["converged"])
         self.assertGreater(state["v_min_pu"], 0.98)
         self.assertLess(state["v_max_pu"], 1.10)
@@ -146,7 +148,7 @@ class TwinTests(unittest.TestCase):
                 for h in houses
             ],
         }
-        state = power_flow(grid, data, include_internal=True)
+        state = solve(grid, data)
         self.assertTrue(state["converged"])
         self.assertGreater(state["v_min_pu"], 0.9)
         self.assertLess(state["v_max_pu"], 1.1)

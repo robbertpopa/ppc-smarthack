@@ -1,5 +1,3 @@
-"""Battery step: positive power charges, negative power discharges, in kW."""
-
 import math
 
 

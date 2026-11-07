@@ -1,9 +1,7 @@
-"""Check proposed plans using the twin. Battery sign: positive means charging."""
-
 import math
 
 from .battery import step
-from .twin import power_flow
+from .twin import limit_violations, solve
 
 
 def guard(grid, plan, injections):
@@ -52,7 +50,6 @@ def guard(grid, plan, injections):
                 step(float(source["battery_soc_kwh"]), power, grid.interval_hours)
             except (ValueError, TypeError) as exc:
                 violations.append(f"{hid}: {exc}")
-        # Express negative net demand as extra generation so both remain nonnegative.
         updated.append(
             {
                 **source,
@@ -64,20 +61,13 @@ def guard(grid, plan, injections):
     if violations:
         return {"passed": False, "violations": violations}
     try:
-        state = power_flow(grid, {**injections, "houses": updated}, include_internal=True)
+        state = solve(grid, {**injections, "houses": updated})
     except (ValueError, KeyError, TypeError) as exc:
         return {"passed": False, "violations": [f"Invalid input: {exc}"]}
     if not state["converged"]:
         violations.append("Power flow did not converge")
     else:
-        if state["v_min_pu"] < grid.min_voltage_pu:
-            violations.append("Voltage below configured minimum")
-        if state["v_max_pu"] > grid.voltage_limit_pu:
-            violations.append("Voltage exceeds configured limit")
-        if state["line_loading_max_pct"] > 100:
-            violations.append("Line loading exceeds 100%")
-        if state["trafo_loading_pct"] > 100:
-            violations.append("Transformer loading exceeds 100%")
+        violations.extend(limit_violations(grid, state))
     return {
         "passed": not violations,
         "violations": violations,

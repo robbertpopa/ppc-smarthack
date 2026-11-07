@@ -7,7 +7,7 @@ Hackathon prototype in progress. The repository contains documentation and a loc
 
 ## Local P3 prototype
 
-Use Python 3.12 as required by the project. Install the project simulation and development dependencies with `python -m pip install -e ".[sim,dev]"`, then `python -m pip install -r requirements-grid.txt` for the additional local comparison and Parquet tools. Run `python -m pytest` for the project tests and `python -m src.grid.compare_station` to compare pandapower and OpenDSS voltages on the synthetic station.
+Use Python 3.12 as required by the project. Install the simulation, comparison/Parquet tool and development dependencies with `python -m pip install -e ".[sim,grid-tools,dev]"`. Run `python -m pytest` for the project tests and `python -m src.grid.compare_station` to compare pandapower and OpenDSS voltages on the synthetic station.
 
 To generate a provisional one-day label file, use:
 

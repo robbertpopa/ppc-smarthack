@@ -1,9 +1,3 @@
-"""Compare a balanced synthetic LV feeder using independent AC solvers.
-
-Run with ``python -m src.grid.compare_solvers``. This is a small validation
-case, not the SimBench station or a model of the PPC network.
-"""
-
 import math
 
 import opendssdirect as dss
@@ -31,7 +25,6 @@ def compare(load_kw, pv_kw):
 
     dss.Text.Command("clear")
     dss.Text.Command("new circuit.test basekv=0.4 pu=1 phases=3 bus1=source")
-    # Make source impedance negligible, matching pandapower's ideal slack bus.
     dss.Text.Command("edit vsource.source r1=0.000001 x1=0.000001 r0=0.000001 x0=0.000001")
     dss.Text.Command(
         "new line.feeder bus1=source bus2=house phases=3 length=0.1 units=km "

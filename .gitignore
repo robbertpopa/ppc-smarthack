@@ -22,4 +22,3 @@ __pycache__/
 *.tfvars
 backend.hcl
 crash.log
-!/requirements-grid.txt
