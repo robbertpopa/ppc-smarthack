@@ -69,11 +69,16 @@ resource "azurerm_role_assignment" "acr_pull" {
 }
 
 resource "azurerm_container_app_environment" "env" {
-  name                       = "cae-${local.name}"
+  name                       = "cae-${local.name}-wp"
   location                   = azurerm_resource_group.rg.location
   resource_group_name        = azurerm_resource_group.rg.name
   log_analytics_workspace_id = azurerm_log_analytics_workspace.logs.id
   tags                       = local.tags
+
+  workload_profile {
+    name                  = "Consumption"
+    workload_profile_type = "Consumption"
+  }
 }
 
 resource "azurerm_container_app_environment_storage" "artifacts" {
@@ -90,6 +95,7 @@ resource "azurerm_container_app" "api" {
   container_app_environment_id = azurerm_container_app_environment.env.id
   resource_group_name          = azurerm_resource_group.rg.name
   revision_mode                = "Single"
+  workload_profile_name        = "Consumption"
   tags                         = local.tags
 
   identity {
