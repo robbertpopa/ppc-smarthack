@@ -78,6 +78,22 @@ class LabelTests(unittest.TestCase):
         self.assertTrue((labels.safe_cap_share == 1.0).all())
         self.assertTrue((labels.provenance == "simulated").all())
 
+    def test_labels_are_identical_with_one_or_two_workers(self):
+        write_csv(self.source, controlled={5: {"01/01/2013"}})
+        outputs = []
+        for workers in (1, 2):
+            output = Path(self.directory.name) / f"labels-{workers}.parquet"
+            generate(self.source, output, "2013-01-01", 1, workers=workers)
+            outputs.append(pd.read_parquet(output))
+        pd.testing.assert_frame_equal(outputs[0], outputs[1])
+
+    def test_workers_must_be_positive(self):
+        write_csv(self.source)
+        with self.assertRaises(ValueError):
+            generate(
+                self.source, Path(self.directory.name) / "x.parquet", "2013-01-01", 1, workers=0
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
