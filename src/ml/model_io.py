@@ -6,6 +6,8 @@ Layout: ``ARTIFACT_URI/models/<model_version>/<pt_id>/``  with ``q05.joblib`` ..
 
 import hashlib
 import json
+import math
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -23,13 +25,22 @@ def quantile_name(q: float) -> str:
 
 
 def git_sha() -> str:
+    """Commit of this code (``-dirty`` if tracked files have uncommitted changes)."""
+    here = Path(__file__).resolve().parent
+
+    def git(*args):
+        return subprocess.run(
+            ["git", *args], cwd=here, capture_output=True, text=True, check=True, timeout=10
+        ).stdout.strip()
+
     try:
-        out = subprocess.run(
-            ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True, timeout=10
-        )
-        return out.stdout.strip() or "unknown"
+        sha = git("rev-parse", "HEAD")
+        dirty = git("status", "--porcelain", "--untracked-files=no")
     except (OSError, subprocess.SubprocessError):
         return "unknown"
+    if not sha:
+        return "unknown"
+    return f"{sha}-dirty" if dirty else sha
 
 
 def file_sha256(path) -> str:
@@ -40,15 +51,37 @@ def file_sha256(path) -> str:
     return digest.hexdigest()
 
 
+def _json_safe(value):
+    """Replace NaN by None so ``metadata.json`` is valid JSON."""
+    if isinstance(value, float) and math.isnan(value):
+        return None
+    if isinstance(value, dict):
+        return {k: _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(v) for v in value]
+    return value
+
+
 def save(models: dict[float, object], meta: dict, out) -> None:
-    """Write one file per quantile and ``metadata.json`` into the folder ``out``."""
+    """Write one file per quantile and ``metadata.json`` into the folder ``out``.
+
+    The files are written to a temporary folder first and swapped in at the end, so a
+    failure never leaves new models next to the old metadata.
+    """
     out = Path(out)
-    out.mkdir(parents=True, exist_ok=True)
+    tmp = out.with_name(f".{out.name}.tmp")
+    old = out.with_name(f".{out.name}.old")
+    shutil.rmtree(tmp, ignore_errors=True)
+    shutil.rmtree(old, ignore_errors=True)
+    tmp.mkdir(parents=True)
     for q, model in models.items():
-        joblib.dump(model, out / f"{quantile_name(q)}.joblib")
-    (out / "metadata.json").write_text(
-        json.dumps(meta, indent=2, sort_keys=True, default=str) + "\n"
-    )
+        joblib.dump(model, tmp / f"{quantile_name(q)}.joblib")
+    text = json.dumps(_json_safe(meta), indent=2, sort_keys=True, default=str, allow_nan=False)
+    (tmp / "metadata.json").write_text(text + "\n")
+    if out.exists():
+        out.rename(old)
+    tmp.rename(out)
+    shutil.rmtree(old, ignore_errors=True)
 
 
 def load(model_version: str, pt_id: str) -> tuple[dict[float, object], dict]:

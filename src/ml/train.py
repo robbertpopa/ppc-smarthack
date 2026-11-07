@@ -19,10 +19,9 @@ import sklearn
 from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.metrics import mean_pinball_loss
 
-from src.eval.metrics import evaluate, surplus_kw
+from src.eval.metrics import evaluate, load_profiles, surplus_kw
 from src.ml import baselines, features, model_io
 from src.ml import labels as labels_io
-from src.ml.config import profiles_path
 from src.ml.split import daylight, split
 
 QUANTILES: tuple[float, ...] = (0.05, 0.10, 0.20, 0.50, 0.90)
@@ -78,8 +77,9 @@ def _economics(labels, part, share, surplus, kwp):
 def _optional_surplus(scenario: str):
     try:
         houses = labels_io.load_station_houses(scenario)
-        profiles = pd.read_parquet(profiles_path())
-    except (FileNotFoundError, OSError):
+        profiles = load_profiles(houses)
+    except (FileNotFoundError, OSError) as error:
+        print(f"warning: {scenario}: export numbers skipped ({error})", file=sys.stderr)
         return None, None
     surplus = surplus_kw(profiles, houses)
     return (surplus, houses.set_index("house_id")["kwp"]) if len(surplus) else (None, None)
@@ -108,16 +108,22 @@ def train(scenario: str, seed: int = 0, grid: list[dict] | None = None, save: bo
     for params in grid:
         models = {q: fit_quantile(X_train, y_train, q, params, seed) for q in QUANTILES}
         pred = predict_quantiles(models, X_val)
-        loss = float(
-            np.mean(
-                [mean_pinball_loss(y_val, pred[:, i], alpha=q) for i, q in enumerate(QUANTILES)]
-            )
+        pinball = {
+            str(q): float(mean_pinball_loss(y_val, pred[:, i], alpha=q))
+            for i, q in enumerate(QUANTILES)
+        }
+        search.append(
+            {
+                "params": params,
+                "mean_pinball_val": float(np.mean(list(pinball.values()))),
+                "models": models,
+                "pred": pred,
+                "pinball": pinball,
+            }
         )
-        search.append({"params": params, "mean_pinball_val": loss, "models": models})
     best = min(search, key=lambda item: item["mean_pinball_val"])
-    models, params = best["models"], best["params"]
+    models, params, pred = best["models"], best["params"], best["pred"]
 
-    pred = predict_quantiles(models, X_val)
     surplus, kwp = _optional_surplus(scenario)
     val_labels = split(labels)["val"]
     q05 = pd.Series(pred[:, 0], index=pd.DatetimeIndex(val_rows["target_start"]))
@@ -127,10 +133,7 @@ def train(scenario: str, seed: int = 0, grid: list[dict] | None = None, save: bo
         "n_train": len(train_rows),
         "n_val": len(val_rows),
         "params": params,
-        "pinball_val": {
-            str(q): float(mean_pinball_loss(y_val, pred[:, i], alpha=q))
-            for i, q in enumerate(QUANTILES)
-        },
+        "pinball_val": best["pinball"],
         "coverage_val": {
             str(q): float(np.mean(y_val < pred[:, i])) for i, q in enumerate(QUANTILES)
         },
