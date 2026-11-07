@@ -31,7 +31,7 @@ def to_frame(rows: dict[str, dict[str, dict]]) -> pd.DataFrame:
     lines = []
     for pt_id, per_row in rows.items():
         for key, metrics in per_row.items():
-            label = ROW_LABELS.get(key, key)
+            label = metrics.get("label") or ROW_LABELS.get(key, key)
             lines.append(
                 {"station": pt_id, "policy": label, **{c: metrics.get(c) for c, _ in COLUMNS}}
             )

@@ -42,7 +42,10 @@ def env(tmp_path_factory):
     mp.setenv("ARTIFACT_URI", str(root / "artifacts"))
     labels.main(["mock", "--scenario", "A"])
     write_profiles(root)
+    path = root / "data" / "labels" / "A" / "labels.parquet"
+    original = path.read_bytes()
     yield root
+    path.write_bytes(original)
     mp.undo()
 
 
@@ -82,7 +85,7 @@ def test_fixed_is_100_and_oracle_never_violates(first):
     assert rows["oracle"]["violation_rate"] == 0.0
     assert rows["fixed"]["abstain_rate"] is None
     assert rows["model_fallback"]["abstain_rate"] is not None
-    assert set(rows) == set(eval_run.KEYS)
+    assert set(eval_run.KEYS) <= set(rows)
 
 
 def test_only_the_test_period_is_scored(env, monkeypatch):
@@ -94,7 +97,7 @@ def test_only_the_test_period_is_scored(env, monkeypatch):
         return real(share, lab, *args, **kwargs)
 
     monkeypatch.setattr(eval_run, "evaluate", spy)
-    eval_run.run(["A"], "spy", allow_mock=True, grid=FAST)
+    eval_run.run(["A"], "spy", allow_mock=True, robustness=False, grid=FAST)
     assert len(seen) == 6
     assert all(
         low >= TEST_START and high <= pd.Timestamp("2013-06-30 14:00", tz="UTC")
@@ -123,12 +126,14 @@ def test_calibration_has_validation_and_test_coverage(first):
 
 def test_saved_models_must_match_the_labels(env, first):
     eval_run.run(["A"], "artifacts", use_artifacts=True, allow_mock=True)  # same labels: fine
+    path = env / "data" / "labels" / "A" / "labels.parquet"
+    original = path.read_bytes()
     labels.main(["mock", "--scenario", "A", "--seed", "1"])  # different labels, same station
     try:
         with pytest.raises(ValueError, match="other labels"):
             eval_run.run(["A"], "bad", use_artifacts=True, allow_mock=True)
     finally:
-        labels.main(["mock", "--scenario", "A"])
+        path.write_bytes(original)
 
 
 def test_profiles_without_the_test_year_give_a_clear_error(env):
@@ -144,3 +149,25 @@ def test_profiles_without_the_test_year_give_a_clear_error(env):
 
 def test_outputs_live_under_artifact_uri(first):
     assert str(eval_run.eval_dir("one")).startswith(artifact_uri())
+
+
+def test_robustness_rows_are_in_every_output(first):
+    rows = first["scenarios"]["PT-A"]["rows"]
+    for key in ("robust_missing_20", "robust_noise_30", "robust_censored"):
+        assert {"violation_rate", "delta_violation_rate", "delta_abstain_rate"} <= set(rows[key])
+    notes = first["scenarios"]["PT-A"]["robustness"]
+    assert notes["net_only"] is True and "extra_flagged_by_input_checks" in notes["missing_20"]
+    text = (eval_run.eval_dir("one") / "table.md").read_text()
+    assert "20% of readings missing" in text and "censored production" in text
+    assert "robust" not in (eval_run.eval_dir("one") / "table.csv").read_text().splitlines()[0]
+    assert "30% noise on readings" in (eval_run.eval_dir("one") / "table.csv").read_text()
+
+
+def test_the_clean_rows_do_not_change_with_robustness(env, first):
+    eval_run.run(["A"], "plain", allow_mock=True, robustness=False, grid=FAST)
+    clean = first["scenarios"]["PT-A"]["rows"]
+    plain = json.loads((eval_run.eval_dir("plain") / "summary.json").read_text())["scenarios"][
+        "PT-A"
+    ]
+    for key in eval_run.KEYS:
+        assert clean[key] == plain["rows"][key]
