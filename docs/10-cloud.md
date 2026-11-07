@@ -73,7 +73,7 @@ make tf-validate   # Terraform validation, no Azure access needed
 2. Run `SUBSCRIPTION_ID=<id> GITHUB_REPO=owner/repo infra/azure/bootstrap.sh`. It creates the state storage and two identities that GitHub can use through OIDC (one for deploys from `main`, one read-only for the plan job on pull requests), then prints the values to store. It needs `gh` logged in: it reads the OIDC subject prefix GitHub uses for this repository (new repositories use the immutable form `repo:owner@<id>/repo@<id>`).
 3. In the GitHub repository settings add the printed **secrets** (`AZURE_CLIENT_ID`, `AZURE_PLAN_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `DEMO_TOKEN`) and **variables** (`DEPLOY_ENABLED=true`, `TFSTATE_RG`, `TFSTATE_SA`, `TFSTATE_CONTAINER`).
 4. Optional, for local Terraform: create `infra/terraform/backend.hcl` (git-ignored) as the script prints, then `make tf-init` and `make tf-plan`.
-5. Optional budget: pass `-var 'budget_contact_emails=["you@example.com"]'`.
+5. Optional budget alert: set the repository variable `BUDGET_EMAILS` to a JSON list, for example `["you@example.com"]` (Settings, Secrets and variables, Actions, Variables, or `gh variable set BUDGET_EMAILS --body '["you@example.com"]'`). The deploy and the plan job pass it to Terraform; empty or unset means no budget. Whether a Students subscription accepts a budget is not verified: if the apply refuses it, clear the variable.
 
 The first push to `main` after this creates the whole stack.
 
@@ -129,7 +129,7 @@ Layout on the share:
 - **Audit log:** append-only JSONL; each decision traceable to the forecast that caused it.
 
 ## Cost control
-- Budget alert (`budget_contact_emails`) set before the first deploy.
+- Budget alert: set the `BUDGET_EMAILS` repository variable before the first deploy.
 - Container Apps Basic-tier pieces only: one 0.5 vCPU / 1 GiB replica, Basic registry, LRS storage. Check the bill at every sync point.
 - Everything is deleted after the event.
 
