@@ -1,3 +1,5 @@
+import hmac
+
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import AwareDatetime, BaseModel
@@ -39,7 +41,14 @@ def create_app(settings: Settings | None = None, service: AgentService | None = 
     app = FastAPI(title="PPC dynamic export limits: agent API", version="0.1.0")
 
     def require_token(x_demo_token: str | None = Header(default=None)) -> None:
-        if settings.demo_token and x_demo_token != settings.demo_token:
+        expected = settings.demo_token
+        if not expected:
+            if settings.app_env == "cloud":
+                raise HTTPException(status_code=503, detail="writes disabled: no demo token")
+            return
+        if x_demo_token is None or not hmac.compare_digest(
+            x_demo_token.encode(), expected.encode()
+        ):
             raise HTTPException(status_code=403, detail="demo token required")
 
     @app.exception_handler(ServiceError)

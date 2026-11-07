@@ -121,7 +121,7 @@ One record per station and interval. `horizon_min` is how far ahead it looks (60
 
 ## Reference implementation
 
-The contract lives in code in `src/common/contract.py` (pydantic models, mocks in `src/common/mocks/`). The agent API serves it: `GET /health`, `/station`, `/forecast`, `/grid_state`, `/plans`, `/plan/{id}`, `/queue`, `/log`, `/kill_switch`, and `POST /plan/propose`, `/plan/{id}/approve`, `/plan/{id}/reject`, `/plan/{id}/execute`, `/kill_switch`. Writes need the header `X-Demo-Token` when `DEMO_TOKEN` is set. Run it with `make run`.
+The contract lives in code in `src/common/contract.py` (pydantic models, mocks in `src/common/mocks/`). The agent API serves it: `GET /health`, `/station`, `/forecast`, `/grid_state`, `/plans`, `/plan/{id}`, `/queue`, `/log`, `/kill_switch`, and `POST /plan/propose`, `/plan/{id}/approve`, `/plan/{id}/reject`, `/plan/{id}/execute`, `/kill_switch`. Writes need the header `X-Demo-Token` when `DEMO_TOKEN` is set; with `APP_ENV=cloud` and no token every write is refused (503). `actor` in a request is self-asserted: with one shared token it names a role, not an authenticated person. Run it with `make run`.
 
 ## Function interfaces
 

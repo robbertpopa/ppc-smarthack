@@ -16,7 +16,7 @@ NOON = "2025-06-21T10:00:00Z"
 NIGHT = "2025-06-21T02:00:00Z"
 
 
-def client(tmp_path, token=None):
+def client(tmp_path, token=None, app_env="local"):
     service = AgentService(
         load_mock("station", StationConfig),
         ActionLog(tmp_path / "actions.jsonl"),
@@ -24,7 +24,7 @@ def client(tmp_path, token=None):
         MockSource(),
         clock=lambda: datetime(2025, 6, 21, 10, 0, tzinfo=timezone.utc),
     )
-    settings = Settings(demo_token=token)
+    settings = Settings(demo_token=token, app_env=app_env)
     return TestClient(create_app(settings, service))
 
 
@@ -89,3 +89,21 @@ def test_writes_need_the_demo_token_when_set(tmp_path, path, body):
     assert c.post(path, json=body).status_code == 403
     assert c.post(path, json=body, headers={"X-Demo-Token": "secret"}).status_code == 200
     assert c.get("/health").status_code == 200
+
+
+def test_wrong_token_is_refused(tmp_path):
+    c = client(tmp_path, token="secret")
+    body = {"interval_start": NOON}
+    assert c.post("/plan/propose", json=body, headers={"X-Demo-Token": "other"}).status_code == 403
+
+
+def test_cloud_without_a_token_refuses_all_writes(tmp_path):
+    c = client(tmp_path, app_env="cloud")
+    assert c.post("/plan/propose", json={"interval_start": NOON}).status_code == 503
+    assert c.post("/kill_switch", json={"on": True, "actor": "op"}).status_code == 503
+    assert c.get("/health").status_code == 200
+
+
+def test_local_without_a_token_allows_writes(tmp_path):
+    c = client(tmp_path)
+    assert c.post("/plan/propose", json={"interval_start": NOON}).status_code == 200
