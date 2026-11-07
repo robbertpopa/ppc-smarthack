@@ -150,3 +150,121 @@ def test_the_command_checks_against_the_profiles_when_they_exist(
     code = data.main(["geo", "--from", str(geo_file), "--postcodes", str(official_file)])
     out = capsys.readouterr().out
     assert code == 0 and "3 houses in 2 postcodes" in out and "matches profiles.parquet" in out
+
+
+def test_text_where_a_number_belongs_is_a_listed_problem_not_a_traceback(tmp_path):
+    bad = write(
+        tmp_path, "bad.csv", GEO.replace("1.62", "n/a").replace("3,1.0,2259", 'x,"1,5",2259')
+    )
+    with pytest.raises(ValueError) as error:
+        geo.read_geo(bad)
+    text = str(error.value)
+    assert "bad.csv" in text and "Generator Capacity" in text and "not numbers" in text
+    assert "'n/a'" in text and "'1,5'" in text  # the offending values are shown
+    comma = write(tmp_path, "comma.csv", GEO.replace("-33.71,151.11", '"-33,71",151.11'))
+    with pytest.raises(ValueError, match="lat are not numbers"):
+        geo.read_geo(comma)
+
+
+def test_a_customer_that_is_not_a_whole_number_is_named_with_the_file(tmp_path):
+    for value in ("abc", "1.5"):
+        bad = write(tmp_path, "customers.csv", GEO.replace("\n3,1.0", f"\n{value},1.0"))
+        with pytest.raises(ValueError, match="customers.csv"):
+            geo.read_geo(bad)
+    official = write(tmp_path, "o.csv", OFFICIAL.replace("\n3,1,", "\nthree,1,"))
+    with pytest.raises(ValueError, match="o.csv"):
+        geo.read_official(official)
+
+
+def test_several_problems_are_reported_together(tmp_path):
+    bad = write(
+        tmp_path,
+        "many.csv",
+        GEO.replace("1.62", "n/a").replace("2076", "207").replace("-33.71", "-3.71"),
+    )
+    with pytest.raises(ValueError) as error:
+        geo.read_geo(bad)
+    for part in ("not numbers", "four digits", "outside New South Wales"):
+        assert part in str(error.value)
+
+
+def test_an_unreadable_file_is_a_clear_error(tmp_path):
+    empty = write(tmp_path, "empty.csv", "")
+    with pytest.raises(ValueError, match="empty.csv: cannot be read"):
+        geo.read_geo(empty)
+
+
+def test_a_located_house_that_is_not_in_the_profiles_is_reported_too(geo_file):
+    table = geo.read_geo(geo_file)
+    profiles = pd.DataFrame(
+        {"house_id": ["AG-0001", "AG-0002"], "kwp": [3.78, 1.62], "postcode": ["2076", "2259"]}
+    )
+    with pytest.raises(ValueError, match="1 located houses are not in the profiles .*AG-0003"):
+        geo.check_against_profiles(table, profiles)
+
+
+def profiles_for(*rows):
+    return pd.DataFrame(rows, columns=["house_id", "kwp", "postcode"])
+
+
+def test_a_file_that_disagrees_with_the_profiles_stores_nothing(
+    tmp_path, monkeypatch, geo_file, official_file
+):
+    monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))
+    wrong = profiles_for(
+        ("AG-0001", 3.78, "2076"), ("AG-0002", 1.62, "2261"), ("AG-0003", 1.0, "2259")
+    )
+    with pytest.raises(ValueError, match="differs from the profiles"):
+        geo.ingest(geo_file, official_file, wrong)
+    assert not (tmp_path / "data" / "reference").exists()
+
+
+def test_the_command_stores_nothing_when_the_profiles_disagree(
+    tmp_path, monkeypatch, geo_file, official_file
+):
+    monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))
+    (tmp_path / "data").mkdir()
+    profiles_for(
+        ("AG-0001", 3.78, "2076"), ("AG-0002", 9.99, "2259"), ("AG-0003", 1.0, "2259")
+    ).assign(gc_kw=0.0).to_parquet(tmp_path / "data" / "profiles.parquet")
+    with pytest.raises(ValueError, match="disagrees with profiles.parquet"):
+        data.main(["geo", "--from", str(geo_file), "--postcodes", str(official_file)])
+    assert not (tmp_path / "data" / "reference").exists()  # not even the files that were fine
+
+
+def test_the_stored_file_can_be_checked_again_in_place(
+    tmp_path, monkeypatch, geo_file, official_file
+):
+    monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))
+    geo.ingest(geo_file, official_file)
+    stored = geo.reference_dir() / geo.GEO_FILE
+    summary = geo.ingest(stored, geo.reference_dir() / geo.OFFICIAL_FILE)  # same files: no error
+    assert summary["houses"] == 3
+    assert stored.read_text() == GEO
+    assert not list(geo.reference_dir().glob(".*.tmp"))  # no temporary leftovers
+
+
+def test_a_failure_while_copying_leaves_the_old_pair_in_place(
+    tmp_path, monkeypatch, geo_file, official_file
+):
+    monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))
+    geo.ingest(geo_file, official_file)
+    newer = write(tmp_path, "newer.csv", GEO.replace("Normanhurst, Wahroonga", "Somewhere else"))
+    real = geo.shutil.copyfile
+
+    def flaky(source, dest, *args, **kwargs):
+        if str(dest).endswith(f"{geo.OFFICIAL_FILE}.tmp"):
+            raise OSError("disk full")
+        return real(source, dest, *args, **kwargs)
+
+    monkeypatch.setattr(geo.shutil, "copyfile", flaky)
+    with pytest.raises(OSError, match="disk full"):
+        geo.ingest(newer, official_file)
+    assert (geo.reference_dir() / geo.GEO_FILE).read_text() == GEO  # still the old geo file
+    assert not list(geo.reference_dir().glob(".*.tmp"))
+
+
+def test_a_row_with_too_many_fields_is_a_clear_error_naming_the_file(tmp_path):
+    ragged = write(tmp_path, "ragged.csv", GEO.replace("3,1.0,2259", "3,1,5,2259"))
+    with pytest.raises(ValueError, match="ragged.csv: cannot be read as a CSV file"):
+        geo.read_geo(ragged)

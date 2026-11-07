@@ -283,22 +283,32 @@ def profiles() -> Path:
 
 
 def store_geo(source: Path, postcodes: Path | None) -> int:
-    """Validate and store the location files, and check them against the profiles if built."""
+    """Validate, check and store the location files.
+
+    Everything is checked first, including the agreement with ``profiles.parquet`` when it
+    exists, and nothing is stored if any check fails.
+    """
     import pandas as pd
 
     from src.ml import geo
 
-    summary = geo.ingest(source, postcodes)
+    profiles = None
+    if profiles_path().exists():
+        profiles = pd.read_parquet(profiles_path(), columns=["house_id", "kwp", "postcode"])
+    summary = geo.ingest(source, postcodes, profiles)
     print(
         f"{summary['houses']} houses in {summary['postcodes']} postcodes stored in "
         f"{summary['folder']}"
     )
     if not postcodes:
         print("not checked against Ausgrid's postcode list (pass --postcodes)")
-    if profiles_path().exists():
-        seen = pd.read_parquet(profiles_path(), columns=["house_id", "kwp", "postcode"])
-        geo.check_against_profiles(geo.load(), seen)
-        print("matches profiles.parquet: same houses, capacities and postcodes")
+    if profiles is not None:
+        print(
+            f"matches profiles.parquet: the same {summary['houses']} houses with the same "
+            "capacity and postcode"
+        )
+    else:
+        print("not checked against profiles.parquet (build it first with `... data profiles`)")
     return 0
 
 
