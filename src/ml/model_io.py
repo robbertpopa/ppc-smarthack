@@ -62,8 +62,8 @@ def _json_safe(value):
     return value
 
 
-def save(models: dict[float, object], meta: dict, out) -> None:
-    """Write one file per quantile and ``metadata.json`` into the folder ``out``.
+def save(models: dict, meta: dict, out) -> None:
+    """Write one file per model (keyed by quantile or name) and ``metadata.json`` into ``out``.
 
     The files are written to a temporary folder first and swapped in at the end, so a
     failure never leaves new models next to the old metadata.
@@ -76,8 +76,9 @@ def save(models: dict[float, object], meta: dict, out) -> None:
     shutil.rmtree(tmp, ignore_errors=True)
     shutil.rmtree(old, ignore_errors=True)
     tmp.mkdir(parents=True)
-    for q, model in models.items():
-        joblib.dump(model, tmp / f"{quantile_name(q)}.joblib")
+    for key, model in models.items():
+        name = key if isinstance(key, str) else quantile_name(key)
+        joblib.dump(model, tmp / f"{name}.joblib")
     text = json.dumps(_json_safe(meta), indent=2, sort_keys=True, default=str, allow_nan=False)
     (tmp / "metadata.json").write_text(text + "\n")
     if out.exists():

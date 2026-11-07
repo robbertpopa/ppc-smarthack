@@ -5,6 +5,7 @@ Models are loaded once per process and cached by ``(model_version, pt_id)``. The
 version comes from ``MODEL_VERSION`` (default ``safe-cap-qgb-v1``).
 """
 
+import logging
 import os
 
 import pandas as pd
@@ -13,9 +14,10 @@ from src.common.contract import Forecast
 from src.ml import features as feature_set
 from src.ml import model_io
 
+logger = logging.getLogger(__name__)
 DEFAULT_MODEL_VERSION = "safe-cap-qgb-v1"
 SAFE_CAP_HORIZON_MIN = 60
-_cache: dict[tuple[str, str], tuple[dict, dict]] = {}
+_cache: dict[str, tuple[dict, dict]] = {}
 
 
 def model_version() -> str:
@@ -27,7 +29,7 @@ def clear_cache() -> None:
 
 
 def _load(version: str, pt_id: str):
-    key = (version, pt_id)
+    key = str(model_io.model_dir(version, pt_id))
     if key not in _cache:
         models, meta = model_io.load(version, pt_id)
         if meta["features"] != feature_set.FEATURES:
@@ -48,6 +50,19 @@ def _timestamp(features: dict, key: str) -> pd.Timestamp:
     return stamp.tz_convert("UTC")
 
 
+def _pv_load(features: dict) -> dict:
+    """PV and load bands from the second model if it exists; the safe cap never needs it."""
+    from src.ml import forecast_pv_load
+
+    try:
+        return forecast_pv_load.predict_pv_load(features, SAFE_CAP_HORIZON_MIN)
+    except FileNotFoundError:
+        return {}
+    except ValueError as exc:  # a stale second model must not break the safe cap
+        logger.warning("no PV and load forecast: %s", exc)
+        return {}
+
+
 def predict(features: dict, horizon_min: int = SAFE_CAP_HORIZON_MIN) -> Forecast:
     """Quantiles of the safe export share for one station and interval.
 
@@ -65,6 +80,7 @@ def predict(features: dict, horizon_min: int = SAFE_CAP_HORIZON_MIN) -> Forecast
     decision_time = _timestamp(features, "decision_time")
 
     models, meta = _load(model_version(), pt_id)
+    pv_load = _pv_load(features)
     row = [features.get(name) for name in feature_set.FEATURES]  # always in FEATURES order
     X = pd.DataFrame([row], columns=feature_set.FEATURES, dtype=float)  # None becomes NaN
     q = predict_quantiles(models, X)[0]
@@ -75,6 +91,8 @@ def predict(features: dict, horizon_min: int = SAFE_CAP_HORIZON_MIN) -> Forecast
         horizon_min=horizon_min,
         safe_cap_share=shares,
         spread=float(shares["q90"] - shares["q05"]),
+        pv_kw=pv_load.get("pv_kw"),
+        load_kw=pv_load.get("load_kw"),
         available_at=decision_time.to_pydatetime(),
         model_version=meta["model_version"],
         provenance="forecast",
