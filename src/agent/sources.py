@@ -52,7 +52,12 @@ class MockSource:
 def make_source(settings: Settings) -> Source:
     if settings.source == "mock":
         return MockSource()
-    raise NotImplementedError(f"source {settings.source!r} is not available yet")
+    if settings.source == "model":
+        raise NotImplementedError(
+            "SOURCE=model needs ml.predict, ml.features.build and grid.power_flow, "
+            "which are not merged yet"
+        )
+    raise NotImplementedError(f"unknown source {settings.source!r}")
 
 
 def floor_to_half_hour(moment: datetime | None = None) -> datetime:

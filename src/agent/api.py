@@ -4,13 +4,10 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import AwareDatetime, BaseModel
 
-from src.agent.guard import stub_guard
-from src.agent.log import open_log
 from src.agent.service import AgentService, ServiceError
-from src.agent.sources import floor_to_half_hour, make_source
+from src.agent.sources import floor_to_half_hour
+from src.agent.wiring import build_service
 from src.common.config import Settings
-from src.common.contract import StationConfig
-from src.common.mock_data import load_mock
 
 STATUS = {"not_found": 404, "conflict": 409, "kill_switch_active": 409}
 
@@ -32,12 +29,7 @@ class KillRequest(BaseModel):
 def create_app(settings: Settings | None = None, service: AgentService | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     if service is None:
-        service = AgentService(
-            station=load_mock("station", StationConfig),
-            log=open_log(settings.log_uri),
-            guard=stub_guard,
-            source=make_source(settings),
-        )
+        service = build_service(settings)
     app = FastAPI(title="PPC dynamic export limits: agent API", version="0.1.0")
 
     def require_token(x_demo_token: str | None = Header(default=None)) -> None:
