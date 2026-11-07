@@ -10,8 +10,14 @@ log = logging.getLogger(__name__)
 Guard = Callable[[Plan, GridState | None], GuardResult]
 
 
+_warned = False
+
+
 def stub_guard(plan: Plan, grid_state: GridState | None) -> GuardResult:
-    log.warning("stub guard in use: voltage and transformer limits are not checked")
+    global _warned
+    if not _warned:
+        log.warning("stub guard in use: voltage and transformer limits are not checked")
+        _warned = True
     violations = [
         f"{limit.house_id}: export limit {limit.export_limit_kw} kW is not a finite number"
         for limit in plan.limits
