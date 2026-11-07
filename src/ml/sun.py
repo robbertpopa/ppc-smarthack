@@ -18,7 +18,7 @@ def solar_elevation(ts, lat: float = SYDNEY_LAT, lon: float = SYDNEY_LON):
     ``ts`` is a timestamp or a list-like of timestamps and must carry a time zone.
     A scalar gives a float, anything else a numpy array.
     """
-    scalar = isinstance(ts, pd.Timestamp)
+    scalar = np.ndim(ts) == 0
     idx = pd.DatetimeIndex([ts] if scalar else ts)
     if idx.tz is None:
         raise ValueError("solar_elevation needs timezone-aware timestamps")

@@ -8,9 +8,9 @@ every boundary by 10 or 11 hours. Never shuffle, never split at random.
 import numpy as np
 import pandas as pd
 
-from .sun import solar_elevation
+from src.ml.config import SYDNEY
+from src.ml.sun import solar_elevation
 
-SYDNEY = "Australia/Sydney"
 VAL_START = pd.Timestamp("2012-04-01")
 TEST_START = pd.Timestamp("2012-07-01")
 TEST_END = pd.Timestamp("2013-06-30")

@@ -22,9 +22,8 @@ import zlib
 import numpy as np
 import pandas as pd
 
-from .config import data_dir
-from .split import SYDNEY
-from .sun import solar_elevation
+from src.ml.config import SYDNEY, data_dir, profiles_path
+from src.ml.sun import solar_elevation
 
 SCENARIOS = ("A", "B", "B-VAR")
 BINDING = ("voltage", "line", "trafo", "none")
@@ -84,6 +83,9 @@ def validate(df: pd.DataFrame) -> None:
     unconverged = (~df["converged"]) & share.notna()
     if unconverged.any():
         problems.append(f"{unconverged.sum()} rows have a safe_share but converged is false")
+    no_share = df["converged"] & share.isna()
+    if no_share.any():
+        problems.append(f"{no_share.sum()} rows are converged but have no safe_share")
     bad_binding = df["binding"].notna() & ~df["binding"].isin(BINDING)
     if bad_binding.any():
         problems.append(f"{bad_binding.sum()} rows have an unknown binding (allowed: {BINDING})")
@@ -153,18 +155,15 @@ def _mock_inputs(profiles: pd.DataFrame | None, rng: np.random.Generator):
     )
     kwp = np.full(MOCK_HOUSES, 2.0)
     sun = np.clip(np.sin(np.radians(solar_elevation(index + pd.Timedelta(minutes=15)))), 0, None)
-    day = index.tz_convert(SYDNEY).normalize()
-    cloud = pd.Series(rng.uniform(0.3, 1.0, day.nunique()), index=day.unique())
-    hour = index.tz_convert(SYDNEY).hour + index.tz_convert(SYDNEY).minute / 60
+    local = index.tz_convert(SYDNEY)
+    day_codes, days = pd.factorize(local.normalize())
+    cloud = rng.uniform(0.3, 1.0, len(days))[day_codes]
+    hour = local.hour + local.minute / 60
     total = kwp.sum()
     station = pd.DataFrame(
         {
             "load_kw": total * (0.12 + 0.08 * np.cos(np.radians(15 * (hour - 19)))),
-            "pv_kw": total
-            * 0.75
-            * sun**1.2
-            * cloud.loc[day].to_numpy()
-            * rng.uniform(0.9, 1.0, len(index)),
+            "pv_kw": total * 0.75 * sun**1.2 * cloud * rng.uniform(0.9, 1.0, len(index)),
         },
         index=index,
     )
@@ -235,8 +234,8 @@ def main(argv: list[str] | None = None) -> None:
     mock.add_argument("--seed", type=int, default=0)
     args = parser.parse_args(argv)
 
-    profiles_path = data_dir() / "profiles.parquet"
-    profiles = pd.read_parquet(profiles_path) if profiles_path.exists() else None
+    path = profiles_path()
+    profiles = pd.read_parquet(path) if path.exists() else None
     labels, houses = make_mock_with_houses(profiles, args.scenario, args.seed)
     validate(labels)
     out = labels_path(args.scenario)

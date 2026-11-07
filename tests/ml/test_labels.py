@@ -143,3 +143,9 @@ def test_load_names_the_missing_file(tmp_path, monkeypatch):
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     with pytest.raises(FileNotFoundError, match="labels.parquet"):
         labels.load("A")
+
+
+def test_validate_rejects_a_converged_row_without_a_share(mock):
+    mock.loc[0, "safe_share"] = np.nan
+    with pytest.raises(ValueError, match="converged but have no safe_share"):
+        labels.validate(mock)

@@ -65,3 +65,11 @@ def test_solar_elevation_scalar_and_naive_input():
     else:
         raise AssertionError("naive timestamps must be rejected")
     assert np.isfinite(solar_elevation(pd.DatetimeIndex(["2012-12-21 02:00"], tz="UTC"))).all()
+
+
+def test_solar_elevation_accepts_datetime_and_numpy_scalars():
+    from datetime import datetime, timezone
+
+    stamp = pd.Timestamp("2012-12-21 02:00", tz="UTC")
+    expected = solar_elevation(stamp)
+    assert solar_elevation(datetime(2012, 12, 21, 2, tzinfo=timezone.utc)) == expected
