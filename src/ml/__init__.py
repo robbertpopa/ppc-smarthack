@@ -1,7 +1,7 @@
-"""ML package: ``from src.ml import predict`` and ``from src.ml import features``."""
+"""ML package.
 
-from src.ml import features
-from src.ml.explain import explain
-from src.ml.predict import predict
-
-__all__ = ["explain", "features", "predict"]
+Import the entry points from their modules: ``from src.ml.predict import predict``,
+``from src.ml.explain import explain`` and ``from src.ml.features import build``. The
+package does not re-export them, because a function with the name of its module would
+hide the module (``src.ml.predict`` would be the function).
+"""

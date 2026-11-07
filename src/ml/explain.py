@@ -12,7 +12,9 @@ that is not in the figures). Explanations describe **the model, not the physics*
   The three largest effects are returned. Missing features are listed, not ablated.
 * Similar cases: the five nearest decisions from training and validation whose outcome was
   already known at the decision time (standardised features, Euclidean distance over the
-  dimensions both have), with their ``q05`` and the realised ``safe_share``.
+  dimensions both have), with the realised ``safe_share``. The ``q05`` the model gave is
+  shown for validation cases only: for training cases it would be an in-sample prediction,
+  so ``q05`` is ``None`` and ``in_sample`` is true.
 """
 
 import json
@@ -46,7 +48,6 @@ SIMILAR = 5
 MIN_SHARED_DIMS = 3
 REPEATS = 10
 STEP = pd.Timedelta(minutes=30)
-_cache: dict[str, dict] = {}
 
 
 def _slot(target_start) -> pd.Series:
@@ -92,6 +93,9 @@ def build_artifacts(models: dict, train_rows: pd.DataFrame, val_rows: pd.DataFra
     past = pd.concat([train_rows, val_rows], ignore_index=True)
     index = past[[*names, "target_start", "safe_share"]].copy()
     index["q05"] = predict_quantiles(models, past[names])[:, 0]
+    # The models were fitted on the training rows, so their q05 there is an in-sample
+    # prediction, tighter than on new decisions. It is only shown for validation cases.
+    index["in_sample"] = [True] * len(train_rows) + [False] * len(val_rows)
     return {"importance": importance, "reference": reference, "overall": overall, "index": index}
 
 
@@ -202,7 +206,8 @@ def _similar(art: dict, values: dict, decision: pd.Timestamp) -> list[dict]:
         cases.append(
             {
                 "interval_start": r["target_start"].strftime("%Y-%m-%dT%H:%M:%SZ"),
-                "q05": float(r["q05"]),
+                "q05": None if r["in_sample"] else float(r["q05"]),
+                "in_sample": bool(r["in_sample"]),
                 "safe_share": float(r["safe_share"]),
             }
         )
@@ -221,11 +226,5 @@ def explain(feats: dict) -> dict:
             raise ValueError(f"features must include {key}")
     version = model_version()
     models, _ = _load(version, pt_id)
-    key = str(model_io.model_dir(version, pt_id))
-    if key not in _cache:
-        _cache[key] = load_artifacts(model_io.model_dir(version, pt_id))
-    return explain_with(models, _cache[key], feats)
-
-
-def clear_cache() -> None:
-    _cache.clear()
+    folder = model_io.model_dir(version, pt_id)
+    return explain_with(models, model_io.cached("explain", folder, load_artifacts), feats)

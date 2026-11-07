@@ -12,6 +12,7 @@ here**; the evaluation script does that once.
 
 import argparse
 import sys
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -87,8 +88,19 @@ def _optional_surplus(scenario: str):
     return (surplus, houses.set_index("house_id")["kwp"]) if len(surplus) else (None, None)
 
 
-def train(scenario: str, seed: int = 0, grid: list[dict] | None = None, save: bool = True) -> dict:
-    """Train, report on validation and save. Returns the validation report."""
+def train(
+    scenario: str,
+    seed: int = 0,
+    grid: list[dict] | None = None,
+    save: bool = True,
+    out_root=None,
+) -> dict:
+    """Train, report on validation and save. Returns the validation report.
+
+    Models go to ``ARTIFACT_URI/models/<version>/<pt_id>/`` unless ``out_root`` is given
+    (then ``<out_root>/<pt_id>/``), so an evaluation run can keep its models apart from the
+    ones the API serves.
+    """
     grid = GRID if grid is None else grid
     labels = labels_io.load(scenario)
     stations = labels["pt_id"].unique()
@@ -136,8 +148,10 @@ def train(scenario: str, seed: int = 0, grid: list[dict] | None = None, save: bo
         [bool(abstention.quality_flags(r)) for r in X_val.to_dict("records")], index=index
     )
     target = violation_target()
-    chosen = abstention.choose_threshold(spread, q05, val_labels, surplus, kwp, target, flagged)
-    curve = abstention.risk_coverage(spread, q05, val_labels, surplus, kwp, flagged)
+    sweep = abstention.sweep(spread, q05, val_labels, surplus, kwp, flagged)
+    chosen = abstention.pick(sweep, target)
+    curve = abstention.curve(sweep)
+    holdout = abstention.holdout_check(spread, q05, val_labels, surplus, kwp, target, flagged)
     budget = crew_cases_per_day()
     report = {
         "pt_id": pt_id,
@@ -163,6 +177,7 @@ def train(scenario: str, seed: int = 0, grid: list[dict] | None = None, save: bo
             "crew_cases_per_day": budget,
             "crew_budget_holds": bool(chosen["per_day_max"] <= budget),
             "share_flagged_by_input_checks": float(flagged.mean()),
+            "holdout": holdout,
         },
     }
 
@@ -195,10 +210,13 @@ def train(scenario: str, seed: int = 0, grid: list[dict] | None = None, save: bo
             "abstention": report["abstention"],
             "sklearn_version": sklearn.__version__,
         }
-        out = model_io.model_dir(MODEL_VERSION, pt_id)
-        model_io.save(models, meta, out)
-        save_artifacts(build_artifacts(models, train_rows, val_rows, seed), out)
-        curve.to_csv(out / "risk_coverage.csv", index=False)
+        out = Path(out_root) / pt_id if out_root else model_io.model_dir(MODEL_VERSION, pt_id)
+
+        def write_extras(folder):  # swapped in together with the models they describe
+            curve.to_csv(folder / "risk_coverage.csv", index=False)
+            save_artifacts(build_artifacts(models, train_rows, val_rows, seed), folder)
+
+        model_io.save(models, meta, out, extra=write_extras)
     return report
 
 

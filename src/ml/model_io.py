@@ -9,6 +9,7 @@ import json
 import math
 import shutil
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 from src.ml.config import artifact_uri
@@ -62,11 +63,13 @@ def _json_safe(value):
     return value
 
 
-def save(models: dict, meta: dict, out) -> None:
+def save(models: dict, meta: dict, out, extra: Callable[[Path], None] | None = None) -> None:
     """Write one file per model (keyed by quantile or name) and ``metadata.json`` into ``out``.
 
     The files are written to a temporary folder first and swapped in at the end, so a
-    failure never leaves new models next to the old metadata.
+    failure never leaves new models next to the old metadata. ``extra(folder)`` may write
+    more files (explanation data, curves) into the same temporary folder, so they are
+    swapped in together with the models they describe.
     """
     import joblib
 
@@ -79,12 +82,51 @@ def save(models: dict, meta: dict, out) -> None:
     for key, model in models.items():
         name = key if isinstance(key, str) else quantile_name(key)
         joblib.dump(model, tmp / f"{name}.joblib")
+    if extra is not None:
+        extra(tmp)
     text = json.dumps(_json_safe(meta), indent=2, sort_keys=True, default=str, allow_nan=False)
     (tmp / "metadata.json").write_text(text + "\n")
     if out.exists():
         out.rename(old)
     tmp.rename(out)
     shutil.rmtree(old, ignore_errors=True)
+
+
+_caches: dict[tuple[str, str], tuple[int | None, tuple[bool, object]]] = {}
+
+
+def stamp(folder) -> int | None:
+    """Changes whenever a model is retrained into ``folder`` (``None`` if there is none)."""
+    try:
+        return (Path(folder) / "metadata.json").stat().st_mtime_ns
+    except OSError:
+        return None
+
+
+def cached(name: str, folder, loader: Callable[[Path], object]):
+    """``loader(folder)`` once per folder and training, including "there is no model".
+
+    The cache entry is tied to the modification time of ``metadata.json``, so a model
+    retrained into the same folder is picked up by a long-running process, and a missing
+    model costs one ``stat`` per call instead of repeated file checks.
+    """
+    folder = Path(folder)
+    key, current = (name, str(folder)), stamp(folder)
+    hit = _caches.get(key)
+    if hit is None or hit[0] != current:
+        try:
+            hit = (current, (True, loader(folder)))
+        except Exception as error:  # remembered too: a broken folder fails fast until retrained
+            hit = (current, (False, error))
+        _caches[key] = hit
+    ok, value = hit[1]
+    if not ok:
+        raise value
+    return value
+
+
+def clear_caches() -> None:
+    _caches.clear()
 
 
 def load_metadata(model_version: str, pt_id: str) -> dict:
@@ -95,11 +137,11 @@ def load_metadata(model_version: str, pt_id: str) -> dict:
     return json.loads(meta_file.read_text())
 
 
-def load(model_version: str, pt_id: str) -> tuple[dict[float, object], dict]:
-    """Load the models and metadata, or raise naming the folder that was expected."""
+def load_dir(path) -> tuple[dict[float, object], dict]:
+    """Load the quantile models and metadata of one model folder."""
     import joblib
 
-    path = model_dir(model_version, pt_id)
+    path = Path(path)
     meta_file = path / "metadata.json"
     if not meta_file.exists():
         raise FileNotFoundError(
@@ -108,3 +150,8 @@ def load(model_version: str, pt_id: str) -> tuple[dict[float, object], dict]:
     meta = json.loads(meta_file.read_text())
     models = {q: joblib.load(path / f"{quantile_name(q)}.joblib") for q in meta["quantiles"]}
     return models, meta
+
+
+def load(model_version: str, pt_id: str) -> tuple[dict[float, object], dict]:
+    """Load the models and metadata, or raise naming the folder that was expected."""
+    return load_dir(model_dir(model_version, pt_id))
