@@ -70,7 +70,7 @@ resource "azurerm_role_assignment" "acr_pull" {
 
 resource "azapi_resource" "env" {
   type                      = "Microsoft.App/managedEnvironments@2026-03-02-preview"
-  name                      = "cae-${local.name}-wp"
+  name                      = "cae-${local.name}-std"
   parent_id                 = azurerm_resource_group.rg.id
   location                  = azurerm_resource_group.rg.location
   tags                      = local.tags
@@ -108,6 +108,7 @@ resource "azurerm_container_app" "api" {
   container_app_environment_id = azapi_resource.env.id
   resource_group_name          = azurerm_resource_group.rg.name
   revision_mode                = "Single"
+  workload_profile_name        = "Consumption"
   tags                         = local.tags
 
   identity {
