@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Station operator screen</title>
+<style>
+:root{--bg:#edf3f3;--card:#fff;--ink:#173047;--muted:#506879;--ok:#228466;--warn:#d99a00;--bad:#ba3636;--line:#d6e0e3;--accent:#1d5f8a}
+@media (prefers-color-scheme:dark){:root{--bg:#10191f;--card:#18262e;--ink:#e3edf1;--muted:#9bb0bb;--line:#2b3d47;--accent:#6fb4e0}}
+*{box-sizing:border-box}
+body{font-family:system-ui,sans-serif;color:var(--ink);background:var(--bg);margin:0;padding:16px 16px 48px}
+main{max-width:1180px;margin:auto}
+header{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+h1{font-size:1.5rem;margin:0}h2{font-size:1.05rem;margin:0 0 10px}
+p{line-height:1.5;margin:6px 0}
+.banner{background:#fff0c1;color:#644a00;padding:10px 14px;border-radius:10px;margin:12px 0;font-weight:600}
+.card{background:var(--card);padding:18px;border-radius:14px;margin-top:16px;box-shadow:0 2px 10px #17304712}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}
+.row{display:flex;gap:16px;flex-wrap:wrap;align-items:end}
+label{display:block;font-weight:600;margin-bottom:4px}
+input,select,button{font:inherit;color:inherit}
+input,select{padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--card);max-width:100%}
+input[type=range]{width:100%;padding:0}
+button{padding:7px 14px;border-radius:8px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer}
+button.ghost{background:transparent;color:var(--accent)}
+button.danger{background:var(--bad);border-color:var(--bad)}
+button:disabled{opacity:.45;cursor:not-allowed}
+.metrics{display:flex;gap:16px;flex-wrap:wrap}.metrics>div{min-width:130px;flex:1;color:var(--muted);font-size:.9rem}
+.metric{display:block;font-size:1.4rem;font-weight:700;color:var(--ink)}
+.pill{display:inline-block;padding:2px 10px;border-radius:99px;font-size:.85rem;font-weight:600;color:#fff}
+.pill.ok{background:var(--ok)}.pill.warn{background:var(--warn);color:#2b2000}.pill.bad{background:var(--bad)}.pill.off{background:var(--muted)}
+.band{position:relative;height:26px;background:var(--line);border-radius:6px;margin:10px 0 4px}
+.band span{position:absolute;top:0;bottom:0;border-radius:6px}
+.band .wide{background:#9ec7de}.band .tick{width:3px;background:var(--ink);border-radius:0}
+.band .stat{width:3px;background:var(--bad);border-radius:0}
+.houses{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px}
+.house{border-radius:10px;padding:8px 10px;color:#fff;font-size:.85rem;line-height:1.35}
+.house.ok{background:var(--ok)}.house.warn{background:var(--warn);color:#2b2000}.house.bad{background:var(--bad)}.house.off{background:var(--muted)}
+.house b{display:block;font-size:1rem}
+table{width:100%;border-collapse:collapse;font-size:.92rem}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600}
+.legend span{margin-right:14px;font-size:.85rem;color:var(--muted)}
+.dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px}
+.err{color:var(--bad);min-height:1.3em}
+.muted{color:var(--muted)}
+.scroll{max-height:290px;overflow:auto}
+a{color:var(--accent)}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <div><h1>Station operator screen</h1><p class="muted" id="station">Loading station…</p></div>
+  <span id="killState" class="pill off">Kill switch: …</span>
+</header>
+<div class="banner" id="simBanner" role="note">Simulated data. The grid is a model, not PPC's network, and nothing here controls real inverters.</div>
+
+<section class="card">
+  <div class="row">
+    <div><label for="date">Day (UTC)</label><input type="date" id="date"></div>
+    <div style="flex:1;min-width:240px"><label for="slot">Interval: <span id="slotLabel"></span> UTC</label><input type="range" id="slot" min="0" max="47" value="20"></div>
+    <div><label for="token">Demo token (needed for writes)</label><input type="password" id="token" autocomplete="off" placeholder="only if the API requires it"></div>
+    <div><label for="actor">Your role</label><input id="actor" value="operator-demo" size="14"></div>
+  </div>
+  <p class="err" id="err" role="alert"></p>
+</section>
+
+<div class="grid2">
+<section class="card">
+  <h2>Station state <span class="muted" id="gsProv"></span></h2>
+  <div class="metrics">
+    <div>Max voltage<span class="metric" id="vmax">—</span></div>
+    <div>Transformer load<span class="metric" id="trafo">—</span></div>
+    <div>Line load (max)<span class="metric" id="line">—</span></div>
+    <div>Exported / curtailed<span class="metric" id="exp">—</span></div>
+  </div>
+  <p class="muted" id="gsNote"></p>
+</section>
+<section class="card">
+  <h2>Forecast: highest safe export share <span class="muted" id="fcProv"></span></h2>
+  <div class="band" id="band" role="img" aria-label="Forecast band"></div>
+  <p class="legend"><span><i class="dot" style="background:#9ec7de"></i>q05 to q90 band</span><span><i class="dot" style="background:var(--ink)"></i>median (q50)</span><span><i class="dot" style="background:var(--bad)"></i>fixed limit</span></p>
+  <div class="metrics">
+    <div>Cautious (q05)<span class="metric" id="q05">—</span></div>
+    <div>Median (q50)<span class="metric" id="q50">—</span></div>
+    <div>Uncertainty (spread)<span class="metric" id="spread">—</span></div>
+    <div>Fixed limit<span class="metric" id="static">—</span></div>
+  </div>
+  <p class="muted" id="fcNote"></p>
+</section>
+</div>
+
+<section class="card">
+  <h2>Plan for this interval</h2>
+  <div class="row">
+    <span id="planStatus" class="pill off">No plan</span>
+    <span id="planSource" class="muted"></span>
+    <button id="propose">Propose plan</button>
+    <button id="approve" class="ghost" disabled>Approve</button>
+    <button id="reject" class="ghost" disabled>Reject</button>
+    <button id="execute" disabled>Execute</button>
+  </div>
+  <p id="planExplain"></p>
+  <p class="muted" id="planGuard"></p>
+  <p class="legend"><span><i class="dot" style="background:var(--ok)"></i>model limit, guard passed</span><span><i class="dot" style="background:var(--warn)"></i>fixed limit (case sent to a human) or contract cap</span><span><i class="dot" style="background:var(--bad)"></i>blocked by the guard</span></p>
+  <div class="houses" id="houses"></div>
+</section>
+
+<div class="grid2">
+<section class="card">
+  <h2>"Not sure" queue <span class="muted" id="queueCount"></span></h2>
+  <div class="scroll"><table><thead><tr><th>Interval</th><th>Reason</th><th>Decision</th></tr></thead><tbody id="queue"></tbody></table></div>
+</section>
+<section class="card">
+  <h2>Kill switch</h2>
+  <p class="muted">Cancels open plans. Houses go back to the fixed limit from the connection approval.</p>
+  <div class="row"><button id="killOn" class="danger">Turn on</button><button id="killOff" class="ghost">Turn off</button></div>
+</section>
+</div>
+
+<section class="card">
+  <h2>Comparison: fixed limit versus ours</h2>
+  <p class="muted" id="cmpNote">Loading evaluation output…</p>
+  <div class="scroll"><table id="cmp" hidden><thead></thead><tbody></tbody></table></div>
+</section>
+
+<section class="card">
+  <h2>Action log</h2>
+  <div class="scroll"><table><thead><tr><th>Time (UTC)</th><th>Event</th><th>Actor</th><th>Plan</th></tr></thead><tbody id="log"></tbody></table></div>
+</section>
+
+<p class="muted">Also available: <a href="/simulation">210-house simulation viewer</a> (loads a local CSV).</p>
+</main>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const state = {station: null, plan: null};
+const pct = v => v == null ? "—" : (v * 100).toFixed(0) + "%";
+const num = (v, d = 1, unit = "") => v == null ? "—" : Number(v).toFixed(d) + unit;
+const setErr = m => { $("err").textContent = m || ""; };
+
+async function api(path, method = "GET", body) {
+  const headers = {};
+  if (body !== undefined) headers["content-type"] = "application/json";
+  const token = $("token").value;
+  if (token) headers["x-demo-token"] = token;
+  const res = await fetch("/api/" + path, {method, headers, body: body === undefined ? undefined : JSON.stringify(body)});
+  let data = null;
+  try { data = await res.json(); } catch (_) { /* not JSON */ }
+  if (!res.ok) {
+    const why = data && (data.message || data.detail || data.error) || res.statusText;
+    const e = new Error(res.status + ": " + why); e.status = res.status; throw e;
+  }
+  return data;
+}
+
+function intervalStart() {
+  const d = $("date").value, s = Number($("slot").value);
+  const hh = String(Math.floor(s / 2)).padStart(2, "0"), mm = s % 2 ? "30" : "00";
+  $("slotLabel").textContent = hh + ":" + mm;
+  return d + "T" + hh + ":" + mm + ":00Z";
+}
+
+function el(tag, text, cls) {
+  const n = document.createElement(tag);
+  if (text != null) n.textContent = text;
+  if (cls) n.className = cls;
+  return n;
+}
+function setPill(node, text, kind) { node.textContent = text; node.className = "pill " + kind; }
+
+async function loadStation() {
+  state.station = await api("station");
+  const s = state.station;
+  const kwp = s.houses.reduce((a, h) => a + h.kwp, 0);
+  $("station").textContent = s.pt_id + " · " + s.houses.length + " houses · " + kwp.toFixed(0) + " kWp installed · fixed limit " + pct(s.static_share) + " · review budget " + s.review_budget + "/day";
+  $("static").textContent = pct(s.static_share);
+}
+
+async function loadKill() {
+  const k = await api("kill_switch");
+  setPill($("killState"), k.on ? "Kill switch: ON" : "Kill switch: off", k.on ? "bad" : "ok");
+}
+
+function provText(p) { return p ? "(" + p + ")" : ""; }
+
+async function loadForecast(t) {
+  const q = "?interval_start=" + encodeURIComponent(t);
+  try {
+    const f = await api("forecast" + q);
+    const c = f.safe_cap_share;
+    $("q05").textContent = pct(c.q05); $("q50").textContent = pct(c.q50); $("spread").textContent = pct(f.spread);
+    $("fcProv").textContent = provText(f.provenance) + " " + f.model_version;
+    const band = $("band"); band.replaceChildren();
+    const seg = (l, r, cls) => { const n = el("span", null, cls); n.style.left = (l * 100) + "%"; n.style.width = Math.max((r - l) * 100, 0.5) + "%"; band.append(n); };
+    seg(c.q05, c.q90, "wide"); seg(c.q50, c.q50 + 0.008, "tick"); seg(state.station.static_share, state.station.static_share + 0.008, "stat");
+    const sure = f.spread <= state.station.spread_threshold;
+    $("fcNote").textContent = sure ? "Spread is within the " + pct(state.station.spread_threshold) + " threshold: the cautious value can be used."
+      : "Spread is above the " + pct(state.station.spread_threshold) + " threshold: the case goes to a human and the fixed limit applies.";
+  } catch (e) {
+    ["q05", "q50", "spread"].forEach(i => $(i).textContent = "—");
+    $("band").replaceChildren(); $("fcProv").textContent = ""; $("fcNote").textContent = "No forecast for this interval (" + e.message + ").";
+  }
+}
+
+async function loadGrid(t) {
+  try {
+    const g = await api("grid_state?interval_start=" + encodeURIComponent(t));
+    $("gsProv").textContent = provText(g.provenance);
+    if (!g.converged) {
+      ["vmax", "trafo", "line", "exp"].forEach(i => $(i).textContent = "—");
+      $("gsNote").textContent = "The power flow did not converge, so no numbers are shown.";
+      return;
+    }
+    $("vmax").textContent = num(g.v_max_pu, 3, " pu");
+    $("trafo").textContent = num(g.trafo_loading_pct, 0, "%");
+    $("line").textContent = num(g.line_loading_max_pct, 0, "%");
+    $("exp").textContent = num(g.exported_kwh, 1) + " / " + num(g.curtailed_kwh, 1) + " kWh";
+    $("gsNote").textContent = g.v_max_node ? "Highest voltage at " + g.v_max_node + "." : "";
+  } catch (e) {
+    ["vmax", "trafo", "line", "exp"].forEach(i => $(i).textContent = "—");
+    $("gsNote").textContent = "No grid state for this interval (" + e.message + ").";
+  }
+}
+
+function renderPlan(plan) {
+  state.plan = plan;
+  const houses = $("houses"); houses.replaceChildren();
+  ["approve", "reject", "execute"].forEach(i => { $(i).disabled = true; });
+  if (!plan) {
+    setPill($("planStatus"), "No plan", "off");
+    $("planSource").textContent = ""; $("planExplain").textContent = "No plan has been proposed for this interval.";
+    $("planGuard").textContent = "";
+    state.station.houses.forEach(h => {
+      const n = el("div", null, "house off"); n.append(el("div", h.house_id), el("b", "—")); houses.append(n);
+    });
+    return;
+  }
+  const blocked = plan.guard && !plan.guard.passed;
+  const kind = blocked ? "bad" : plan.abstain ? "warn" : "ok";
+  setPill($("planStatus"), plan.status + (blocked ? " (guard blocked)" : ""), kind);
+  $("planSource").textContent = (plan.source === "model" ? "Model limit" : "Fixed fallback limit") + " · confidence " + pct(plan.confidence);
+  $("planExplain").textContent = plan.explanation ? plan.explanation.text : plan.reasons.join("; ");
+  const g = plan.guard;
+  $("planGuard").textContent = g ? (g.passed ? "Guard passed" : "Guard blocked") + ": " + (g.violations.length ? g.violations.join("; ") : "no violations") +
+    (g.v_max_pu != null ? " · " + num(g.v_max_pu, 3, " pu") : "") + (g.trafo_loading_pct != null ? " · transformer " + num(g.trafo_loading_pct, 0, "%") : "") : "Guard not run";
+  const kwp = Object.fromEntries(state.station.houses.map(h => [h.house_id, h]));
+  plan.limits.forEach(l => {
+    const h = kwp[l.house_id];
+    const capped = h && h.contract_cap_kw != null && l.export_limit_kw >= h.contract_cap_kw - 1e-9;
+    const cls = blocked ? "bad" : (plan.abstain || capped) ? "warn" : "ok";
+    const n = el("div", null, "house " + cls);
+    n.append(el("div", l.house_id + (capped ? " (cap)" : "")), el("b", num(l.export_limit_kw, 2, " kW")), el("div", h ? pct(l.export_limit_kw / h.kwp) + " of " + h.kwp + " kWp" : ""));
+    houses.append(n);
+  });
+  const open = plan.status === "proposed", approved = plan.status === "approved";
+  $("approve").disabled = !(open && !blocked); $("reject").disabled = !open; $("execute").disabled = !approved;
+}
+
+async function loadPlan(t) {
+  const all = await api("plans");
+  renderPlan(all.find(p => Date.parse(p.interval_start) === Date.parse(t)) || null);
+}
+
+async function loadQueue() {
+  const q = await api("queue");
+  $("queueCount").textContent = "(" + q.pending.length + " pending · reviewed today " + q.reviewed_today + "/" + q.review_budget + (q.over_budget ? " · OVER BUDGET" : "") + ")";
+  const body = $("queue"); body.replaceChildren();
+  if (!q.pending.length) { const r = el("tr"); const c = el("td", "Nothing waiting for review."); c.colSpan = 3; r.append(c); body.append(r); }
+  q.pending.forEach(p => {
+    const r = el("tr");
+    const when = el("td"); const a = el("a", p.interval_start.replace("T", " ").replace(":00Z", " UTC")); a.href = "#"; a.onclick = ev => { ev.preventDefault(); jump(p.interval_start); }; when.append(a);
+    const actions = el("td");
+    const ok = el("button", "Approve"); ok.onclick = () => decide(p.plan_id, "approve");
+    const no = el("button", "Reject", "ghost"); no.onclick = () => decide(p.plan_id, "reject"); no.style.marginLeft = "6px";
+    actions.append(ok, no);
+    r.append(when, el("td", p.reasons.join("; ")), actions); body.append(r);
+  });
+}
+
+async function loadLog() {
+  const events = await api("log?limit=50");
+  const body = $("log"); body.replaceChildren();
+  events.slice().reverse().forEach(e => {
+    const r = el("tr");
+    r.append(el("td", e.ts.replace("T", " ").replace("Z", "")), el("td", e.event), el("td", e.actor), el("td", e.plan_id || "—"));
+    body.append(r);
+  });
+}
+
+function jump(iso) {
+  $("date").value = iso.slice(0, 10);
+  $("slot").value = Number(iso.slice(11, 13)) * 2 + (iso.slice(14, 16) === "30" ? 1 : 0);
+  refresh();
+}
+
+const ROWS = {fixed: "Fixed limit", last_known: "Last known", same_hour_yesterday: "Same hour yesterday", model_q05: "Model (q05)", model_fallback: "Model + fallback", oracle: "Safe maximum (oracle)"};
+const COLS = [["export_index", "Export index (fixed = 100)", v => num(v, 1)], ["violation_rate", "Violations", v => v == null ? "—" : (v * 100).toFixed(1) + "%"], ["abstain_rate", "Sent to a human", v => v == null ? "—" : (v * 100).toFixed(1) + "%"], ["flagged_per_day_mean", "Flagged per day (mean)", v => num(v, 1)], ["flagged_per_day_max", "Flagged per day (max)", v => num(v, 0)]];
+
+async function loadComparison() {
+  const note = $("cmpNote"), table = $("cmp");
+  table.hidden = true;
+  let res;
+  try { res = await fetch("/eval/summary"); } catch (_) { note.textContent = "The screen server did not answer."; return; }
+  if (res.status === 404) { note.textContent = "No evaluation output yet. Run python -m src.eval.run, then reload. No numbers are shown until it exists."; return; }
+  if (!res.ok) { note.textContent = "The evaluation summary could not be read."; return; }
+  const s = (await res.json()).summary;
+  const scenarios = s.scenarios || {};
+  const keys = Object.keys(scenarios);
+  note.textContent = (s.mock ? "MOCK, NOT A RESULT. " : "") + "Run " + s.run_id + (s.git_sha ? " · commit " + String(s.git_sha).slice(0, 8) : "") + ". Numbers come from the evaluation output, not from this page.";
+  if (s.mock) note.style.color = "var(--bad)";
+  const head = table.tHead, body = table.tBodies[0]; head.replaceChildren(); body.replaceChildren();
+  const hr = el("tr"); hr.append(el("th", "Station · policy")); COLS.forEach(c => hr.append(el("th", c[1]))); head.append(hr);
+  keys.forEach(k => {
+    const rows = scenarios[k].rows || {};
+    Object.keys(rows).forEach(name => {
+      const r = el("tr"); r.append(el("td", k + " · " + (ROWS[name] || name)));
+      COLS.forEach(c => r.append(el("td", c[2](rows[name][c[0]])))); body.append(r);
+    });
+  });
+  table.hidden = !body.children.length;
+  if (!body.children.length) note.textContent += " The summary has no rows.";
+}
+
+async function refresh() {
+  setErr("");
+  const t = intervalStart();
+  try {
+    if (!state.station) await loadStation();
+    await Promise.all([loadForecast(t), loadGrid(t), loadPlan(t), loadQueue(), loadLog(), loadKill()]);
+  } catch (e) { setErr("Could not reach the agent API: " + e.message); }
+}
+
+async function act(fn) {
+  setErr("");
+  try { await fn(); } catch (e) { setErr(e.status === 403 || e.status === 503 ? "Write refused: " + e.message + ". Enter the demo token." : e.message); }
+  await refresh();
+}
+function decide(id, what) { return act(() => api("plan/" + id + "/" + what, "POST", {actor: $("actor").value || "operator"})); }
+
+$("propose").onclick = () => act(() => api("plan/propose", "POST", {interval_start: intervalStart(), actor: $("actor").value || "operator"}));
+$("approve").onclick = () => state.plan && decide(state.plan.plan_id, "approve");
+$("reject").onclick = () => state.plan && decide(state.plan.plan_id, "reject");
+$("execute").onclick = () => state.plan && decide(state.plan.plan_id, "execute");
+$("killOn").onclick = () => act(() => api("kill_switch", "POST", {on: true, actor: $("actor").value || "operator"}));
+$("killOff").onclick = () => act(() => api("kill_switch", "POST", {on: false, actor: $("actor").value || "operator"}));
+let timer;
+$("slot").addEventListener("input", () => { intervalStart(); clearTimeout(timer); timer = setTimeout(refresh, 150); });
+$("date").addEventListener("change", refresh);
+
+$("date").value = new Date().toISOString().slice(0, 10);
+intervalStart();
+loadComparison();
+refresh();
+</script>
+</body>
+</html>
