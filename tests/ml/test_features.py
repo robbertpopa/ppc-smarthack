@@ -128,3 +128,9 @@ def test_build_rejects_naive_time_and_several_stations(station):
 
 def test_features_are_the_single_source_of_column_order(frame):
     assert list(frame.columns) == [*features.KEYS, *features.FEATURES, "safe_share"]
+
+
+def test_build_accepts_a_plain_datetime(station, frame):
+    t = frame["decision_time"].iloc[500]
+    plain, stamped = features.build(station, t.to_pydatetime()), features.build(station, t)
+    assert same([plain[k] for k in features.FEATURES], [stamped[k] for k in features.FEATURES])
