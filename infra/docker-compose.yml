@@ -1,0 +1,38 @@
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+      target: app
+    image: ppc-smarthack:local
+    ports:
+      - "8000:8000"
+    environment:
+      APP_ENV: ${APP_ENV:-local}
+      SOURCE: ${SOURCE:-mock}
+      DEMO_TOKEN: ${DEMO_TOKEN:-}
+      LOG_URI: /data/artifacts/logs/actions.jsonl
+    volumes:
+      - artifacts:/data/artifacts
+    restart: unless-stopped
+
+  test:
+    profiles: ["test"]
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+      target: dev
+    image: ppc-smarthack:dev
+    command: pytest -q
+
+  lint:
+    profiles: ["test"]
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+      target: dev
+    image: ppc-smarthack:dev
+    command: ruff check src tests
+
+volumes:
+  artifacts:
