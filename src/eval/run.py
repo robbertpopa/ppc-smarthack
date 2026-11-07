@@ -75,9 +75,10 @@ def _prepare(scenario: str, allow_mock: bool, use_artifacts: bool, grid) -> dict
             "(2012-07-01 to 2013-06-30)"
         )
     houses = labels_io.load_station_houses(scenario)
-    surplus = kwp = None
+    surplus = kwp = profiles = None
     if profiles_path().exists():
-        surplus = surplus_kw(pd.read_parquet(profiles_path()), houses)
+        profiles = pd.read_parquet(profiles_path())
+        surplus = surplus_kw(profiles, houses)
         kwp = houses.set_index("house_id")["kwp"]
         if not surplus.index.intersection(pd.DatetimeIndex(test_labels["interval_start"])).size:
             raise ValueError(
@@ -87,7 +88,8 @@ def _prepare(scenario: str, allow_mock: bool, use_artifacts: bool, grid) -> dict
     models, meta = _load_models(scenario, labels, use_artifacts, grid)
     return {
         "scenario": scenario, "labels": labels, "test_labels": test_labels, "houses": houses,
-        "surplus": surplus, "kwp": kwp, "models": models, "meta": meta, "mock": mock,
+        "profiles": profiles, "surplus": surplus, "kwp": kwp, "models": models, "meta": meta,
+        "mock": mock,
     }  # fmt: skip
 
 
@@ -99,12 +101,19 @@ def _round(value):
     return value
 
 
-def policies(ctx: dict) -> dict:
-    """Rows for one station on the test period, plus what the other steps need."""
-    labels, test, meta = ctx["labels"], ctx["test_labels"], ctx["meta"]
-    surplus, kwp = ctx["surplus"], ctx["kwp"]
-    rows = train.training_rows(labels)
-    rows = split(rows)["test"]
+def tau_of(meta: dict) -> float:
+    info = meta["abstention"]
+    return float(info["tau"]) if info["reachable"] else -math.inf
+
+
+def score_model(ctx: dict, labels: pd.DataFrame) -> dict:
+    """Run the clean models on test-period features built from ``labels``.
+
+    ``labels`` is normally the clean label table; the robustness variants pass a copy
+    whose inputs (``load_kw``, ``pv_kw``, ``net_kw``) were corrupted. The target
+    ``safe_share`` is never touched, so the scored rows are the same.
+    """
+    rows = split(train.training_rows(labels))["test"]
     X = rows[features.FEATURES]
     pred = train.predict_quantiles(ctx["models"], X)
     index = pd.DatetimeIndex(rows["target_start"])
@@ -113,10 +122,23 @@ def policies(ctx: dict) -> dict:
     flagged = pd.Series(
         [bool(abstention.quality_flags(r)) for r in X.to_dict("records")], index=index
     )
+    abstain = (spread > tau_of(ctx["meta"])) | flagged
+    return {
+        "rows": rows, "X": X, "pred": pred, "index": index, "q05": q05, "spread": spread,
+        "flagged": flagged, "abstain": abstain, "fallback": q05.where(~abstain, FIXED_SHARE),
+    }  # fmt: skip
+
+
+def policies(ctx: dict) -> dict:
+    """Rows for one station on the test period, plus what the other steps need."""
+    labels, test, meta = ctx["labels"], ctx["test_labels"], ctx["meta"]
+    surplus, kwp = ctx["surplus"], ctx["kwp"]
+    scored = score_model(ctx, labels)
+    rows, pred = scored["rows"], scored["pred"]
+    q05, spread, flagged = scored["q05"], scored["spread"], scored["flagged"]
+    abstain, fallback = scored["abstain"], scored["fallback"]
     info = meta["abstention"]
-    tau = float(info["tau"]) if info["reachable"] else -math.inf
-    abstain = (spread > tau) | flagged
-    fallback = q05.where(~abstain, FIXED_SHARE)
+    tau = tau_of(meta)
 
     shares = {name: baselines.apply(name, labels) for name in baselines.NAMES}
     results = {
@@ -144,8 +166,14 @@ def policies(ctx: dict) -> dict:
     return {
         "rows": results, "calibration": cal, "drift": drift, "risk_coverage": curve,
         "tau": None if not info["reachable"] else tau, "n_test": len(rows),
-        "pred": pred, "features": X, "index": index,
+        "scored": scored,
     }  # fmt: skip
+
+
+def _clean_note(value):
+    if isinstance(value, dict):
+        return {k: _clean_note(v) for k, v in value.items()}
+    return _round(value)
 
 
 def _clean(results: dict) -> dict:
@@ -157,10 +185,16 @@ def _clean(results: dict) -> dict:
         "per_day_max",
         "n_intervals",
     )
-    return {k: {m: _round(r[m]) for m in keep} for k, r in results.items()}
+    extra = ("delta_violation_rate", "delta_export_index", "delta_abstain_rate")
+    return {
+        k: {m: _round(r[m]) for m in (*keep, *(e for e in extra if e in r))}
+        for k, r in results.items()
+    }
 
 
-def run(scenarios, run_id="local", use_artifacts=False, allow_mock=False, grid=None) -> dict:
+def run(
+    scenarios, run_id="local", use_artifacts=False, allow_mock=False, robustness=True, grid=None
+) -> dict:
     """Evaluate every scenario and write the outputs. Returns the summary."""
     started = time.perf_counter()
     out = eval_dir(run_id)
@@ -170,7 +204,13 @@ def run(scenarios, run_id="local", use_artifacts=False, allow_mock=False, grid=N
         ctx = _prepare(scenario, allow_mock, use_artifacts, grid)
         pt_id = ctx["labels"]["pt_id"].iloc[0]
         result = policies(ctx)
-        rows = result["rows"]
+        rows, extra = result["rows"], {}
+        if robustness:
+            from src.eval import robustness as robust
+
+            variants = robust.run_variants(ctx, result)
+            rows = {**rows, **variants["rows"]}
+            extra = {"robustness": {k: _clean_note(v) for k, v in variants["notes"].items()}}
         any_mock |= ctx["mock"]
         all_rows[pt_id] = rows
         meta, test = ctx["meta"], ctx["test_labels"]
@@ -198,6 +238,7 @@ def run(scenarios, run_id="local", use_artifacts=False, allow_mock=False, grid=N
             "calibration_drift": {k: _round(v) for k, v in result["drift"].items()},
             "labels_sha256": meta["labels_sha256"],
             "source_ref": test["source_ref"].iloc[0],
+            **extra,
         }
     git = model_io.git_sha()
     footer += [
@@ -234,6 +275,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--allow-mock", action="store_true", help="run on mock labels (not a result)"
     )
+    parser.add_argument("--no-robustness", dest="robustness", action="store_false")
     args = parser.parse_args(argv)
     names = list(labels_io.SCENARIOS) if args.scenario == "all" else [args.scenario]
     names = [n for n in names if (labels_io.labels_path(n) / "labels.parquet").exists()]
@@ -242,7 +284,7 @@ def main(argv: list[str] | None = None) -> None:
             "no labels found: ask P3 for the real file, or use `python -m src.ml.labels mock`"
         )
     try:
-        run(names, args.run_id, args.use_artifacts, args.allow_mock)
+        run(names, args.run_id, args.use_artifacts, args.allow_mock, args.robustness)
     except MockLabelsError as err:
         raise SystemExit(str(err)) from err
 
