@@ -28,7 +28,22 @@ def test_the_grid_guard_gets_the_grid_the_plan_and_the_injections(plan):
 
     result = adapt(grid_guard)(plan, None)
     assert result.passed and result.violations == []
-    assert seen == {"grid": "grid", "plan": plan, "injections": {"H01": 1.0}}
+    assert seen == {
+        "grid": "grid",
+        "plan": plan.model_dump(mode="json"),
+        "injections": {"H01": 1.0},
+    }
+    assert isinstance(seen["plan"], dict) and seen["plan"]["interval_start"].endswith("Z")
+
+
+def test_a_guard_written_for_plain_dicts_works(plan):
+    def dict_guard(grid, got_plan, injections):
+        ids = {x["house_id"] for x in got_plan["limits"]}
+        houses = {h.house_id for h in load_mock("station", StationConfig).houses}
+        ok = got_plan.get("pt_id") == "PT-A" and ids == houses
+        return {"passed": ok, "violations": [] if ok else ["wrong plan shape"]}
+
+    assert adapt(dict_guard)(plan, None).passed
 
 
 def test_violations_block_the_plan_and_are_reported(plan):
@@ -102,3 +117,42 @@ def test_the_adapter_plugs_into_the_service(tmp_path):
     plan = service.propose(noon)
     assert plan.status == "rejected" and plan.guard.violations == ["trafo 104%"]
     assert [e.event for e in log.read()] == ["guard_blocked"]
+
+
+@pytest.mark.parametrize("bad", ["high", [1.0], float("nan")])
+def test_a_figure_the_contract_rejects_blocks_the_plan_instead_of_raising(plan, bad):
+    result = adapt(lambda *a: {"passed": True, "violations": [], "v_max_pu": bad})(plan, None)
+    assert not result.passed and result.violations[0].startswith("guard failed: ")
+
+
+def with_limit(plan, **fields):
+    from src.common.contract import HouseLimit
+
+    first = plan.limits[0]
+    bad = HouseLimit.model_construct(
+        house_id=first.house_id,
+        export_limit_kw=fields.get("export_limit_kw", first.export_limit_kw),
+        battery_kw=fields.get("battery_kw", first.battery_kw),
+    )
+    return plan.model_copy(update={"limits": [bad, *plan.limits[1:]]})
+
+
+@pytest.mark.parametrize(
+    "fields,text",
+    [
+        ({"export_limit_kw": float("nan")}, "export limit nan kW is not a finite number"),
+        ({"export_limit_kw": float("inf")}, "export limit inf kW is not a finite number"),
+        ({"battery_kw": float("nan")}, "battery power nan kW is not a finite number"),
+        ({"battery_kw": float("-inf")}, "battery power -inf kW is not a finite number"),
+    ],
+)
+def test_a_non_finite_limit_is_blocked_before_the_grid_guard_runs(plan, fields, text):
+    calls = []
+
+    def grid_guard(*args):
+        calls.append(args)
+        return {"passed": True, "violations": []}
+
+    result = adapt(grid_guard)(with_limit(plan, **fields), None)
+    assert not result.passed and result.violations[0].endswith(text)
+    assert calls == []
