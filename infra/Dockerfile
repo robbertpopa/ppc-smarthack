@@ -7,7 +7,7 @@ COPY pyproject.toml ./
 COPY src ./src
 
 FROM base AS dev
-RUN pip install -e ".[dev,ml,sim]"
+RUN pip install -e ".[dev,ml,sim,report]"
 COPY tests ./tests
 CMD ["pytest", "-q"]
 

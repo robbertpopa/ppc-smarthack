@@ -6,7 +6,7 @@ TF ?= terraform
 .PHONY: setup data profiles smoke test lint run docker-build up down docker-test batch tf-fmt tf-validate tf-init tf-plan tf-apply
 
 setup:
-	$(PY) -m pip install -e ".[dev,ml,sim]"
+	$(PY) -m pip install -e ".[dev,ml,sim,report]"
 
 data:
 	$(PY) -m src.ml.data download
