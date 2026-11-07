@@ -19,10 +19,12 @@ import shutil
 import sys
 import urllib.request
 import zipfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
-from src.ml.config import data_dir
+from src.ml.config import data_dir, profiles_path
 
 SOURCE_URL = "https://pierreh.eu/downloads/Ausgrid_solar_home_data.zip"
 ZIP_NAME = "Ausgrid_solar_home_data.zip"
@@ -51,11 +53,8 @@ def ausgrid_dir() -> Path:
 
 
 def sha256(path: Path) -> str:
-    h = hashlib.sha256()
     with open(path, "rb") as fh:
-        for chunk in iter(lambda: fh.read(1 << 20), b""):
-            h.update(chunk)
-    return h.hexdigest()
+        return hashlib.file_digest(fh, "sha256").hexdigest()
 
 
 def read_sums(raw: Path) -> dict[str, str]:
@@ -82,9 +81,22 @@ def _matches(raw: Path, sums: dict[str, str], rel: str) -> bool:
     return rel in sums and path.is_file() and sha256(path) == sums[rel]
 
 
+def _zip_held_out(zip_path: Path) -> set[str]:
+    """Extracted-folder paths (relative to ``raw``) of the held-out files inside the zip."""
+    with zipfile.ZipFile(zip_path) as zf:
+        return {
+            f"ausgrid/{m.filename}"
+            for m in zf.infolist()
+            if not m.is_dir() and not m.filename.startswith("__MACOSX/") and is_held_out(m.filename)
+        }
+
+
 def _extracted_ok(raw: Path, sums: dict[str, str], include_held_out: bool = False) -> bool:
     rels = [rel for rel in sums if rel != ZIP_NAME]
-    if not include_held_out and any(is_held_out(rel) for rel in rels):
+    if include_held_out:
+        if not _zip_held_out(raw / ZIP_NAME) <= set(rels):
+            return False  # asked for the held-out year but it was never extracted: extract again
+    elif any(is_held_out(rel) for rel in rels):
         return False  # a held-out file is lying in the folder: extract again without it
     return bool(rels) and all(_matches(raw, sums, rel) for rel in rels)
 
@@ -92,17 +104,24 @@ def _extracted_ok(raw: Path, sums: dict[str, str], include_held_out: bool = Fals
 # --- download and extraction -----------------------------------------------
 
 
-def _download_file(url: str, dest: Path) -> None:
-    """Stream to a temporary file, then rename. Generic User-Agent only."""
-    dest.parent.mkdir(parents=True, exist_ok=True)
+@contextmanager
+def _atomic_path(dest: Path) -> Iterator[Path]:
+    """Yield a ``.part`` path next to ``dest``; rename it onto ``dest`` if the block succeeds."""
     tmp = dest.with_name(dest.name + ".part")
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     try:
-        with urllib.request.urlopen(request, timeout=TIMEOUT_S) as resp, open(tmp, "wb") as out:
-            shutil.copyfileobj(resp, out, 1 << 20)
+        yield tmp
         os.replace(tmp, dest)
     finally:
         tmp.unlink(missing_ok=True)
+
+
+def _download_file(url: str, dest: Path) -> None:
+    """Stream to a temporary file, then rename. Generic User-Agent only."""
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    with _atomic_path(dest) as tmp:
+        with urllib.request.urlopen(request, timeout=TIMEOUT_S) as resp, open(tmp, "wb") as out:
+            shutil.copyfileobj(resp, out, 1 << 20)
 
 
 def _reset(dest: Path) -> None:
@@ -145,7 +164,7 @@ def download(force: bool = False, include_held_out: bool = False) -> list[Path]:
     if fresh or not _extracted_ok(raw, sums, include_held_out):
         _extract_zip(raw / ZIP_NAME, dest, include_held_out)
         write_sums(raw)
-    return half_hourly_csvs(dest)
+    return half_hourly_csvs(dest, include_held_out)
 
 
 def use_local_copy(src: Path, include_held_out: bool = False) -> list[Path]:
@@ -164,7 +183,7 @@ def use_local_copy(src: Path, include_held_out: bool = False) -> list[Path]:
     else:
         raise FileNotFoundError(src)
     write_sums(raw)
-    return half_hourly_csvs(dest)
+    return half_hourly_csvs(dest, include_held_out)
 
 
 # --- inspection ------------------------------------------------------------
@@ -192,8 +211,12 @@ class CsvInfo:
         )
 
 
-def inspect_csv(path: Path) -> CsvInfo:
-    """Find the header (the first line may be a title row) and count lines."""
+def inspect_csv(path: Path, header_only: bool = False) -> CsvInfo:
+    """Find the header (the first line may be a title row) and count lines.
+
+    ``header_only`` stops after the first 10 lines; ``lines`` (and so ``data_rows``) is then
+    not the real count. Use it when only the layout matters, the files are large.
+    """
     first, header_index, header, lines = "", None, None, 0
     with open(path, encoding="utf-8-sig", errors="replace") as fh:
         for i, line in enumerate(fh):
@@ -202,12 +225,23 @@ def inspect_csv(path: Path) -> CsvInfo:
                 first = line.rstrip("\r\n")
             if header is None and i < 10 and line.startswith("Customer,"):
                 header_index, header = i, line.rstrip("\r\n")
+            if header_only and i >= 9:
+                break
     return CsvInfo(path, path.stat().st_size, lines, first, header_index, header)
 
 
-def half_hourly_csvs(folder: Path) -> list[Path]:
-    """CSVs with the half-hourly layout (excludes the monthly dataset)."""
-    return [p for p in sorted(folder.rglob("*.csv")) if inspect_csv(p).half_hourly]
+def half_hourly_csvs(folder: Path, include_held_out: bool = False) -> list[Path]:
+    """CSVs with the half-hourly layout (excludes the monthly dataset).
+
+    The held-out year is left out unless ``include_held_out`` is set, so profiles and
+    checks built from this list cannot touch the test year by accident.
+    """
+    return [
+        p
+        for p in sorted(folder.rglob("*.csv"))
+        if (include_held_out or not is_held_out(p.name))
+        and inspect_csv(p, header_only=True).half_hourly
+    ]
 
 
 def report(folder: Path) -> None:
@@ -229,13 +263,9 @@ def profiles() -> Path:
     from src.ml import ausgrid  # imported here: ausgrid itself imports this module
 
     table = ausgrid.build_profiles(ausgrid_dir())
-    out = data_dir() / "profiles.parquet"
-    tmp = out.with_name(out.name + ".part")
-    try:
+    out = profiles_path()
+    with _atomic_path(out) as tmp:
         table.to_parquet(tmp, index=False)
-        os.replace(tmp, out)
-    finally:
-        tmp.unlink(missing_ok=True)
     print(ausgrid.summarize(table))
     print("gross generation, kWh (raw CSV vs profiles; raw = profile + removed by rules):")
     checks = ausgrid.generation_check(ausgrid_dir(), table)

@@ -211,3 +211,12 @@ def test_profiles_command_writes_parquet(tmp_path, monkeypatch):
     assert list(table.columns) == ausgrid.OUTPUT_COLUMNS
     assert str(table["interval_start"].dt.tz) == "UTC"
     assert table["gg_kw"].iloc[0] == pytest.approx(0.4)
+
+
+def test_held_out_file_is_never_profiled(tmp_path):
+    write_csv(tmp_path / "Solar home 2010-2011.csv", [day("1/07/2010")], new_format=True)
+    write_csv(tmp_path / "Solar home 2012-2013.csv", [day("1/07/2012")], new_format=True)
+
+    profiles = ausgrid.build_profiles(tmp_path)
+
+    assert profiles["interval_start"].dt.year.max() == 2010

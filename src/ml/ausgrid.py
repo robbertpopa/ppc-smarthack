@@ -15,16 +15,15 @@ Conventions (evidence in DATA.md):
 
 from __future__ import annotations
 
-import csv
 from collections import Counter
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
+from src.ml.config import SYDNEY as TZ
 from src.ml.data import half_hourly_csvs, inspect_csv
 
-TZ = "Australia/Sydney"
 MAX_GG_PER_KWP = 1.2
 CATEGORIES = ("GC", "CL", "GG")
 DATE_FORMATS = ("%d-%b-%y", "%d-%b-%Y", "%d/%m/%Y", "%d/%m/%y", "%d%b%Y")
@@ -79,7 +78,7 @@ def parse_file(path: Path) -> pd.DataFrame:
     Columns: house_id, category, interval_start (naive Sydney wall clock),
     kwh, kwp, postcode, quality ("NA" or null). Nothing is cleaned here.
     """
-    info = inspect_csv(path)
+    info = inspect_csv(path, header_only=True)
     if not info.half_hourly:
         raise ValueError(f"{path.name}: not a half-hourly Ausgrid file")
     # keep_default_na=False: the quality flag "NA" must not become a missing value
@@ -242,17 +241,10 @@ def generation_check(raw_dir: Path, profiles: pd.DataFrame) -> list[dict]:
     """
     rows = []
     for path in half_hourly_csvs(raw_dir):
-        info = inspect_csv(path)
-        total, dates = 0.0, set()
-        with open(path, newline="", encoding="utf-8-sig") as fh:
-            reader = csv.reader(fh)
-            for _ in range(info.header_index + 1):
-                next(reader)
-            for row in reader:
-                if row[3] == "GG":
-                    dates.add(row[4])
-                    total += sum(float(v) for v in row[5:53] if v)
-        days = _parse_dates(pd.Series(sorted(dates)))
+        long = parse_file(path)
+        gg = long["category"] == "GG"
+        total = float(long.loc[gg, "kwh"].sum())
+        days = long.loc[gg, "interval_start"].dt.normalize()
         start = days.min().tz_localize(TZ)
         end = (days.max() + pd.Timedelta(days=1)).tz_localize(TZ)
         window = (profiles["interval_start"] >= start) & (profiles["interval_start"] < end)

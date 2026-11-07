@@ -8,10 +8,17 @@ from pathlib import Path
 
 from src.common.config import Settings
 
+SYDNEY = "Australia/Sydney"
+
 
 def data_dir() -> Path:
     """Root for raw data, profiles and labels. Default ``./data``."""
     return Path(Settings.from_env().data_dir)
+
+
+def profiles_path() -> Path:
+    """The cleaned per-house profiles written by ``python -m src.ml.data profiles``."""
+    return data_dir() / "profiles.parquet"
 
 
 def artifact_uri() -> str:
