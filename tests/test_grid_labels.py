@@ -87,6 +87,14 @@ class LabelTests(unittest.TestCase):
             outputs.append(pd.read_parquet(output))
         pd.testing.assert_frame_equal(outputs[0], outputs[1])
 
+    def test_invalid_grid_fails_in_the_parent_with_workers(self):
+        write_csv(self.source)
+        output = Path(self.directory.name) / "x.parquet"
+        for workers in (1, 2):
+            with self.assertRaises(ValueError):
+                generate(self.source, output, "2013-01-01", 1, transformer_kva=-1, workers=workers)
+        self.assertFalse(output.exists())
+
     def test_workers_must_be_positive(self):
         write_csv(self.source)
         with self.assertRaises(ValueError):
