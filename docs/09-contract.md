@@ -103,6 +103,8 @@ One record per station and interval. `horizon_min` is how far ahead it looks (60
 ```
 `event` is one of `plan_proposed`, `guard_blocked`, `plan_approved`, `plan_rejected`, `plan_executed`, `abstained`, `kill_switch`. Each decision must be traceable from the log to the forecast that caused it.
 
+The log is also the agent's memory. `plan_proposed` and `guard_blocked` carry the full plan in `detail.plan`; at start-up the service replays the log to rebuild its plans, the review count and the kill switch. An event is written before the state it describes changes, so a failed write leaves the state as it was. The kill switch writes one `plan_rejected` event (`detail.reason = "kill_switch"`) per cancelled plan, then the `kill_switch` event. A plan the operator rejected stays rejected; a plan blocked by the guard or cancelled by the kill switch can be proposed again. Unreadable lines (for example one cut short by a crash) are skipped.
+
 ## 5. `station_config`: the station the agent controls
 
 ```json

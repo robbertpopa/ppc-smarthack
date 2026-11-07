@@ -73,14 +73,128 @@ def test_guard_can_block_a_plan(tmp_path):
     assert err.value.code == "conflict"
 
 
-def test_propose_is_idempotent_until_rejected(tmp_path):
+def test_propose_is_idempotent(tmp_path):
     service, log = make_service(tmp_path)
     first = service.propose(NOON)
     assert service.propose(NOON) == first
     assert events(log) == ["plan_proposed"]
-    service.reject(first.plan_id, "op")
-    again = service.propose(NOON)
-    assert again.status == "proposed"
+
+
+def test_human_rejection_is_not_overridden_by_propose(tmp_path):
+    service, log = make_service(tmp_path)
+    first = service.propose(NIGHT)
+    rejected = service.reject(first.plan_id, "op")
+    assert service.propose(NIGHT) == rejected
+    assert rejected.status == "rejected" and service.queue()["pending"] == []
+    assert events(log) == ["plan_proposed", "abstained", "plan_rejected"]
+
+
+def test_guard_blocked_plan_is_proposed_again_when_the_guard_passes(tmp_path):
+    verdicts = iter([False, True])
+
+    def flaky(plan, grid_state):
+        ok = next(verdicts)
+        return GuardResult(passed=ok, violations=[] if ok else ["v_max 1.12 pu above 1.10"])
+
+    service, log = make_service(tmp_path, guard=flaky)
+    assert service.propose(NOON).status == "rejected"
+    assert service.propose(NOON).status == "proposed"
+    assert events(log) == ["guard_blocked", "plan_proposed"]
+
+
+def test_kill_switch_writes_one_rejection_per_cancelled_plan(tmp_path):
+    service, log = make_service(tmp_path)
+    approved = service.propose(NOON)
+    service.approve(approved.plan_id, "op")
+    pending = service.propose(NIGHT)
+    service.kill_switch(True, "op")
+    rejections = [e for e in log.read() if e.event == "plan_rejected"]
+    assert {e.plan_id for e in rejections} == {approved.plan_id, pending.plan_id}
+    assert all(e.detail["reason"] == "kill_switch" for e in rejections)
+    assert log.read()[-1].event == "kill_switch"
+
+
+def test_kill_cancelled_plan_can_be_proposed_again(tmp_path):
+    service, _ = make_service(tmp_path)
+    plan = service.propose(NOON)
+    service.kill_switch(True, "op")
+    service.kill_switch(False, "op")
+    assert service.propose(NOON).status == "proposed"
+    assert plan.plan_id == service.propose(NOON).plan_id
+
+
+class BrokenLog:
+    def __init__(self, inner):
+        self.inner = inner
+        self.fail = False
+
+    def append(self, event):
+        if self.fail:
+            raise OSError("disk full")
+        self.inner.append(event)
+
+    def read(self, limit=100):
+        return self.inner.read(limit)
+
+    def read_all(self):
+        return self.inner.read_all()
+
+
+def test_a_failed_log_write_leaves_the_state_unchanged(tmp_path):
+    inner = ActionLog(tmp_path / "actions.jsonl")
+    log = BrokenLog(inner)
+    service = AgentService(
+        load_mock("station", StationConfig), log, stub_guard, MockSource(), clock=lambda: NOON
+    )
+    plan = service.propose(NOON)
+    service.approve(plan.plan_id, "op")
+    log.fail = True
+    with pytest.raises(OSError):
+        service.execute(plan.plan_id, "op")
+    assert service.get(plan.plan_id).status == "approved"
+    with pytest.raises(OSError):
+        service.kill_switch(True, "op")
+    assert not service.kill_active and service.get(plan.plan_id).status == "approved"
+    with pytest.raises(OSError):
+        service.propose(NIGHT)
+    assert [p.plan_id for p in service.plans()] == [plan.plan_id]
+    log.fail = False
+    assert service.execute(plan.plan_id, "op").status == "executed"
+
+
+def restart(tmp_path):
+    station = load_mock("station", StationConfig)
+    log = ActionLog(tmp_path / "actions.jsonl")
+    return AgentService(station, log, stub_guard, MockSource(), clock=lambda: NOON)
+
+
+def test_plans_and_kill_switch_survive_a_restart(tmp_path):
+    service, _ = make_service(tmp_path)
+    executed = service.propose(NOON)
+    service.approve(executed.plan_id, "op")
+    service.execute(executed.plan_id, "op")
+    pending = service.propose(NIGHT)
+    service.kill_switch(True, "op")
+    again = restart(tmp_path)
+    assert again.kill_active
+    assert again.get(executed.plan_id).status == "executed"
+    assert again.get(pending.plan_id).status == "rejected"
+    with pytest.raises(ServiceError):
+        again.execute(executed.plan_id, "op")
+    again.kill_switch(False, "op")
+    assert not restart(tmp_path).kill_active
+
+
+def test_review_budget_and_human_rejections_survive_a_restart(tmp_path):
+    service, _ = make_service(tmp_path)
+    plan = service.propose(NIGHT)
+    service.reject(plan.plan_id, "op")
+    again = restart(tmp_path)
+    assert again.queue()["reviewed_today"] == 1
+    assert again.propose(NIGHT).status == "rejected"
+    approved = service.propose(NOON)
+    service.approve(approved.plan_id, "op")
+    assert restart(tmp_path).get(approved.plan_id).status == "approved"
 
 
 def test_execute_requires_approval(tmp_path):

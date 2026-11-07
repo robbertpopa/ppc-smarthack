@@ -9,6 +9,12 @@ from src.agent.planner import make_plan
 from src.agent.sources import Source, floor_to_half_hour
 from src.common.contract import ActionEvent, AwareDatetime, EventType, Plan, StationConfig
 
+DECISION_STATUS = {
+    "plan_approved": "approved",
+    "plan_rejected": "rejected",
+    "plan_executed": "executed",
+}
+
 
 class ServiceError(Exception):
     def __init__(self, code: str, message: str):
@@ -36,9 +42,33 @@ class AgentService:
         self.source = source
         self.clock = clock
         self._plans: dict[str, Plan] = {}
+        self._retryable: set[str] = set()
         self._reviews: list[datetime] = []
         self._kill = False
         self._lock = RLock()
+        self._restore()
+
+    def _restore(self) -> None:
+        for event in self.log.read_all():
+            detail = event.detail
+            if event.event in ("plan_proposed", "guard_blocked") and "plan" in detail:
+                plan = Plan.model_validate(detail["plan"])
+                self._plans[plan.plan_id] = plan
+                if event.event == "guard_blocked":
+                    self._retryable.add(plan.plan_id)
+                else:
+                    self._retryable.discard(plan.plan_id)
+            elif event.event in DECISION_STATUS and event.plan_id in self._plans:
+                plan = self._plans[event.plan_id]
+                self._plans[event.plan_id] = plan.model_copy(
+                    update={"status": DECISION_STATUS[event.event]}
+                )
+                if detail.get("reason") == "kill_switch":
+                    self._retryable.add(event.plan_id)
+                if detail.get("abstain") and event.event != "plan_executed":
+                    self._reviews.append(event.ts)
+            elif event.event == "kill_switch":
+                self._kill = bool(detail.get("on"))
 
     def _emit(self, plan: Plan | None, event: EventType, actor: str, detail: dict) -> None:
         sha = hashlib.sha256(plan.model_dump_json().encode()).hexdigest()[:16] if plan else None
@@ -59,10 +89,13 @@ class AgentService:
             raise ServiceError("not_found", f"unknown plan {plan_id}")
         return plan
 
-    def _set_status(self, plan: Plan, status: str) -> Plan:
-        plan = plan.model_copy(update={"status": status})
-        self._plans[plan.plan_id] = plan
-        return plan
+    def _transition(
+        self, plan: Plan, status: str, event: EventType, actor: str, detail: dict
+    ) -> Plan:
+        moved = plan.model_copy(update={"status": status})
+        self._emit(moved, event, actor, detail)
+        self._plans[moved.plan_id] = moved
+        return moved
 
     def propose(self, interval_start: AwareDatetime, actor: str = "agent") -> Plan:
         with self._lock:
@@ -72,17 +105,24 @@ class AgentService:
             grid_state = self.source.grid_state(pt_id, interval_start)
             plan = make_plan(forecast, grid_state, self.station, interval_start)
             existing = self._plans.get(plan.plan_id)
-            if existing is not None and existing.status != "rejected":
+            if existing is not None and not (
+                existing.status == "rejected" and plan.plan_id in self._retryable
+            ):
                 return existing
             plan = plan.model_copy(update={"guard": self.guard(plan, grid_state)})
             if not plan.guard.passed:
-                plan = self._set_status(plan, "rejected")
-                self._emit(plan, "guard_blocked", actor, {"violations": plan.guard.violations})
+                plan = plan.model_copy(update={"status": "rejected"})
+                detail = {"violations": plan.guard.violations, "plan": plan.model_dump(mode="json")}
+                self._emit(plan, "guard_blocked", actor, detail)
+                self._plans[plan.plan_id] = plan
+                self._retryable.add(plan.plan_id)
                 return plan
-            self._plans[plan.plan_id] = plan
-            self._emit(plan, "plan_proposed", actor, {"source": plan.source})
+            detail = {"source": plan.source, "plan": plan.model_dump(mode="json")}
+            self._emit(plan, "plan_proposed", actor, detail)
             if plan.abstain:
                 self._emit(plan, "abstained", actor, {"reasons": plan.reasons})
+            self._plans[plan.plan_id] = plan
+            self._retryable.discard(plan.plan_id)
             return plan
 
     def _decide(self, plan_id: str, actor: str, approve: bool) -> Plan:
@@ -94,11 +134,17 @@ class AgentService:
                 raise ServiceError("conflict", "plan did not pass the guard")
             detail: dict = {"abstain": plan.abstain}
             if plan.abstain:
+                detail.update(self._review_counts(extra=1))
+            moved = self._transition(
+                plan,
+                "approved" if approve else "rejected",
+                "plan_approved" if approve else "plan_rejected",
+                actor,
+                detail,
+            )
+            if plan.abstain:
                 self._reviews.append(self.clock())
-                detail.update(self._review_counts())
-            plan = self._set_status(plan, "approved" if approve else "rejected")
-            self._emit(plan, "plan_approved" if approve else "plan_rejected", actor, detail)
-            return plan
+            return moved
 
     def approve(self, plan_id: str, actor: str) -> Plan:
         return self._decide(plan_id, actor, True)
@@ -113,10 +159,8 @@ class AgentService:
                 raise ServiceError("kill_switch_active", "kill switch is active")
             if plan.status != "approved":
                 raise ServiceError("conflict", f"plan is {plan.status}, not approved")
-            plan = self._set_status(plan, "executed")
             detail = {"source": plan.source, "houses": len(plan.limits)}
-            self._emit(plan, "plan_executed", actor, detail)
-            return plan
+            return self._transition(plan, "executed", "plan_executed", actor, detail)
 
     def kill_switch(self, on: bool, actor: str) -> dict:
         with self._lock:
@@ -124,20 +168,23 @@ class AgentService:
             if on:
                 for plan in list(self._plans.values()):
                     if plan.status in ("proposed", "approved"):
-                        self._set_status(plan, "rejected")
+                        self._transition(
+                            plan, "rejected", "plan_rejected", actor, {"reason": "kill_switch"}
+                        )
+                        self._retryable.add(plan.plan_id)
                         cancelled.append(plan.plan_id)
-            self._kill = on
             self._emit(
                 None,
                 "kill_switch",
                 actor,
                 {"on": on, "cancelled": cancelled, "fallback_share": self.station.static_share},
             )
+            self._kill = on
             return {"on": on, "cancelled": cancelled}
 
-    def _review_counts(self) -> dict:
+    def _review_counts(self, extra: int = 0) -> dict:
         today = self.clock().date()
-        reviewed = sum(1 for t in self._reviews if t.date() == today)
+        reviewed = extra + sum(1 for t in self._reviews if t.date() == today)
         budget = self.station.review_budget
         return {
             "reviewed_today": reviewed,
