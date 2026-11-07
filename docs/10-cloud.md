@@ -93,7 +93,7 @@ The first push to `main` after this creates the whole stack.
 | `ARTIFACT_URI` | Where models and evaluation outputs go; a path | `./artifacts` | `/data/artifacts` (the Azure Files share) |
 | `LOG_URI` | Where the action log is appended; a path | `./artifacts/logs/actions.jsonl` | `/data/artifacts/logs/actions.jsonl` |
 | `API_URL` | Base URL the UI calls | `http://127.0.0.1:8000` | the Container App URL (Terraform output `app_url`) |
-| `SOURCE` | `mock` until the real model and grid are connected | `mock` | `mock` |
+| `SOURCE` | `mock`, or `model` (real model, labels history and grid guard; needs `SCENARIO`, default `A`) | `mock` | `mock` |
 | `DEMO_TOKEN` | Required header `X-Demo-Token` for write endpoints; empty disables the check | empty | secret from GitHub |
 
 Layout on the share:

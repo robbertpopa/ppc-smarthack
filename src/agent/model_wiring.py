@@ -1,0 +1,79 @@
+"""Wiring for SOURCE=model: real model, real labels history, real guard.
+
+Heavy imports (ml, grid) stay inside the functions so the mock path loads none of them.
+"""
+
+import logging
+from datetime import datetime, timezone
+from functools import lru_cache
+
+from src.agent.model_source import ModelSource
+from src.common.config import Settings
+from src.common.contract import GridState, House, StationConfig
+from src.common.mock_data import load_mock
+
+logger = logging.getLogger(__name__)
+
+UNCAPPED_KW = 1e6
+
+
+def load_station(settings: Settings) -> StationConfig:
+    """Houses of the scenario's station; other settings keep the mock defaults."""
+    from src.ml import labels as labels_io
+
+    houses = labels_io.load_station_houses(settings.scenario)
+    base = load_mock("station", StationConfig)
+    return base.model_copy(
+        update={
+            "pt_id": labels_io.pt_id(settings.scenario),
+            "houses": [
+                House(house_id=str(r.house_id), kwp=float(r.kwp)) for r in houses.itertuples()
+            ],
+        }
+    )
+
+
+def make_model_source(settings: Settings, station: StationConfig) -> ModelSource:
+    from src.grid.twin import build_grid, power_flow
+    from src.ml import features
+    from src.ml import labels as labels_io
+    from src.ml.predict import predict
+
+    @lru_cache(maxsize=1)
+    def history():
+        return labels_io.load(settings.scenario)
+
+    houses = [h.model_dump(exclude_none=True) for h in station.houses]
+    config = {"pt_id": station.pt_id, "houses": houses}
+    grid = build_grid(config)
+    total_kwp = sum(h.kwp for h in station.houses)
+
+    def station_state(pt_id: str, t: datetime):
+        frame = history()
+        return frame[frame["pt_id"] == pt_id]
+
+    def grid_state_for(pt_id: str, interval_start: datetime):
+        """Power flow on the last reading known one hour before the interval, uncapped."""
+        decision = interval_start.astimezone(timezone.utc)
+        frame = history()
+        seen = frame[(frame["pt_id"] == pt_id) & (frame["available_at"] <= decision)]
+        if seen.empty:
+            return None
+        last = seen.iloc[-1]
+        injections = {
+            "interval_start": interval_start.isoformat(),
+            "houses": [
+                {
+                    "house_id": h.house_id,
+                    "load_kw": float(last["load_kw"]) / len(station.houses),
+                    "pv_kw": float(last["pv_kw"]) * h.kwp / total_kwp,
+                    "export_limit_kw": UNCAPPED_KW,
+                }
+                for h in station.houses
+            ],
+        }
+        state = power_flow(grid, injections)
+        state.pop("interval_start", None)
+        return GridState(interval_start=interval_start, **state)
+
+    return ModelSource(predict, features.build, station_state, grid_state_for)
