@@ -296,3 +296,44 @@ def test_no_threshold_from_the_model_keeps_the_station_value(tmp_path):
         thresholds=lambda pt_id: None,
     )
     assert not service.propose(NOON).abstain and service.propose(NIGHT).abstain
+
+
+def test_a_threshold_lookup_that_raises_makes_the_agent_abstain(tmp_path):
+    def broken(pt_id):
+        raise RuntimeError("metadata file missing")
+
+    service = AgentService(
+        load_mock("station", StationConfig),
+        ActionLog(tmp_path / "actions.jsonl"),
+        stub_guard,
+        MockSource(),
+        clock=lambda: NOON,
+        thresholds=broken,
+    )
+    plan = service.propose(NOON)
+    assert plan.abstain and plan.source == "fallback_static" and plan.confidence == 0.0
+    assert "abstention threshold lookup failed" in plan.reasons
+
+
+@pytest.mark.parametrize("bad", [float("inf"), float("-inf"), float("nan"), 0, "high", [0.3]])
+def test_every_unusable_threshold_abstains_even_with_zero_spread(tmp_path, bad):
+    from src.common.contract import Forecast
+
+    class Flat(MockSource):
+        def forecast(self, pt_id, interval_start):
+            flat = {"q05": 0.5, "q10": 0.5, "q20": 0.5, "q50": 0.5, "q90": 0.5}
+            base = super().forecast(pt_id, interval_start).model_dump()
+            base.update(safe_cap_share=flat, spread=0.0)
+            return Forecast.model_validate(base)
+
+    service = AgentService(
+        load_mock("station", StationConfig),
+        ActionLog(tmp_path / "actions.jsonl"),
+        stub_guard,
+        Flat(),
+        clock=lambda: NOON,
+        thresholds=lambda pt_id: bad,
+    )
+    plan = service.propose(NOON)
+    assert plan.abstain and plan.source == "fallback_static"
+    assert "no usable abstention threshold" in plan.reasons
