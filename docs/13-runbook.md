@@ -1,6 +1,6 @@
 # Demo runbook
 
-How to run the demo, what to say, what to do when something breaks, and how to shut everything down. Owner: P1. It describes what exists today; lines marked **TODO** depend on work that is not merged yet (the real model, the real guard, the UI).
+How to run the demo, what to say, what to do when something breaks, and how to shut everything down. Owner: P1. It describes what exists today; lines marked **TODO** need data that only exists after a real run.
 
 ## Before the demo (30 minutes ahead)
 
@@ -34,7 +34,7 @@ curl -s "$URL/log?limit=5"
 Show the log: `plan_proposed`, `plan_approved`, `plan_executed`, each with the plan hash, in order.
 
 ### Scene 2: a cloud passes, the agent is not sure
-Propose an interval where the forecast is wide. With the mock source that is the night: `"interval_start":"2025-06-21T02:00:00Z"`. **TODO:** with the real model, use the cloudy interval found in the evaluation instead, and say which day it is.
+Propose an interval where the forecast is wide. With the mock source that is the night: `"interval_start":"2025-06-21T02:00:00Z"`. **TODO:** with `SOURCE=model`, use the cloudy interval found in the evaluation (from `src/eval/error_analysis.py`) instead, and say which day it is.
 
 Show: `abstain` is `true`, `source` is `fallback_static`, the limit is the fixed 36% of installed power, `confidence` is low, `reasons` says the spread is above the threshold (0.30), and the explanation says a person reviews the case. The agent did not guess; it fell back to the old rule and asked.
 
@@ -49,7 +49,7 @@ curl -s -X POST $URL/plan/<id>/approve -H "X-Demo-Token: $TOKEN" -H 'content-typ
 Show the log: the `abstained` event and the decision, with the review counters in `detail`.
 
 ### The guard blocks a plan (one moment)
-**TODO:** needs P3's `guard`. Today the stub guard only rejects non-numbers, so nothing blocks. Once the real guard is wired in, pick the interval where it rejects a plan, show the `guard_blocked` event with its violations, and say that nothing was executed.
+With `SOURCE=model` the real grid guard runs and fails closed: it rejects a plan it cannot verify (for example without a PV and load forecast). **TODO:** after a real run, pick the interval where it rejects a plan on voltage or transformer limits (`python -m src.agent.replay` lists plans with their status), show the `guard_blocked` event with its violations, and say that nothing was executed.
 
 ### The kill switch (optional, short)
 ```

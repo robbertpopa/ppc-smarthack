@@ -28,6 +28,33 @@ variable "image_tag" {
   default     = "latest"
 }
 
+variable "agent_source" {
+  description = "Where the agent gets its forecasts: mock, or model (needs labels and trained models on the share)."
+  type        = string
+  default     = "mock"
+
+  validation {
+    condition     = contains(["mock", "model"], var.agent_source)
+    error_message = "agent_source must be mock or model."
+  }
+}
+
+variable "scenario" {
+  description = "Scenario (A, B or B-VAR) used when source is model."
+  type        = string
+  default     = "A"
+}
+
+variable "ui_cpu" {
+  type    = number
+  default = 0.25
+}
+
+variable "ui_memory" {
+  type    = string
+  default = "0.5Gi"
+}
+
 variable "app_cpu" {
   type    = number
   default = 0.5

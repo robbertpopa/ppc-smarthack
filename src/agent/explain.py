@@ -56,6 +56,52 @@ def build_explanation(
     return Explanation(text=text, figures=figures)
 
 
+def _num(value: float) -> str:
+    return str(round(float(value), 2))
+
+
+def add_factors(
+    explanation: Explanation, factors: dict | None, labels: dict[str, str]
+) -> Explanation:
+    """Append the model's top factors and similar cases, using only numbers from the figures.
+
+    ``factors`` is the output of ``ml.explain.explain``. Nothing is invented: every number
+    in the added text is also added as a figure.
+    """
+    if not factors or not factors.get("figures"):
+        return explanation
+    figures = list(explanation.figures)
+    parts = []
+    for item in factors["figures"]:
+        name = item["name"]
+        value = round(float(item["value"]), 2)
+        effect = round(abs(float(item["effect"])) * 100)
+        direction = "raises" if item["effect"] > 0 else "lowers"
+        figures.append(Figure(name=f"factor_{name}", value=value))
+        figures.append(Figure(name=f"factor_{name}_effect_pct", value=effect))
+        parts.append(
+            f"{labels.get(name, name)} is {_num(value)} and {direction} "
+            f"the cautious limit by {effect} points"
+        )
+    text = explanation.text + " Main factors: " + "; ".join(parts) + "."
+    similar = factors.get("similar") or []
+    if similar:
+        realised = sorted(round(c["safe_share"] * 100) for c in similar)
+        median = realised[len(realised) // 2]
+        figures += [
+            Figure(name="similar_cases", value=len(similar)),
+            Figure(name="similar_median_safe_share_pct", value=median),
+        ]
+        text += (
+            f" In {len(similar)} similar past cases the realised safe share had a median "
+            f"of {median}%."
+        )
+    if factors.get("missing"):
+        figures.append(Figure(name="missing_inputs", value=len(factors["missing"])))
+        text += f" {len(factors['missing'])} inputs were missing."
+    return Explanation(text=text, figures=figures)
+
+
 def grounded(explanation: Explanation) -> bool:
     allowed = {float(f.value) for f in explanation.figures}
     return all(float(n) in allowed for n in NUMBER.findall(explanation.text))

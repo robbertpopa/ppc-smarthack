@@ -5,6 +5,7 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from threading import RLock
 
+from src.agent.explain import add_factors, ensure_grounded
 from src.agent.guard import Guard
 from src.agent.log import ActionLog
 from src.agent.planner import make_plan
@@ -123,6 +124,15 @@ class AgentService:
         self._plans[moved.plan_id] = moved
         return moved
 
+    def _with_factors(self, plan: Plan, pt_id: str, interval_start: datetime) -> Plan:
+        factors_of = getattr(self.source, "factors", None)
+        if factors_of is None or plan.source != "model":
+            return plan
+        from src.ml.explain import LABELS
+
+        explanation = add_factors(plan.explanation, factors_of(pt_id, interval_start), LABELS)
+        return plan.model_copy(update={"explanation": ensure_grounded(explanation)})
+
     def propose(self, interval_start: AwareDatetime, actor: str = "agent") -> Plan:
         with self._lock:
             interval_start = floor_to_half_hour(interval_start.astimezone(timezone.utc))
@@ -131,6 +141,7 @@ class AgentService:
             grid_state = self.source.grid_state(pt_id, interval_start)
             station, forced = self._threshold_station()
             plan = make_plan(forecast, grid_state, station, interval_start, force_abstain=forced)
+            plan = self._with_factors(plan, pt_id, interval_start)
             existing = self._plans.get(plan.plan_id)
             if existing is not None and not (
                 existing.status == "rejected" and plan.plan_id in self._retryable

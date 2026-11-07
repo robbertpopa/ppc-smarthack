@@ -33,3 +33,17 @@ def test_model_source_runs_the_real_model_and_guard(env):
     assert plan.pt_id == "PT-A"
     assert plan.guard is not None and plan.guard.v_max_pu is not None
     assert "grid state did not converge" not in plan.reasons
+
+
+def test_the_plan_carries_the_hotspot_and_grounded_factors(env):
+    service = build_service(Settings(source="model", scenario="A", log_uri=str(env / "b.jsonl")))
+    moment = datetime(2012, 5, 10, 1, 0, tzinfo=timezone.utc)
+    state = service.source.grid_state("PT-A", moment)
+    assert state.converged and 20 < state.trafo_hotspot_c < 200
+
+
+def test_hotspot_rises_with_load():
+    from src.agent.model_wiring import hotspot_c
+
+    assert hotspot_c([0.2] * 10) < hotspot_c([0.2] * 5 + [1.4] * 5)
+    assert hotspot_c([]) is None
