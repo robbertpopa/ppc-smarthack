@@ -5,141 +5,248 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Station operator screen</title>
 <style>
-:root{--bg:#edf3f3;--card:#fff;--ink:#173047;--muted:#506879;--ok:#228466;--warn:#d99a00;--bad:#ba3636;--line:#d6e0e3;--accent:#1d5f8a}
-@media (prefers-color-scheme:dark){:root{--bg:#10191f;--card:#18262e;--ink:#e3edf1;--muted:#9bb0bb;--line:#2b3d47;--accent:#6fb4e0}}
+:root{--bg:#fbfbf9;--ink:#17191c;--on-ink:#fff;--muted:#656a70;--line:#e6e6e1;--line2:#c9c9c2;--soft:#f1f1ed;--ok:#2f7d5b;--rev:#c98600;--revtext:#8a5300;--bad:#b3261e;--band:#e4e9f3}
+@media (prefers-color-scheme:dark){:root{--bg:#111314;--ink:#ececea;--on-ink:#111314;--muted:#9aa0a6;--line:#262a2d;--line2:#3a3f43;--soft:#1b1e20;--ok:#4aa37e;--rev:#e0a93b;--revtext:#e0b45c;--bad:#e5645a;--band:#232c3a}}
 *{box-sizing:border-box}
-body{font-family:system-ui,sans-serif;color:var(--ink);background:var(--bg);margin:0;padding:16px 16px 48px}
-main{max-width:1180px;margin:auto}
-header{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
-h1{font-size:1.5rem;margin:0}h2{font-size:1.05rem;margin:0 0 10px}
-p{line-height:1.5;margin:6px 0}
-.banner{background:#fff0c1;color:#644a00;padding:10px 14px;border-radius:10px;margin:12px 0;font-weight:600}
-.card{background:var(--card);padding:18px;border-radius:14px;margin-top:16px;box-shadow:0 2px 10px #17304712}
-.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}
-.row{display:flex;gap:16px;flex-wrap:wrap;align-items:end}
-label{display:block;font-weight:600;margin-bottom:4px}
-input,select,button{font:inherit;color:inherit}
-input,select{padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--card);max-width:100%}
-input[type=range]{width:100%;padding:0}
-button{padding:7px 14px;border-radius:8px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer}
-button.ghost{background:transparent;color:var(--accent)}
-button.danger{background:var(--bad);border-color:var(--bad)}
-button:disabled{opacity:.45;cursor:not-allowed}
-.metrics{display:flex;gap:16px;flex-wrap:wrap}.metrics>div{min-width:130px;flex:1;color:var(--muted);font-size:.9rem}
-.metric{display:block;font-size:1.4rem;font-weight:700;color:var(--ink)}
-.pill{display:inline-block;padding:2px 10px;border-radius:99px;font-size:.85rem;font-weight:600;color:#fff}
-.pill.ok{background:var(--ok)}.pill.warn{background:var(--warn);color:#2b2000}.pill.bad{background:var(--bad)}.pill.off{background:var(--muted)}
-.band{position:relative;height:26px;background:var(--line);border-radius:6px;margin:10px 0 4px}
-.band span{position:absolute;top:0;bottom:0;border-radius:6px}
-.band .wide{background:#9ec7de}.band .tick{width:3px;background:var(--ink);border-radius:0}
-.band .stat{width:3px;background:var(--bad);border-radius:0}
-.houses{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px}
-.house{border-radius:10px;padding:8px 10px;color:#fff;font-size:.85rem;line-height:1.35}
-.house.ok{background:var(--ok)}.house.warn{background:var(--warn);color:#2b2000}.house.bad{background:var(--bad)}.house.off{background:var(--muted)}
-.house b{display:block;font-size:1rem}
-table{width:100%;border-collapse:collapse;font-size:.92rem}
-th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
-th{color:var(--muted);font-weight:600}
-.legend span{margin-right:14px;font-size:.85rem;color:var(--muted)}
-.dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px}
-.err{color:var(--bad);min-height:1.3em}
+body{font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--ink);background:var(--bg);margin:0;padding:0 0 56px;line-height:1.5;font-variant-numeric:tabular-nums}
+.wrap{max-width:1200px;margin:0 auto;padding:0 28px}
+h1,h2,p{margin:0}
 .muted{color:var(--muted)}
-.scroll{max-height:290px;overflow:auto}
-a{color:var(--accent)}
+.sub{color:var(--muted);font-size:.85rem}
+button,input{font:inherit;color:inherit}
+input{padding:8px 10px;border:1px solid var(--line2);border-radius:8px;background:var(--bg);min-height:40px;max-width:100%}
+button{min-height:44px;padding:0 22px;border-radius:8px;border:1px solid var(--ink);background:var(--ink);color:var(--on-ink);font-weight:500;cursor:pointer}
+button.line{background:transparent;color:var(--ink);border-color:var(--line2)}
+button.text{background:transparent;border-color:transparent;color:var(--ink);padding:0 10px;min-width:44px}
+button.kill{min-height:40px;padding:0 16px;background:transparent;color:var(--bad);border-color:color-mix(in srgb,var(--bad) 40%,transparent)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button:focus-visible,input:focus-visible,summary:focus-visible,a:focus-visible{outline:3px solid var(--rev);outline-offset:2px}
+header.top{border-bottom:1px solid var(--line)}
+header.top .wrap{display:flex;flex-wrap:wrap;gap:10px 20px;align-items:center;justify-content:space-between;padding-top:18px;padding-bottom:18px}
+.brand{display:flex;gap:14px;align-items:baseline;flex-wrap:wrap}
+.tools{display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:.9rem}
+.tools .simtag{color:var(--revtext);font-weight:500}
+.dot{display:inline-block;width:10px;height:10px;border-radius:99px;background:var(--line2);flex:none}
+.dot.ok{background:var(--ok)}.dot.rev{background:var(--rev)}.dot.bad{background:var(--bad)}
+details{position:relative}summary{cursor:pointer;color:var(--muted);list-style:none;padding:10px 2px}
+.pop{position:absolute;right:0;top:100%;z-index:5;background:var(--bg);border:1px solid var(--line2);border-radius:10px;padding:14px;width:min(290px,86vw);display:flex;flex-direction:column;gap:10px;box-shadow:0 10px 28px #0002}
+label{display:block;font-weight:500;font-size:.85rem;margin-bottom:3px}
+.err{color:var(--bad);font-weight:500;padding-top:14px}.err:empty{display:none}
+.hero{display:flex;flex-wrap:wrap;gap:36px 72px;padding:40px 0 32px;align-items:flex-start}
+.hero .lead{flex:1 1 460px;min-width:0}.hero .stats{flex:1 1 300px;max-width:420px;min-width:0}
+.when{display:flex;gap:10px;align-items:center;font-size:.9rem;color:var(--muted);margin-bottom:10px}
+.hero h1{font-size:2.4rem;line-height:1.15;font-weight:500;letter-spacing:-.01em}
+.hero .detail{font-size:1.05rem;line-height:1.55;margin-top:14px;max-width:540px;color:var(--muted)}
+.actions{display:flex;gap:10px;margin-top:26px;flex-wrap:wrap}
+.row{display:flex;align-items:center;gap:14px;padding:11px 0;border-top:1px solid var(--line)}
+.stats .row .l{flex:1;color:var(--muted)}.stats .row .v{font-size:1.25rem;font-weight:500}
+.stats .row:last-child,.list .row:last-child{border-bottom:1px solid var(--line)}
+.daybar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+.daynav{display:flex;align-items:center;gap:2px;font-size:.9rem}
+.daynav input{border:0;background:transparent;min-height:44px;padding:0 4px}
+.plot{overflow-x:auto}.plotin{min-width:880px}
+#chart{display:block;width:100%;height:90px}
+.strip{display:grid;grid-template-columns:repeat(48,minmax(0,1fr));margin-top:2px}
+.cell{min-height:28px;height:28px;padding:0;border:0;border-radius:0;background:transparent;display:flex;align-items:center;justify-content:center}
+.cell i{display:block;width:10px;height:10px;border-radius:99px;background:var(--ink)}
+.cell.none i{width:5px;height:5px;background:var(--line2)}
+.cell.night{opacity:.5}
+.cell.done i{background:var(--ink)}
+.cell.approved i{background:radial-gradient(circle,var(--ink) 38%,transparent 42%);box-shadow:inset 0 0 0 2px var(--ink)}
+.cell.waiting i{background:transparent;box-shadow:inset 0 0 0 2px var(--ink)}
+.cell.review i{background:var(--rev)}
+.cell.blocked i{background:var(--bad)}
+.cell.rejected i{width:8px;height:8px;background:transparent;box-shadow:inset 0 0 0 2px var(--line2)}
+.cell[aria-pressed=true] i{outline:2px solid var(--ink);outline-offset:3px}
+.ticks{display:flex;justify-content:space-between;font-size:.72rem;color:var(--muted)}
+.legend{display:flex;flex-wrap:wrap;gap:4px 20px;font-size:.8rem;color:var(--muted);margin-top:10px}
+nav.tabs{display:flex;flex-wrap:wrap;margin-top:30px;border-bottom:1px solid var(--line)}
+.tab{background:none;border:0;border-bottom:2px solid transparent;border-radius:0;padding:12px 2px;margin-right:26px;color:var(--muted);font-weight:400}
+.tab[aria-selected=true]{color:var(--ink);border-bottom-color:var(--ink);font-weight:500}
+.panel{padding-top:24px}
+.two{display:flex;flex-wrap:wrap;gap:32px 56px;align-items:flex-start}
+.two>*{flex:1 1 380px;min-width:0}
+h2.h{font-size:.78rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin:0 0 12px}
+.tag{font-size:.72rem;font-weight:600;color:var(--revtext);border:1px solid color-mix(in srgb,var(--rev) 55%,transparent);border-radius:4px;padding:1px 6px;margin-left:8px;text-transform:none;letter-spacing:0}
+.hrow{width:100%;min-height:52px;text-align:left;background:transparent;color:var(--ink);border:0;border-top:1px solid var(--line);border-radius:0;padding:10px 4px;display:flex;align-items:center;gap:14px;font-weight:400}
+.hrow[aria-pressed=true]{background:var(--soft)}
+.hrow .id{width:44px;font-weight:500}.hrow .lim{width:82px;font-size:1.05rem;font-weight:500}
+.hrow .bar{flex:1;height:4px;border-radius:99px;background:var(--line);min-width:40px}.hrow .bar i{display:block;height:100%;border-radius:99px;background:var(--ink)}
+.hrow .note{width:108px;text-align:right;font-size:.8rem;color:var(--muted)}
+.mapbox{min-height:360px;border:1px dashed var(--line2);border-radius:10px;position:relative;overflow:hidden}
+.mapbox.live{border-style:solid;height:440px}
+.mapempty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;padding:24px}
+.mapnote{font-size:.8rem;color:var(--revtext);margin-top:8px}
+ol.tree{list-style:none;margin:0;padding:0}
+ol.tree li{display:flex;gap:16px;padding-bottom:22px}
+ol.tree .rail{display:flex;flex-direction:column;align-items:center;width:22px;flex:none}
+ol.tree .mk{width:22px;height:22px;border-radius:99px;display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:700;border:1.5px solid var(--line2);background:var(--bg);color:var(--muted)}
+ol.tree .ok .mk{background:var(--ink);border-color:var(--ink);color:var(--on-ink)}
+ol.tree .warn .mk{background:var(--rev);border-color:var(--rev);color:#17191c}
+ol.tree .bad .mk{background:var(--bad);border-color:var(--bad);color:#fff}
+ol.tree .now .mk{border:2px solid var(--ink);color:var(--ink)}
+ol.tree .line{flex:1;width:1px;background:var(--line2);margin-top:4px}
+ol.tree li:last-child .line{display:none}
+ol.tree .body{flex:1;min-width:0}
+ol.tree .t{display:flex;justify-content:space-between;gap:16px;align-items:baseline}
+ol.tree .t b{font-weight:500}.ol-v{font-size:.9rem;color:var(--muted);text-align:right}
+ol.tree .warn .ol-v{color:var(--revtext)}ol.tree .bad .ol-v{color:var(--bad)}
+ol.tree .alt{font-size:.82rem;color:var(--muted)}
+ol.tree .todo .t b{color:var(--muted)}
+.opt{display:flex;gap:12px;padding:11px 0;border-top:1px solid var(--line);align-items:baseline}
+.opt .s{width:56px;font-size:1.1rem}.opt .w{flex:1}.opt .w small{display:block;color:var(--muted);font-size:.82rem}
+.opt.chosen .s,.opt.chosen b{font-weight:600}
+.drv{padding:8px 0}.drv .top{display:flex;justify-content:space-between;font-size:.9rem}.drv .bar{height:4px;background:var(--line);border-radius:99px;margin-top:6px}.drv .bar i{display:block;height:100%;border-radius:99px;background:var(--ink)}
+.stack{display:flex;flex-direction:column;gap:36px}
+table{width:100%;border-collapse:collapse;font-size:.9rem}
+th,td{text-align:left;padding:9px 8px 9px 0;border-top:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:500;font-size:.8rem}
+.scroll{max-height:380px;overflow:auto}
+.qitem{border-top:1px solid var(--line);padding:12px 0;display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between}
+.qitem .row2{display:flex;gap:8px}
+.trace{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.82rem}
+.trace div{padding:5px 0;border-top:1px solid var(--line);display:flex;gap:14px}
+.trace .o{color:var(--muted);width:52px;flex:none}.trace .s{width:64px;flex:none;color:var(--muted)}
+.empty{border:1px dashed var(--line2);border-radius:10px;padding:14px;font-size:.9rem;color:var(--muted)}
+footer{margin-top:44px;padding-top:16px;border-top:1px solid var(--line);font-size:.82rem;color:var(--muted)}
+a{color:var(--ink)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 </style>
 </head>
 <body>
-<main>
-<header>
-  <div><h1>Station operator screen</h1><p class="muted" id="station">Loading station…</p></div>
-  <span id="killState" class="pill off">Kill switch: …</span>
+<header class="top">
+  <div class="wrap">
+    <div class="brand"><b id="stationName" style="font-size:1.05rem">Station</b><span class="muted" id="station" style="font-size:.9rem">Loading…</span></div>
+    <div class="tools">
+      <span class="simtag" title="The grid is a model, not PPC's network, and nothing here controls real inverters."><i class="dot rev"></i> Simulated data</span>
+      <span class="sub" id="killState">Kill switch …</span>
+      <button id="killToggle" class="kill" type="button">Kill switch</button>
+      <details><summary>Session</summary>
+        <div class="pop">
+          <div><label for="actor">Your role</label><input id="actor" value="operator-demo" size="16"></div>
+          <div><label for="token">Demo token (needed for writes)</label><input type="password" id="token" autocomplete="off" placeholder="only if the API requires it"></div>
+          <p class="sub">The token stays in this tab's memory only.</p>
+        </div>
+      </details>
+    </div>
+  </div>
 </header>
-<div class="banner" id="simBanner" role="note">Simulated data. The grid is a model, not PPC's network, and nothing here controls real inverters.</div>
 
-<section class="card">
-  <div class="row">
-    <div><label for="date">Day (UTC)</label><input type="date" id="date"></div>
-    <div style="flex:1;min-width:240px"><label for="slot">Interval: <span id="slotLabel"></span> UTC</label><input type="range" id="slot" min="0" max="47" value="20"></div>
-    <div><label for="token">Demo token (needed for writes)</label><input type="password" id="token" autocomplete="off" placeholder="only if the API requires it"></div>
-    <div><label for="actor">Your role</label><input id="actor" value="operator-demo" size="14"></div>
-  </div>
+<div class="wrap">
   <p class="err" id="err" role="alert"></p>
-</section>
 
-<div class="grid2">
-<section class="card">
-  <h2>Station state <span class="muted" id="gsProv"></span></h2>
-  <div class="metrics">
-    <div>Max voltage<span class="metric" id="vmax">—</span></div>
-    <div>Transformer load<span class="metric" id="trafo">—</span></div>
-    <div>Line load (max)<span class="metric" id="line">—</span></div>
-    <div>Exported / curtailed<span class="metric" id="exp">—</span></div>
-  </div>
-  <p class="muted" id="gsNote"></p>
-</section>
-<section class="card">
-  <h2>Forecast: highest safe export share <span class="muted" id="fcProv"></span></h2>
-  <div class="band" id="band" role="img" aria-label="Forecast band"></div>
-  <p class="legend"><span><i class="dot" style="background:#9ec7de"></i>q05 to q90 band</span><span><i class="dot" style="background:var(--ink)"></i>median (q50)</span><span><i class="dot" style="background:var(--bad)"></i>fixed limit</span></p>
-  <div class="metrics">
-    <div>Cautious (q05)<span class="metric" id="q05">—</span></div>
-    <div>Median (q50)<span class="metric" id="q50">—</span></div>
-    <div>Uncertainty (spread)<span class="metric" id="spread">—</span></div>
-    <div>Fixed limit<span class="metric" id="static">—</span></div>
-  </div>
-  <p class="muted" id="fcNote"></p>
-</section>
+  <section class="hero" aria-live="polite">
+    <div class="lead">
+      <div class="when"><i class="dot" id="stateDot"></i><span id="verdictWhen"></span></div>
+      <h1 id="verdictHead">Loading…</h1>
+      <p class="detail" id="verdictSub"></p>
+      <div class="actions">
+        <button id="approve" type="button" hidden>Approve</button>
+        <button id="execute" type="button" hidden>Execute</button>
+        <button id="propose" type="button" hidden>Propose plan</button>
+        <button id="reject" class="line" type="button" hidden>Reject</button>
+      </div>
+    </div>
+    <div class="stats" aria-label="Station state">
+      <div class="row"><i class="dot" id="vDot"></i><span class="l">Highest voltage</span><span class="v" id="vmax">—</span></div>
+      <div class="row"><i class="dot" id="tDot"></i><span class="l">Transformer load</span><span class="v" id="trafo">—</span></div>
+      <div class="row"><i class="dot" id="lDot"></i><span class="l">Busiest line</span><span class="v" id="line">—</span></div>
+      <div class="row"><i class="dot"></i><span class="l">Exported / curtailed</span><span class="v" id="exp">—</span></div>
+      <p class="sub" id="gsNote" style="margin-top:8px"></p>
+    </div>
+  </section>
+
+  <section aria-label="The day">
+    <div class="daybar">
+      <span class="muted" style="font-size:.9rem">Safe export share through the day</span>
+      <div class="daynav">
+        <button id="prevDay" class="text" type="button" aria-label="Previous day">‹</button>
+        <label for="date" class="sr">Day (UTC)</label><input type="date" id="date">
+        <button id="nextDay" class="text" type="button" aria-label="Next day">›</button>
+        <button id="today" class="text" type="button">Today</button>
+      </div>
+    </div>
+    <div class="plot"><div class="plotin">
+      <svg id="chart" viewBox="0 0 960 90" preserveAspectRatio="none" role="img" aria-label="Forecast of the highest safe export share over the day"></svg>
+      <div class="strip" id="strip" role="group" aria-label="Half-hour intervals of the day"></div>
+      <div class="ticks" aria-hidden="true"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div>
+    </div></div>
+    <p class="sub" id="chartNote"></p>
+    <div class="legend"><span>● executed</span><span>◉ approved</span><span>○ waiting for a decision</span><span style="color:var(--revtext)">● sent to a human</span><span style="color:var(--bad)">● blocked</span><span>Line: median · shaded: range · dashed: fixed limit <span id="fixedLbl"></span></span></div>
+  </section>
+
+  <nav class="tabs" role="tablist" aria-label="Sections">
+    <button class="tab" role="tab" id="tab-houses" aria-controls="p-houses" aria-selected="true" type="button">Houses</button>
+    <button class="tab" role="tab" id="tab-queue" aria-controls="p-queue" aria-selected="false" tabindex="-1" type="button">Queue</button>
+    <button class="tab" role="tab" id="tab-decision" aria-controls="p-decision" aria-selected="false" tabindex="-1" type="button">Decision</button>
+    <button class="tab" role="tab" id="tab-log" aria-controls="p-log" aria-selected="false" tabindex="-1" type="button">Log</button>
+    <button class="tab" role="tab" id="tab-compare" aria-controls="p-compare" aria-selected="false" tabindex="-1" type="button">Comparison</button>
+  </nav>
+
+  <section class="panel" id="p-houses" role="tabpanel" aria-labelledby="tab-houses">
+    <div class="two">
+      <div class="list" id="houses" aria-label="Limit per house"></div>
+      <div>
+        <div class="mapbox" id="mapBox">
+          <div class="mapempty" id="mapEmpty"><b style="font-weight:500">Neighbourhood map</b><span class="sub" style="max-width:290px">The slot is ready. The map appears here when the map module is added. The grid behind it is synthetic.</span></div>
+          <div id="mapHost" style="position:absolute;inset:0"></div>
+        </div>
+        <p class="mapnote" id="mapNote" hidden>Illustrative layout. The grid behind this map is synthetic, not PPC's network.</p>
+        <p class="sub" id="houseDetail" style="margin-top:10px;color:var(--ink);font-weight:500"></p>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="p-queue" role="tabpanel" aria-labelledby="tab-queue" hidden>
+    <h2 class="h">Cases where the model is not sure <span class="sub" id="queueCount" style="text-transform:none;letter-spacing:0;font-weight:400"></span></h2>
+    <div id="queue"></div>
+  </section>
+
+  <section class="panel" id="p-decision" role="tabpanel" aria-labelledby="tab-decision" hidden>
+    <div class="two">
+      <div>
+        <h2 class="h">How it decided</h2>
+        <ol class="tree" id="tree"></ol>
+      </div>
+      <div class="stack">
+        <div><h2 class="h">Options considered</h2><div id="options"></div></div>
+        <div><h2 class="h">What moved the forecast <span class="tag" id="drvTag" hidden>Mock</span></h2><div id="drivers"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="p-log" role="tabpanel" aria-labelledby="tab-log" hidden>
+    <div class="two">
+      <div>
+        <h2 class="h">Activity</h2>
+        <div class="scroll"><table><thead><tr><th>Time (UTC)</th><th>Event</th><th>Who</th><th>Plan</th></tr></thead><tbody id="log"></tbody></table></div>
+      </div>
+      <div>
+        <h2 class="h">Agent trace <span class="tag" id="traceTag" hidden>Mock</span></h2>
+        <div class="trace" id="trace"><span class="sub">Shown once a plan exists.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="p-compare" role="tabpanel" aria-labelledby="tab-compare" hidden>
+    <h2 class="h">Fixed limit versus ours</h2>
+    <p class="sub" id="cmpNote">Loading evaluation output…</p>
+    <div class="scroll"><table id="cmp" hidden><thead></thead><tbody></tbody></table></div>
+  </section>
+
+  <footer>Simulated data. The grid is a model, not PPC's network, and nothing here controls real inverters. · <a href="/simulation">210-house simulation viewer</a></footer>
 </div>
 
-<section class="card">
-  <h2>Plan for this interval</h2>
-  <div class="row">
-    <span id="planStatus" class="pill off">No plan</span>
-    <span id="planSource" class="muted"></span>
-    <button id="propose">Propose plan</button>
-    <button id="approve" class="ghost" disabled>Approve</button>
-    <button id="reject" class="ghost" disabled>Reject</button>
-    <button id="execute" disabled>Execute</button>
-  </div>
-  <p id="planExplain"></p>
-  <p class="muted" id="planGuard"></p>
-  <p class="legend"><span><i class="dot" style="background:var(--ok)"></i>model limit, guard passed</span><span><i class="dot" style="background:var(--warn)"></i>fixed limit (case sent to a human) or contract cap</span><span><i class="dot" style="background:var(--bad)"></i>blocked by the guard</span></p>
-  <div class="houses" id="houses"></div>
-</section>
-
-<div class="grid2">
-<section class="card">
-  <h2>"Not sure" queue <span class="muted" id="queueCount"></span></h2>
-  <div class="scroll"><table><thead><tr><th>Interval</th><th>Reason</th><th>Decision</th></tr></thead><tbody id="queue"></tbody></table></div>
-</section>
-<section class="card">
-  <h2>Kill switch</h2>
-  <p class="muted">Cancels open plans. Houses go back to the fixed limit from the connection approval.</p>
-  <div class="row"><button id="killOn" class="danger">Turn on</button><button id="killOff" class="ghost">Turn off</button></div>
-</section>
-</div>
-
-<section class="card">
-  <h2>Comparison: fixed limit versus ours</h2>
-  <p class="muted" id="cmpNote">Loading evaluation output…</p>
-  <div class="scroll"><table id="cmp" hidden><thead></thead><tbody></tbody></table></div>
-</section>
-
-<section class="card">
-  <h2>Action log</h2>
-  <div class="scroll"><table><thead><tr><th>Time (UTC)</th><th>Event</th><th>Actor</th><th>Plan</th></tr></thead><tbody id="log"></tbody></table></div>
-</section>
-
-<p class="muted">Also available: <a href="/simulation">210-house simulation viewer</a> (loads a local CSV).</p>
-</main>
 <script>
 "use strict";
 const $ = id => document.getElementById(id);
-const state = {station: null, plan: null, busy: false, allowed: {approve: false, reject: false, execute: false}};
+const state = {station: null, plan: null, plans: [], fc: null, kill: false, busy: false, selected: null, geo: null, insight: null, insightFor: null,
+  allowed: {approve: false, reject: false, execute: false}};
 let gen = 0; // generation of the latest refresh: results of older ones are dropped
 const pct = v => v == null ? "—" : (v * 100).toFixed(0) + "%";
 const num = (v, d = 1, unit = "") => v == null ? "—" : Number(v).toFixed(d) + unit;
 const setErr = m => { $("err").textContent = m || ""; };
+const hhmm = s => String(Math.floor(s / 2)).padStart(2, "0") + ":" + (s % 2 ? "30" : "00");
 
 async function api(path, method = "GET", body) {
   const headers = {};
@@ -156,163 +263,383 @@ async function api(path, method = "GET", body) {
   return data;
 }
 
-// UTC start of the selected half-hour, or null when the day field is empty or invalid.
-function intervalStart() {
-  const d = $("date").value, s = Number($("slot").value);
-  const hh = String(Math.floor(s / 2)).padStart(2, "0"), mm = s % 2 ? "30" : "00";
-  $("slotLabel").textContent = hh + ":" + mm;
-  return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d + "T" + hh + ":" + mm + ":00Z" : null;
-}
-
-function applyButtons() {
-  $("propose").disabled = state.busy;
-  ["approve", "reject", "execute"].forEach(i => { $(i).disabled = state.busy || !state.allowed[i]; });
-}
-function setBusy(on) { state.busy = on; applyButtons(); }
-
 function el(tag, text, cls) {
   const n = document.createElement(tag);
   if (text != null) n.textContent = text;
   if (cls) n.className = cls;
   return n;
 }
-function setPill(node, text, kind) { node.textContent = text; node.className = "pill " + kind; }
+function setDot(node, kind) { node.className = "dot" + (kind && kind !== "off" ? " " + kind : ""); }
 
+// The selected slot (0 to 47) and the UTC start of that half-hour, or null when the day field is empty or invalid.
+let slot = 20;
+function intervalStart() {
+  const d = $("date").value;
+  return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d + "T" + hhmm(slot) + ":00Z" : null;
+}
+const slotOf = iso => Number(iso.slice(11, 13)) * 2 + (iso.slice(14, 16) === "30" ? 1 : 0);
+
+/* ---------- tabs ---------- */
+const TABS = ["houses", "queue", "decision", "log", "compare"];
+function showTab(name, focus) {
+  if (!TABS.includes(name)) name = "houses";
+  TABS.forEach(t => {
+    const on = t === name;
+    $("tab-" + t).setAttribute("aria-selected", String(on)); $("tab-" + t).tabIndex = on ? 0 : -1;
+    $("p-" + t).hidden = !on;
+  });
+  if (focus) $("tab-" + name).focus();
+  if (history.replaceState) history.replaceState(null, "", "#" + name);
+  if (name === "houses") syncMap(true);
+}
+TABS.forEach(t => { $("tab-" + t).onclick = () => showTab(t); });
+$("tab-houses").parentElement.addEventListener("keydown", ev => {
+  if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight") return;
+  const i = TABS.findIndex(t => $("tab-" + t).getAttribute("aria-selected") === "true");
+  showTab(TABS[(i + (ev.key === "ArrowRight" ? 1 : TABS.length - 1)) % TABS.length], true);
+});
+
+/* ---------- station ---------- */
 async function loadStation() {
   state.station = await api("station");
   const s = state.station;
   const kwp = s.houses.reduce((a, h) => a + h.kwp, 0);
-  $("station").textContent = s.pt_id + " · " + s.houses.length + " houses · " + kwp.toFixed(0) + " kWp installed · fixed limit " + pct(s.static_share) + " · review budget " + s.review_budget + "/day";
-  $("static").textContent = pct(s.static_share);
+  $("stationName").textContent = "Station " + s.pt_id;
+  $("station").textContent = s.houses.length + " houses · " + kwp.toFixed(0) + " kWp · fixed limit " + pct(s.static_share) + " · review budget " + s.review_budget + "/day";
+  $("fixedLbl").textContent = pct(s.static_share);
 }
 
 async function loadKill(t, my) {
   const k = await api("kill_switch");
   if (my !== gen) return;
-  setPill($("killState"), k.on ? "Kill switch: ON" : "Kill switch: off", k.on ? "bad" : "ok");
+  state.kill = !!k.on;
+  $("killState").textContent = k.on ? "Kill switch ON" : "Kill switch off";
+  $("killState").style.color = k.on ? "var(--bad)" : "";
+  $("killState").style.fontWeight = k.on ? "600" : "";
+  $("killToggle").textContent = k.on ? "Turn off" : "Kill switch";
+  $("killToggle").className = k.on ? "line" : "kill";
 }
 
-function provText(p) { return p ? "(" + p + ")" : ""; }
-
+/* ---------- forecast and grid ---------- */
 async function loadForecast(t, my) {
-  const q = "?interval_start=" + encodeURIComponent(t);
   try {
-    const f = await api("forecast" + q);
+    const f = await api("forecast?interval_start=" + encodeURIComponent(t));
     if (my !== gen) return;
-    const c = f.safe_cap_share;
-    $("q05").textContent = pct(c.q05); $("q50").textContent = pct(c.q50); $("spread").textContent = pct(f.spread);
-    $("fcProv").textContent = provText(f.provenance) + " " + f.model_version;
-    const band = $("band"); band.replaceChildren();
-    const seg = (l, r, cls) => { const n = el("span", null, cls); n.style.left = (l * 100) + "%"; n.style.width = Math.max((r - l) * 100, 0.5) + "%"; band.append(n); };
-    seg(c.q05, c.q90, "wide"); seg(c.q50, c.q50 + 0.008, "tick"); seg(state.station.static_share, state.station.static_share + 0.008, "stat");
-    const sure = f.spread <= state.station.spread_threshold;
-    $("fcNote").textContent = sure ? "Spread is within the " + pct(state.station.spread_threshold) + " threshold: the cautious value can be used."
-      : "Spread is above the " + pct(state.station.spread_threshold) + " threshold: the case goes to a human and the fixed limit applies.";
+    state.fc = f;
   } catch (e) {
     if (my !== gen) return;
-    ["q05", "q50", "spread"].forEach(i => $(i).textContent = "—");
-    $("band").replaceChildren(); $("fcProv").textContent = ""; $("fcNote").textContent = "No forecast for this interval (" + e.message + ").";
+    state.fc = null;
   }
 }
 
+// Status for a load figure against its rating. 85% is this screen's "close" mark, not a grid rule.
+const loadKind = p => p == null ? "off" : p > 100 ? "bad" : p >= 85 ? "rev" : "ok";
+
 async function loadGrid(t, my) {
+  const clear = note => { ["vmax", "trafo", "line", "exp"].forEach(i => $(i).textContent = "—"); ["vDot", "tDot", "lDot"].forEach(i => setDot($(i), "off")); $("gsNote").textContent = note; };
   try {
     const g = await api("grid_state?interval_start=" + encodeURIComponent(t));
     if (my !== gen) return;
-    $("gsProv").textContent = provText(g.provenance);
-    if (!g.converged) {
-      ["vmax", "trafo", "line", "exp"].forEach(i => $(i).textContent = "—");
-      $("gsNote").textContent = "The power flow did not converge, so no numbers are shown.";
-      return;
-    }
+    if (!g.converged) { clear("The power flow did not converge, so no numbers are shown."); return; }
     $("vmax").textContent = num(g.v_max_pu, 3, " pu");
-    $("trafo").textContent = num(g.trafo_loading_pct, 0, "%");
-    $("line").textContent = num(g.line_loading_max_pct, 0, "%");
+    $("trafo").textContent = num(g.trafo_loading_pct, 0, "%"); setDot($("tDot"), loadKind(g.trafo_loading_pct));
+    $("line").textContent = num(g.line_loading_max_pct, 0, "%"); setDot($("lDot"), loadKind(g.line_loading_max_pct));
     $("exp").textContent = num(g.exported_kwh, 1) + " / " + num(g.curtailed_kwh, 1) + " kWh";
-    $("gsNote").textContent = g.v_max_node ? "Highest voltage at " + g.v_max_node + "." : "";
+    $("gsNote").textContent = "Without the proposed plan" + (g.provenance ? " · " + g.provenance : "") + ". The guard checks the plan itself; the voltage limit is an assumption (ASSUMPTIONS.md).";
   } catch (e) {
     if (my !== gen) return;
-    ["vmax", "trafo", "line", "exp"].forEach(i => $(i).textContent = "—");
-    $("gsNote").textContent = "No grid state for this interval (" + e.message + ").";
+    clear("No grid state for this interval (" + e.message + ").");
   }
 }
 
+/* ---------- plan, verdict, houses ---------- */
+const KIND = {none: "no plan", done: "executed", approved: "approved, not executed", review: "sent to a human", waiting: "waiting for a decision", blocked: "blocked by the guard", rejected: "rejected"};
+function planKind(p) {
+  if (!p) return "none";
+  // The service marks a guard-blocked plan "rejected" too, so the guard verdict comes first.
+  if (p.guard && !p.guard.passed) return "blocked";
+  if (p.status === "rejected") return "rejected";
+  if (p.status === "executed") return "done";
+  if (p.status === "approved") return "approved";
+  return p.abstain ? "review" : "waiting";
+}
+
+function houseView(plan) {
+  const byId = Object.fromEntries(plan ? plan.limits.map(l => [l.house_id, l]) : []);
+  const blocked = plan && plan.guard && !plan.guard.passed;
+  return state.station.houses.map(h => {
+    const l = byId[h.house_id], cap = h.contract_cap_kw ?? null;
+    if (!l) return {id: h.house_id, kwp: h.kwp, contract_cap_kw: cap, limit_kw: null, share: null, status: "none", capped: false};
+    const capped = cap != null && l.export_limit_kw >= cap - 1e-9;
+    return {id: h.house_id, kwp: h.kwp, contract_cap_kw: cap, limit_kw: l.export_limit_kw, share: l.export_limit_kw / h.kwp,
+      status: blocked ? "blocked" : (plan.abstain || capped) ? "review" : "ok", capped};
+  });
+}
+const HDOT = {ok: "ok", review: "rev", blocked: "bad", none: "off"};
+const HWORD = {ok: "model limit", review: "fixed limit", blocked: "blocked by the guard", none: "no limit yet"};
+
+function renderHouses(view) {
+  const box = $("houses"); box.replaceChildren();
+  view.forEach(h => {
+    const b = el("button", null, "hrow"); b.type = "button"; b.setAttribute("aria-pressed", String(state.selected === h.id));
+    b.setAttribute("aria-label", h.id + ", " + (h.limit_kw == null ? "no limit yet" : num(h.limit_kw, 2) + " kilowatts, " + (h.capped ? "contract cap" : HWORD[h.status])));
+    const d = el("i", null, "dot"); setDot(d, HDOT[h.status]);
+    const bar = el("span", null, "bar"); const i = el("i"); i.style.width = Math.min((h.share || 0) * 100, 100) + "%"; bar.append(i);
+    b.append(d, el("span", h.id, "id"), el("span", h.limit_kw == null ? "—" : num(h.limit_kw, 2) + " kW", "lim"), bar,
+      el("span", h.capped ? "contract cap" : h.share == null ? h.kwp + " kWp" : pct(h.share) + " of " + h.kwp + " kWp", "note"));
+    b.onclick = () => selectHouse(state.selected === h.id ? null : h.id);
+    box.append(b);
+  });
+  const sel = view.find(h => h.id === state.selected);
+  $("houseDetail").textContent = sel ? sel.id + " · " + sel.kwp + " kWp" + (sel.contract_cap_kw != null ? " · contract cap " + sel.contract_cap_kw + " kW" : "") : "";
+}
+function selectHouse(id) { state.selected = id; renderHouses(houseView(state.plan)); syncMap(); }
+
+function renderVerdict() {
+  const p = state.plan, st = state.station, kind = planKind(p), fixed = pct(st.static_share);
+  let dot = "off", head, sub = "";
+  if (state.kill) { dot = "bad"; head = "Kill switch is on"; sub = "All houses are on the fixed limit of " + fixed + ". Open plans are cancelled and nothing can be executed until it is turned off."; }
+  else if (!p) {
+    head = "No plan yet";
+    if (state.fc) sub = state.fc.spread <= st.spread_threshold ? "The forecast is confident (uncertainty " + pct(state.fc.spread) + "), so a model limit can be proposed." : "The forecast is not sure (uncertainty " + pct(state.fc.spread) + "): a proposal would go to a person with the fixed limit.";
+  } else if (kind === "blocked") { dot = "bad"; head = "Blocked by the guard"; sub = ((p.guard.violations || []).join("; ").replace(/\.$/, "") || "The guard refused the plan") + ". The fixed limit of " + fixed + " stays in force."; }
+  else if (kind === "rejected") { head = "Rejected"; sub = "The fixed limit of " + fixed + " applies."; }
+  else if (kind === "done") { dot = "ok"; head = "Executed"; sub = p.abstain ? "The fixed limit of " + fixed + " is applied." : "Each house may export up to " + pct(p.safe_cap_share_used) + " of its installed power."; }
+  else if (kind === "approved") { dot = "ok"; head = "Approved, ready to execute"; sub = "Nothing changes on the grid until you execute it."; }
+  else if (kind === "review") { dot = "rev"; head = "Not sure, needs a person"; sub = p.reasons.join("; ") + ". The fixed limit of " + fixed + " applies unless you decide otherwise."; }
+  else { dot = "rev"; head = "Waiting for your decision"; sub = "Each house may export up to " + pct(p.safe_cap_share_used) + " of its installed power, instead of the fixed " + fixed + ". " + (p.guard && p.guard.passed ? "The guard found no problem." : "The guard has not run.") + " Confidence " + pct(p.confidence) + "."; }
+  setDot($("stateDot"), dot);
+  const t = intervalStart();
+  $("verdictWhen").textContent = t ? t.slice(0, 10) + " · " + t.slice(11, 16) + " UTC" : "";
+  $("verdictHead").textContent = head; $("verdictSub").textContent = sub;
+}
+
+function applyButtons() {
+  const kind = planKind(state.plan);
+  const show = {approve: state.allowed.approve, reject: state.allowed.reject, execute: state.allowed.execute,
+    propose: !state.kill && (!state.plan || kind === "blocked" || kind === "rejected")};
+  Object.entries(show).forEach(([k, v]) => { $(k).hidden = !v; $(k).disabled = state.busy; });
+  // The main action is the black one: reject is always the quiet one.
+  $("propose").className = show.approve || show.execute ? "line" : "";
+}
+function setBusy(on) { state.busy = on; applyButtons(); }
+
 function renderPlan(plan) {
   state.plan = plan;
-  const houses = $("houses"); houses.replaceChildren();
   state.allowed = {approve: false, reject: false, execute: false};
-  if (!plan) {
-    setPill($("planStatus"), "No plan", "off");
-    $("planSource").textContent = ""; $("planExplain").textContent = "No plan has been proposed for this interval.";
-    $("planGuard").textContent = "";
-    state.station.houses.forEach(h => {
-      const n = el("div", null, "house off"); n.append(el("div", h.house_id), el("b", "—")); houses.append(n);
-    });
-    applyButtons();
-    return;
+  if (plan) {
+    const blocked = plan.guard && !plan.guard.passed;
+    state.allowed = {approve: plan.status === "proposed" && !blocked, reject: plan.status === "proposed", execute: plan.status === "approved" && !state.kill};
   }
-  const blocked = plan.guard && !plan.guard.passed;
-  const kind = blocked ? "bad" : plan.abstain ? "warn" : "ok";
-  setPill($("planStatus"), plan.status + (blocked ? " (guard blocked)" : ""), kind);
-  $("planSource").textContent = (plan.source === "model" ? "Model limit" : "Fixed fallback limit") + " · confidence " + pct(plan.confidence);
-  $("planExplain").textContent = plan.explanation ? plan.explanation.text : plan.reasons.join("; ");
-  const g = plan.guard;
-  $("planGuard").textContent = g ? (g.passed ? "Guard passed" : "Guard blocked") + ": " + (g.violations.length ? g.violations.join("; ") : "no violations") +
-    (g.v_max_pu != null ? " · " + num(g.v_max_pu, 3, " pu") : "") + (g.trafo_loading_pct != null ? " · transformer " + num(g.trafo_loading_pct, 0, "%") : "") : "Guard not run";
-  const kwp = Object.fromEntries(state.station.houses.map(h => [h.house_id, h]));
-  plan.limits.forEach(l => {
-    const h = kwp[l.house_id];
-    const capped = h && h.contract_cap_kw != null && l.export_limit_kw >= h.contract_cap_kw - 1e-9;
-    const cls = blocked ? "bad" : (plan.abstain || capped) ? "warn" : "ok";
-    const n = el("div", null, "house " + cls);
-    n.append(el("div", l.house_id + (capped ? " (cap)" : "")), el("b", num(l.export_limit_kw, 2, " kW")), el("div", h ? pct(l.export_limit_kw / h.kwp) + " of " + h.kwp + " kWp" : ""));
-    houses.append(n);
-  });
-  const open = plan.status === "proposed", approved = plan.status === "approved";
-  state.allowed = {approve: open && !blocked, reject: open, execute: approved};
+  renderHouses(houseView(plan));
+  renderVerdict();
+  renderTree();
+  renderOptions();
   applyButtons();
+  syncMap();
+  loadInsight();
 }
 
 async function loadPlan(t, my) {
   const all = await api("plans");
   if (my !== gen) return;
+  state.plans = all;
   renderPlan(all.find(p => Date.parse(p.interval_start) === Date.parse(t)) || null);
+  renderStrip();
 }
 
-async function loadQueue(t, my) {
-  const q = await api("queue");
-  if (my !== gen) return;
-  $("queueCount").textContent = "(" + q.pending.length + " pending · reviewed today " + q.reviewed_today + "/" + q.review_budget + (q.over_budget ? " · OVER BUDGET" : "") + ")";
-  const body = $("queue"); body.replaceChildren();
-  if (!q.pending.length) { const r = el("tr"); const c = el("td", "Nothing waiting for review."); c.colSpan = 3; r.append(c); body.append(r); }
-  q.pending.forEach(p => {
-    const r = el("tr");
-    const when = el("td"); const a = el("a", p.interval_start.replace("T", " ").replace(":00Z", " UTC")); a.href = "#"; a.onclick = ev => { ev.preventDefault(); jump(p.interval_start); }; when.append(a);
-    const actions = el("td");
-    const ok = el("button", "Approve"); ok.onclick = () => decide(p.plan_id, "approve");
-    const no = el("button", "Reject", "ghost"); no.onclick = () => decide(p.plan_id, "reject"); no.style.marginLeft = "6px";
-    actions.append(ok, no);
-    r.append(when, el("td", p.reasons.join("; ")), actions); body.append(r);
+/* ---------- the decision: tree, options, drivers, trace ---------- */
+function buildTree() {
+  const p = state.plan, f = state.fc, st = state.station, fixed = pct(st.static_share), kind = planKind(p);
+  const step = (k, title, value, alt) => ({k, title, value: value || "", alt: alt || ""});
+  const steps = [];
+  steps.push(f ? step("ok", "Forecast loaded", f.model_version + " · " + f.horizon_min + " min ahead") : step("bad", "Forecast loaded", "No forecast for this interval"));
+  if (f) {
+    const sure = f.spread <= st.spread_threshold;
+    steps.push(sure ? step("ok", "Is the model sure?", "Yes: " + pct(f.spread) + " ≤ " + pct(st.spread_threshold), "If not: fixed limit " + fixed + ", and a person decides")
+      : step("warn", "Is the model sure?", "No: " + pct(f.spread) + " > " + pct(st.spread_threshold), "So the fixed limit " + fixed + " applies and a person decides"));
+  } else steps.push(step("todo", "Is the model sure?", "Needs a forecast"));
+  if (p) steps.push(p.abstain || p.source !== "model" ? step("warn", "Limit set", "Fixed limit " + fixed, "The model's cautious estimate was not used")
+    : step("ok", "Limit from the cautious estimate", pct(p.safe_cap_share_used) + " of each house's kWp"));
+  else steps.push(step("todo", "Limit set", "Not set yet", "A plan sets it"));
+  if (p) {
+    const capped = houseView(p).filter(h => h.capped);
+    steps.push(capped.length ? step("warn", "Contract caps", capped.map(h => h.id + " capped at " + h.contract_cap_kw + " kW").join(", "), "Limited below the planned share") : step("ok", "Contract caps", "No house is capped"));
+  } else steps.push(step("todo", "Contract caps"));
+  const g = p && p.guard;
+  if (g) steps.push(g.passed ? step("ok", "Guard, worst cases", [g.v_max_pu != null ? num(g.v_max_pu, 3, " pu") : null, g.trafo_loading_pct != null ? "transformer " + num(g.trafo_loading_pct, 0, "%") : null].filter(Boolean).join(" · ") || "Passed", "Export and import cases both pass")
+    : step("bad", "Guard, worst cases", (g.violations || []).join("; ") || "Blocked", "The plan cannot be approved"));
+  else steps.push(step("todo", "Guard, worst cases", p ? "Not run" : "Runs when a plan is proposed"));
+  if (kind === "blocked") steps.push(step("todo", "Operator decision", "Not reachable", "The guard blocked the plan"));
+  else if (kind === "done" || kind === "approved") steps.push(step("ok", "Operator decision", "Approved"));
+  else if (kind === "rejected") steps.push(step("warn", "Operator decision", "Rejected", "The fixed limit stays"));
+  else if (p) steps.push(step("now", "Operator decision", "Waiting for you", "Approve to continue, reject to keep the fixed limit"));
+  else steps.push(step("todo", "Operator decision"));
+  steps.push(kind === "done" ? step("ok", "Execute", "Executed") : kind === "approved" ? step("now", "Execute", "Ready, waiting for you") : step("todo", "Execute", "After approval"));
+  return steps;
+}
+const MARK = {ok: "✓", warn: "!", bad: "×", now: "", todo: ""};
+function renderTree() {
+  const ol = $("tree"); ol.replaceChildren();
+  buildTree().forEach(s => {
+    const li = el("li", null, s.k);
+    const rail = el("div", null, "rail"); rail.append(el("div", MARK[s.k], "mk"), el("div", null, "line"));
+    const body = el("div", null, "body"); const t = el("div", null, "t");
+    t.append(el("b", s.title), el("span", s.value, "ol-v")); body.append(t); if (s.alt) body.append(el("div", s.alt, "alt"));
+    li.append(rail, body); ol.append(li);
   });
 }
 
+function renderOptions() {
+  const box = $("options"); box.replaceChildren();
+  const f = state.fc, p = state.plan;
+  if (!f) { box.append(el("p", "Needs a forecast for this interval.", "sub")); return; }
+  const chosen = p ? (p.abstain || p.source !== "model" ? "fixed" : "q05") : null;
+  [["fixed", "Fixed limit", state.station.static_share, "Safe, but ignores the forecast"],
+   ["q05", "Cautious estimate (q05)", f.safe_cap_share.q05, "Aims to stay at or below the true safe limit in 19 of 20 intervals"],
+   ["q50", "Median (q50)", f.safe_cap_share.q50, "Would exceed the true safe limit in about half of the intervals"]].forEach(([id, label, share, why]) => {
+    const r = el("div", null, "opt" + (chosen === id ? " chosen" : ""));
+    const w = el("div", null, "w"); const b = el("b", label); b.style.fontWeight = chosen === id ? "600" : "400";
+    w.append(b, el("small", (chosen === id ? "Chosen. " : "") + why)); r.append(el("span", pct(share), "s"), w); box.append(r);
+  });
+}
+
+async function loadInsight() {
+  const p = state.plan;
+  const drv = $("drivers"), trace = $("trace");
+  if (!p) { state.insight = null; state.insightFor = null; drv.replaceChildren(el("p", "Shown once a plan exists.", "sub")); trace.replaceChildren(el("span", "Shown once a plan exists.", "sub")); $("drvTag").hidden = true; $("traceTag").hidden = true; return; }
+  if (state.insightFor !== p.plan_id) {
+    state.insightFor = p.plan_id;
+    try { const r = await fetch("/ai/insight?plan_id=" + encodeURIComponent(p.plan_id)); state.insight = r.ok ? await r.json() : null; } catch (_) { state.insight = null; }
+    if (state.insightFor !== p.plan_id) return;
+  }
+  const r = state.insight;
+  drv.replaceChildren(); trace.replaceChildren();
+  $("drvTag").hidden = $("traceTag").hidden = !(r && r.mock);
+  if (!r) { drv.append(el("p", "No model output available.", "sub")); return; }
+  (r.insight.drivers || []).forEach(d => {
+    const row = el("div", null, "drv"); const top = el("div", null, "top");
+    const e = Number(d.effect) || 0;
+    top.append(el("span", d.label), el("span", e < -0.1 ? "lowers the limit" : e > 0.1 ? "raises the limit" : "little effect", "muted"));
+    const bar = el("div", null, "bar"); const i = el("i"); i.style.width = Math.min(Math.abs(e), 1) * 100 + "%"; bar.append(i);
+    row.append(top, bar); drv.append(row);
+  });
+  if (!(r.insight.drivers || []).length) drv.append(el("p", "No drivers in the model output.", "sub"));
+  (r.insight.trace || []).forEach(x => {
+    const row = el("div"); row.append(el("span", "+" + Number(x.offset_s).toFixed(2) + "s", "o"), el("span", x.step, "s"), el("span", x.message)); trace.append(row);
+  });
+}
+
+/* ---------- the day: strip and chart ---------- */
+function renderStrip() {
+  const strip = $("strip"); strip.replaceChildren();
+  const day = $("date").value, byslot = {};
+  state.plans.forEach(p => { if (p.interval_start.slice(0, 10) === day && !(slotOf(p.interval_start) in byslot)) byslot[slotOf(p.interval_start)] = p; });
+  for (let s = 0; s < 48; s++) {
+    const k = planKind(byslot[s]);
+    const b = el("button", null, "cell " + k + (s < 10 || s >= 42 ? " night" : ""));
+    b.append(el("i")); b.type = "button"; b.dataset.slot = s;
+    b.setAttribute("aria-pressed", String(s === slot));
+    b.setAttribute("aria-label", hhmm(s) + " UTC, " + KIND[k]);
+    b.title = hhmm(s) + " UTC · " + KIND[k];
+    b.onclick = () => pickSlot(s);
+    strip.append(b);
+  }
+}
+function pickSlot(s) {
+  slot = Math.min(Math.max(s, 0), 47);
+  setBusy(true); clearTimeout(timer); timer = setTimeout(refresh, 120);
+  document.querySelectorAll("#strip .cell").forEach(c => c.setAttribute("aria-pressed", String(Number(c.dataset.slot) === slot)));
+  drawChart();
+}
+$("strip").addEventListener("keydown", ev => {
+  if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight") return;
+  ev.preventDefault();
+  pickSlot(slot + (ev.key === "ArrowRight" ? 1 : -1));
+  const c = $("strip").querySelector('[data-slot="' + slot + '"]'); if (c) c.focus();
+});
+
+const dayCache = {}; // date -> array of 48 forecasts or null
+const NS = "http://www.w3.org/2000/svg";
+function svgEl(tag, attrs) { const n = document.createElementNS(NS, tag); Object.entries(attrs).forEach(([k, v]) => n.setAttribute(k, v)); return n; }
+
+function drawChart() {
+  const svg = $("chart"); svg.replaceChildren();
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const X = i => (i + 0.5) * 20, Y = v => 84 - Math.min(Math.max(v, 0), 1) * 78;
+  svg.append(svgEl("line", {x1: 0, x2: 960, y1: 84, y2: 84, stroke: css("--line")}));
+  svg.append(svgEl("line", {x1: slot * 20 + 10, x2: slot * 20 + 10, y1: 0, y2: 90, stroke: css("--ink"), "stroke-width": 1.5, "vector-effect": "non-scaling-stroke"}));
+  const data = dayCache[$("date").value] || [];
+  let seg = [];
+  const flush = () => {
+    if (seg.length > 1) {
+      const up = seg.map(p => X(p.i) + "," + Y(p.q90)), dn = seg.slice().reverse().map(p => X(p.i) + "," + Y(p.q05));
+      svg.append(svgEl("polygon", {points: up.concat(dn).join(" "), fill: css("--band")}));
+      svg.append(svgEl("polyline", {points: seg.map(p => X(p.i) + "," + Y(p.q50)).join(" "), fill: "none", stroke: css("--ink"), "stroke-width": 2, "vector-effect": "non-scaling-stroke"}));
+    }
+    seg = [];
+  };
+  data.forEach((f, i) => { if (f) seg.push({i, q05: f.safe_cap_share.q05, q50: f.safe_cap_share.q50, q90: f.safe_cap_share.q90}); else flush(); });
+  flush();
+  if (state.station) svg.append(svgEl("line", {x1: 0, x2: 960, y1: Y(state.station.static_share), y2: Y(state.station.static_share), stroke: css("--bad"), "stroke-width": 1.5, "stroke-dasharray": "5 5", "vector-effect": "non-scaling-stroke"}));
+}
+
+async function loadDay(my) {
+  const day = $("date").value;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return;
+  if (!dayCache[day]) {
+    const out = new Array(48).fill(null); dayCache[day] = out;
+    let next = 0, failed = 0;
+    const worker = async () => {
+      while (next < 48) {
+        const s = next++;
+        try { out[s] = await api("forecast?interval_start=" + encodeURIComponent(day + "T" + hhmm(s) + ":00Z")); } catch (_) { failed++; }
+        if (my !== gen || $("date").value !== day) return;
+      }
+    };
+    await Promise.all(Array.from({length: 6}, worker));
+    if ($("date").value !== day) { delete dayCache[day]; return; }
+    if (failed === 48) { $("chartNote").textContent = "No forecast is available for this day."; delete dayCache[day]; }
+    else $("chartNote").textContent = failed ? failed + " of 48 intervals have no forecast." : "";
+  }
+  drawChart();
+}
+
+/* ---------- queue, log ---------- */
+async function loadQueue(t, my) {
+  const q = await api("queue");
+  if (my !== gen) return;
+  $("tab-queue").textContent = q.pending.length ? "Queue · " + q.pending.length : "Queue";
+  $("queueCount").textContent = "· reviewed today " + q.reviewed_today + "/" + q.review_budget + (q.over_budget ? " · OVER BUDGET" : "");
+  const box = $("queue"); box.replaceChildren();
+  if (!q.pending.length) box.append(el("div", "Nothing waiting for review.", "empty"));
+  q.pending.forEach(p => {
+    const item = el("div", null, "qitem");
+    const left = el("div"); const a = el("a", p.interval_start.replace("T", " ").replace(":00Z", " UTC")); a.href = "#"; a.onclick = ev => { ev.preventDefault(); jump(p.interval_start); showTab("houses"); };
+    left.append(a, el("div", p.reasons.join("; "), "sub"));
+    const actions = el("div", null, "row2");
+    const ok = el("button", "Approve"); ok.type = "button"; ok.onclick = () => decide(p.plan_id, "approve");
+    const no = el("button", "Reject", "line"); no.type = "button"; no.onclick = () => decide(p.plan_id, "reject");
+    actions.append(ok, no); item.append(left, actions); box.append(item);
+  });
+}
+
+const EVENT = {plan_proposed: "Plan proposed", guard_blocked: "Guard blocked the plan", plan_approved: "Plan approved", plan_rejected: "Plan rejected", plan_executed: "Plan executed", abstained: "Model not sure", kill_switch: "Kill switch"};
 async function loadLog(t, my) {
   const events = await api("log?limit=50");
   if (my !== gen) return;
   const body = $("log"); body.replaceChildren();
+  if (!events.length) { const r = el("tr"); const c = el("td", "No events yet."); c.colSpan = 4; c.className = "sub"; r.append(c); body.append(r); }
   events.slice().reverse().forEach(e => {
     const r = el("tr");
-    r.append(el("td", e.ts.replace("T", " ").replace("Z", "")), el("td", e.event), el("td", e.actor), el("td", e.plan_id || "—"));
+    r.append(el("td", e.ts.replace("T", " ").replace("Z", "")), el("td", EVENT[e.event] || e.event), el("td", e.actor), el("td", e.plan_id || "—"));
     body.append(r);
   });
 }
 
-function jump(iso) {
-  $("date").value = iso.slice(0, 10);
-  $("slot").value = Number(iso.slice(11, 13)) * 2 + (iso.slice(14, 16) === "30" ? 1 : 0);
-  refresh();
-}
+function jump(iso) { $("date").value = iso.slice(0, 10); slot = slotOf(iso); refresh(); }
 
+/* ---------- comparison ---------- */
 const ROWS = {fixed: "Fixed limit", last_known: "Last known", same_hour_yesterday: "Same hour yesterday", model_q05: "Model (q05)", model_fallback: "Model + fallback", oracle: "Safe maximum (oracle)"};
 const COLS = [["export_index", "Export index (fixed = 100)", v => num(v, 1)], ["violation_rate", "Violations", v => v == null ? "—" : (v * 100).toFixed(1) + "%"], ["abstain_rate", "Sent to a human", v => v == null ? "—" : (v * 100).toFixed(1) + "%"], ["flagged_per_day_mean", "Flagged per day (mean)", v => num(v, 1)], ["flagged_per_day_max", "Flagged per day (max)", v => num(v, 0)]];
 
@@ -321,16 +648,16 @@ async function loadComparison() {
   table.hidden = true;
   let res;
   try { res = await fetch("/eval/summary"); } catch (_) { note.textContent = "The screen server did not answer."; return; }
-  if (res.status === 404) { note.textContent = "No evaluation output yet. Run python -m src.eval.run, then reload. No numbers are shown until it exists."; return; }
+  if (res.status === 404) { note.className = "empty"; note.textContent = "No evaluation output yet. Run python -m src.eval.run, then reload. No numbers are shown until it exists."; return; }
   if (!res.ok) { note.textContent = "The evaluation summary could not be read."; return; }
   const s = (await res.json()).summary;
   const scenarios = s.scenarios || {};
-  const keys = Object.keys(scenarios);
+  note.className = "sub";
   note.textContent = (s.mock ? "MOCK, NOT A RESULT. " : "") + "Run " + s.run_id + (s.git_sha ? " · commit " + String(s.git_sha).slice(0, 8) : "") + ". Numbers come from the evaluation output, not from this page.";
-  if (s.mock) note.style.color = "var(--bad)";
+  if (s.mock) { note.style.color = "var(--bad)"; note.style.fontWeight = "600"; }
   const head = table.tHead, body = table.tBodies[0]; head.replaceChildren(); body.replaceChildren();
   const hr = el("tr"); hr.append(el("th", "Station · policy")); COLS.forEach(c => hr.append(el("th", c[1]))); head.append(hr);
-  keys.forEach(k => {
+  Object.keys(scenarios).forEach(k => {
     const rows = scenarios[k].rows || {};
     Object.keys(rows).forEach(name => {
       const r = el("tr"); r.append(el("td", k + " · " + (ROWS[name] || name)));
@@ -341,15 +668,51 @@ async function loadComparison() {
   if (!body.children.length) note.textContent += " The summary has no rows.";
 }
 
+/* ---------- map slot (filled by P4) ----------
+   Contract: src/ui/static/map/README.md. A map module registers window.StationMap with
+   mount(el, host), update(view) and optionally onShow() and destroy(). The screen never
+   depends on it: with no module the slot shows a placeholder. */
+const mapApi = () => (window.StationMap && typeof window.StationMap.mount === "function") ? window.StationMap : null;
+let mapMounted = false;
+
+function mapViewModel() {
+  return {pt_id: state.station && state.station.pt_id, interval_start: intervalStart(), selected: state.selected, kill_switch: state.kill,
+    houses: state.station ? houseView(state.plan) : []};
+}
+function syncMap(shown) {
+  const m = mapApi();
+  if (!m || !state.station || $("p-houses").hidden) return;
+  try {
+    $("mapEmpty").hidden = true; $("mapBox").classList.add("live"); $("mapNote").hidden = false;
+    if (!mapMounted) { m.mount($("mapHost"), {geo: state.geo, select: selectHouse}); mapMounted = true; shown = true; }
+    m.update(mapViewModel());
+    if (shown && m.onShow) m.onShow();
+  } catch (e) {
+    $("mapHost").replaceChildren(el("p", "The map module failed: " + e.message, "empty"));
+  }
+}
+async function loadMapModule() {
+  try { const r = await fetch("/geo/station"); if (r.ok) state.geo = (await r.json()).geojson || null; } catch (_) { /* no geometry yet */ }
+  const s = document.createElement("script");
+  s.src = "/static/map/map.js";
+  s.onload = () => syncMap(true);
+  s.onerror = () => { /* no module: the placeholder stays */ };
+  document.head.append(s);
+}
+
+/* ---------- refresh and actions ---------- */
 async function refresh() {
   const my = ++gen;
   setErr("");
   const t = intervalStart();
   if (!t) { setErr("Pick a valid day."); setBusy(false); return; }
   setBusy(true);
+  renderStrip();
   try {
     if (!state.station) await loadStation();
-    await Promise.all([loadForecast, loadGrid, loadPlan, loadQueue, loadLog, loadKill].map(f => f(t, my)));
+    await Promise.all([loadKill, loadForecast, loadGrid, loadQueue, loadLog].map(f => f(t, my)));
+    await loadPlan(t, my);
+    if (my === gen) { loadDay(my); }
   } catch (e) {
     if (my === gen) setErr("Could not reach the agent API: " + e.message);
   } finally {
@@ -360,7 +723,7 @@ async function refresh() {
 async function act(fn) {
   setErr("");
   setBusy(true);
-  try { await fn(); } catch (e) { setErr(e.status === 403 || e.status === 503 ? "Write refused: " + e.message + ". Enter the demo token." : e.message); }
+  try { await fn(); } catch (e) { setErr(e.status === 403 || e.status === 503 ? "Write refused: " + e.message + ". Open Session and enter the demo token." : e.message); }
   await refresh();
 }
 
@@ -373,25 +736,35 @@ function currentPlan() {
   }
   return state.plan;
 }
-function decide(id, what) { return act(() => api("plan/" + id + "/" + what, "POST", {actor: $("actor").value || "operator"})); }
+const actor = () => $("actor").value || "operator";
+function decide(id, what) { return act(() => api("plan/" + id + "/" + what, "POST", {actor: actor()})); }
 
 $("propose").onclick = () => {
   const t = intervalStart();
   if (!t) { setErr("Pick a valid day."); return; }
-  act(() => api("plan/propose", "POST", {interval_start: t, actor: $("actor").value || "operator"}));
+  act(() => api("plan/propose", "POST", {interval_start: t, actor: actor()}));
 };
 ["approve", "reject", "execute"].forEach(what => {
   $(what).onclick = () => { const plan = currentPlan(); if (plan) decide(plan.plan_id, what); };
 });
-$("killOn").onclick = () => act(() => api("kill_switch", "POST", {on: true, actor: $("actor").value || "operator"}));
-$("killOff").onclick = () => act(() => api("kill_switch", "POST", {on: false, actor: $("actor").value || "operator"}));
+$("killToggle").onclick = () => {
+  const turnOn = !state.kill;
+  if (turnOn && !confirm("Turn the kill switch on? Open plans are cancelled and every house goes back to the fixed limit.")) return;
+  act(() => api("kill_switch", "POST", {on: turnOn, actor: actor()}));
+};
 let timer;
-$("slot").addEventListener("input", () => { intervalStart(); setBusy(true); clearTimeout(timer); timer = setTimeout(refresh, 150); });
 $("date").addEventListener("change", () => { setBusy(true); refresh(); });
+const shiftDay = n => { const d = new Date($("date").value + "T00:00:00Z"); if (isNaN(d)) return; d.setUTCDate(d.getUTCDate() + n); $("date").value = d.toISOString().slice(0, 10); setBusy(true); refresh(); };
+$("prevDay").onclick = () => shiftDay(-1);
+$("nextDay").onclick = () => shiftDay(1);
+$("today").onclick = () => { const n = new Date(); $("date").value = n.toISOString().slice(0, 10); slot = n.getUTCHours() * 2 + (n.getUTCMinutes() >= 30 ? 1 : 0); setBusy(true); refresh(); };
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", drawChart);
 
 $("date").value = new Date().toISOString().slice(0, 10);
-intervalStart();
+showTab(location.hash.slice(1));
+renderStrip();
 loadComparison();
+loadMapModule();
 refresh();
 </script>
 </body>

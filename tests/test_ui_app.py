@@ -166,6 +166,58 @@ class UiAppTests(unittest.TestCase):
         self.write_summary("run-2.1")
         self.assertEqual(client.get("/eval/summary").json()["summary"]["run_id"], "run-2.1")
 
+    def test_geo_missing_gives_404(self):
+        response = self.client().get("/geo/station")
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(response.json()["available"])
+
+    def write_geo(self, text):
+        folder = Path(self.tmp.name) / "geo"
+        folder.mkdir(parents=True)
+        (folder / "station.geojson").write_text(text, encoding="utf-8")
+
+    def test_geo_is_read_from_the_artifacts(self):
+        client = self.client()
+        self.write_geo('{"type": "FeatureCollection", "features": []}')
+        body = client.get("/geo/station").json()
+        self.assertTrue(body["available"])
+        self.assertEqual(body["geojson"]["type"], "FeatureCollection")
+
+    def test_unreadable_geo_is_a_502(self):
+        client = self.client()
+        self.write_geo("{not json")
+        self.assertEqual(client.get("/geo/station").status_code, 502)
+
+    def test_map_module_is_optional_and_its_folder_is_served(self):
+        client = self.client()
+        self.assertEqual(client.get("/static/map/map.js").status_code, 404)
+        self.assertEqual(client.get("/static/map/README.md").status_code, 200)
+        self.assertEqual(client.get("/static/map/../index.html").status_code, 404)
+
+    def test_the_page_has_the_map_slot_and_keeps_the_simulation_notice(self):
+        page = self.client().get("/").text
+        needles = ('id="mapHost"', "window.StationMap", "/static/map/map.js", "Simulated data")
+        for needle in needles:
+            self.assertIn(needle, page)
+
+    def test_ai_insight_is_a_labelled_mock_until_a_real_file_exists(self):
+        client = self.client()
+        body = client.get("/ai/insight?plan_id=PLAN-1").json()
+        self.assertTrue(body["mock"])
+        self.assertTrue(body["insight"]["drivers"])
+        folder = Path(self.tmp.name) / "ai"
+        folder.mkdir()
+        (folder / "PLAN-1.json").write_text('{"drivers": []}', encoding="utf-8")
+        real = client.get("/ai/insight?plan_id=PLAN-1").json()
+        self.assertFalse(real["mock"])
+        self.assertEqual(real["insight"], {"drivers": []})
+        self.assertTrue(client.get("/ai/insight?plan_id=PLAN-2").json()["mock"])
+
+    def test_ai_insight_plan_id_cannot_escape_the_folder(self):
+        client = self.client()
+        for bad in ("..", "../x", ".hidden", "a/b"):
+            self.assertEqual(client.get("/ai/insight", params={"plan_id": bad}).status_code, 400)
+
     def test_run_id_cannot_escape_the_eval_folder(self):
         for bad in ("..", "../x", ".", ".hidden", "a/b", "x\n"):
             self.assertEqual(self.client(run_id=bad).get("/eval/summary").status_code, 400, bad)

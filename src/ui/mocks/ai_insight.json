@@ -1,0 +1,16 @@
+{
+  "model_version": "safe-cap-qgb-v1",
+  "drivers": [
+    {"label": "Net load now", "effect": -0.78},
+    {"label": "Change over the last hour", "effect": -0.46},
+    {"label": "Hour of day", "effect": 0.38},
+    {"label": "Day type", "effect": 0.05}
+  ],
+  "trace": [
+    {"offset_s": 0.00, "step": "forecast", "message": "Loaded the safe-cap forecast for the interval (60 min horizon)."},
+    {"offset_s": 0.02, "step": "check", "message": "Compared the uncertainty with the threshold for sending a case to a person."},
+    {"offset_s": 0.03, "step": "limit", "message": "Set each house's limit from the cautious estimate and applied contract caps."},
+    {"offset_s": 0.41, "step": "guard", "message": "Asked the guard to run its worst cases on the whole station."},
+    {"offset_s": 0.44, "step": "decide", "message": "Proposed the plan and waited for an operator."}
+  ]
+}
