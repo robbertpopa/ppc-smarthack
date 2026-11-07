@@ -64,8 +64,8 @@ def exported_kwh(share: pd.Series, surplus: pd.DataFrame, kwp: pd.Series) -> flo
 def evaluate(
     share: pd.Series,
     labels: pd.DataFrame,
-    surplus: pd.DataFrame,
-    kwp: pd.Series,
+    surplus: pd.DataFrame | None,
+    kwp: pd.Series | None,
     abstain: pd.Series | None = None,
 ) -> dict:
     """Score a policy of one station on its daylight intervals with a known safe share.
@@ -73,7 +73,8 @@ def evaluate(
     ``share`` is the share actually applied (fallback already substituted where the policy
     abstained), indexed by ``interval_start``. ``abstain`` is a boolean series with the same
     index, used only for the abstention numbers. Intervals with a null ``safe_share`` are
-    left out and counted in ``n_null_label``.
+    left out and counted in ``n_null_label``. Without ``surplus`` the export numbers are NaN
+    and only the violation and abstention numbers are filled.
     """
     lab = labels.set_index("interval_start")
     if not lab.index.is_unique:
@@ -88,8 +89,11 @@ def evaluate(
         )
     safe = lab.loc[scored, "safe_share"]
 
-    exported = exported_kwh(applied, surplus, kwp)
-    reference = exported_kwh(pd.Series(FIXED_SHARE, index=scored), surplus, kwp)
+    if surplus is None:
+        exported = reference = float("nan")
+    else:
+        exported = exported_kwh(applied, surplus, kwp)
+        reference = exported_kwh(pd.Series(FIXED_SHARE, index=scored), surplus, kwp)
     violations = int((applied > safe + EPS).sum())
     result = {
         "n_intervals": len(scored),
