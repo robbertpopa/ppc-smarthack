@@ -234,3 +234,8 @@ def explain(feats: dict) -> dict:
     models, _ = _load(version, pt_id)
     folder = model_io.model_dir(version, pt_id)
     return explain_with(models, model_io.cached("explain", folder, load_artifacts), feats)
+
+
+def clear_cache() -> None:
+    """Forget every loaded model; the same as ``src.ml.predict.clear_cache``."""
+    model_io.clear_caches()

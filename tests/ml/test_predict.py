@@ -150,3 +150,14 @@ def test_a_missing_model_is_remembered_and_found_when_it_appears(tmp_path, monke
         predict_function(feats)
     with pytest.raises(FileNotFoundError):  # second call answers from the cache
         predict_function(feats)
+
+
+def test_the_older_clear_cache_names_still_work_and_clear_everything(trained, feats):
+    from src.ml import explain, forecast_pv_load
+
+    predict_function(feats)
+    assert model_io._caches  # something is cached
+    for module in (forecast_pv_load, explain):
+        predict_function(feats)
+        module.clear_cache()
+        assert not model_io._caches

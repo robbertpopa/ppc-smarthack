@@ -145,6 +145,14 @@ def _load(pt_id: str):
     return model_io.cached("pv-load", model_io.model_dir(MODEL_VERSION, pt_id), loader)
 
 
+def clear_cache() -> None:
+    """Forget every loaded model; the same as ``src.ml.predict.clear_cache``.
+
+    Kept so existing callers keep working: all the model caches are one registry now.
+    """
+    model_io.clear_caches()
+
+
 def predict_pv_load(feats: dict, horizon_min: int = 60) -> dict[str, Band | None]:
     """``{"pv_kw": Band, "load_kw": Band | None}`` for the target time in ``feats``.
 
