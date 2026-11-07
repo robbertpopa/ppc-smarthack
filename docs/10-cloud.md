@@ -47,6 +47,8 @@ Azure resource group  rg-ppcsmart-demo
 | State | Terraform state in a separate storage account, created by the bootstrap script | State must live outside the stack it describes |
 | Region | `germanywestcentral` by default (variable) | EU region allowed by the Azure for Students region policy; change it in `variables.tf` and `bootstrap.sh` |
 
+**Environment mode.** Azure now creates a Container Apps environment in *Express* mode unless the request says otherwise, and Express environments reject Azure Files mounts and jobs (`ExpressEnvironmentResourceNotSupported`; this stopped our first deploy). The azurerm provider has no setting for the mode, so the environment is created with the `azapi` provider as `Microsoft.App/managedEnvironments` with `environmentMode = WorkloadProfiles` (preview API `2026-03-02-preview`). Check an environment with `az rest --method get --url ".../managedEnvironments/<name>?api-version=2026-03-02-preview"` and read `properties.environmentMode`.
+
 The app runs with **exactly one replica** because the action log is a single append-only file on a shared volume.
 
 ## Files
@@ -141,6 +143,7 @@ Layout on the share:
 | Runtime image: `python -m src.smoke`, `/health`, container health check, propose → approve → execute, action log written by the non-root user to the named volume and kept across a restart | Verified locally with `docker compose` (not on Azure Files) |
 | `terraform plan` or `apply` against a real subscription | **Not run**: no Azure access from here |
 | `bootstrap.sh` against a real tenant | **Not run** (Azure CLI not installed here) |
+| Environment created as `WorkloadProfiles` through `azapi` (the first deploy created an Express one, which rejected the file share) | **Unverified until the next deploy** |
 | Azure Files mount permissions for the non-root user (`mount_options` in `main.tf`) | **Unverified until the first deploy**; if the log cannot be written, change the mount options or the container user |
 | The deploy job | **Never run**; expect to fix small things on the first real deploy |
 
