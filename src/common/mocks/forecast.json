@@ -1,0 +1,13 @@
+{
+  "pt_id": "PT-A",
+  "interval_start": "2025-06-21T10:00:00Z",
+  "horizon_min": 60,
+  "safe_cap_share": {"q05": 0.52, "q10": 0.55, "q20": 0.58, "q50": 0.64, "q90": 0.71},
+  "spread": 0.19,
+  "pv_kw": {"p10": 41.0, "p50": 58.5, "p90": 70.2},
+  "load_kw": {"p10": 12.1, "p50": 15.3, "p90": 21.0},
+  "available_at": "2025-06-21T09:00:00Z",
+  "model_version": "mock-v0",
+  "provenance": "assumed",
+  "source_ref": "mock"
+}

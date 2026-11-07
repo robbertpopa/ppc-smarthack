@@ -1,0 +1,16 @@
+{
+  "pt_id": "PT-A",
+  "houses": [
+    {"house_id": "H01", "kwp": 5.0},
+    {"house_id": "H02", "kwp": 8.0},
+    {"house_id": "H03", "kwp": 10.0},
+    {"house_id": "H04", "kwp": 10.0},
+    {"house_id": "H05", "kwp": 15.0},
+    {"house_id": "H06", "kwp": 25.0, "contract_cap_kw": 9.0},
+    {"house_id": "H07", "kwp": 10.0},
+    {"house_id": "H08", "kwp": 8.0}
+  ],
+  "static_share": 0.36,
+  "spread_threshold": 0.30,
+  "review_budget": 20
+}
