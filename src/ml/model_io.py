@@ -50,13 +50,15 @@ def file_sha256(path) -> str:
 
 
 def _json_safe(value):
-    """Replace NaN by None so ``metadata.json`` is valid JSON."""
-    if isinstance(value, float) and math.isnan(value):
-        return None
+    """Plain-JSON copy: numpy numbers become Python numbers, NaN and infinity become null."""
     if isinstance(value, dict):
-        return {k: _json_safe(v) for k, v in value.items()}
+        return {str(k): _json_safe(v) for k, v in value.items()}
     if isinstance(value, (list, tuple)):
         return [_json_safe(v) for v in value]
+    if hasattr(value, "item") and not isinstance(value, (str, bytes)):
+        value = value.item()
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
     return value
 
 
@@ -82,6 +84,14 @@ def save(models: dict[float, object], meta: dict, out) -> None:
         out.rename(old)
     tmp.rename(out)
     shutil.rmtree(old, ignore_errors=True)
+
+
+def load_metadata(model_version: str, pt_id: str) -> dict:
+    """Only ``metadata.json`` (no model files), or raise naming the expected path."""
+    meta_file = model_dir(model_version, pt_id) / "metadata.json"
+    if not meta_file.exists():
+        raise FileNotFoundError(f"no model at {meta_file.parent} (expected {meta_file})")
+    return json.loads(meta_file.read_text())
 
 
 def load(model_version: str, pt_id: str) -> tuple[dict[float, object], dict]:
