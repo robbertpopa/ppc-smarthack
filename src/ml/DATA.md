@@ -149,3 +149,33 @@ Where it fits (`src/ml/geo.py` loads and validates it; nothing uses it yet):
 1. **Station composition.** Today a station is 30 houses picked at random (mock) or in file order (P3's twin). Houses in one postcode area share the same weather, which is what a real low-voltage station sees. Choosing a station from one area makes the clouds hit all of its houses together, which is the case the model has to handle.
 2. **Map for the operator screen** (P3): a point per postcode, sized by installed power.
 3. **Regional feature or check**: whether the error depends on the coast, Sydney or Newcastle.
+
+## Weather and solar radiation: NASA POWER (hourly, 2010–2013)
+Hourly weather for the 100 postcodes of the houses, from the NASA POWER hourly point API. Nothing else in the pipeline uses weather yet; it is meant for the PV forecast and for the station composition above.
+
+```
+python -m src.ml.weather fetch    # one request per postcode and year, cached, safe to rerun
+python -m src.ml.weather build [--csv]   # joins them into DATA_DIR/weather_hourly.parquet
+```
+
+| | |
+|---|---|
+| Source | NASA POWER (Prediction Of Worldwide Energy Resources), https://power.larc.nasa.gov/ ; API https://power.larc.nasa.gov/api/temporal/hourly/point (hourly API v2.10.4; underlying sources MERRA-2, SYN1DEG, POWER) |
+| Licence | CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/), as stated in https://power.larc.nasa.gov/llms.txt. Attribution is required, so the source goes in the project README and the slides. How NASA asks to be cited: https://power.larc.nasa.gov/docs/referencing/ (**not read yet: copy the exact citation here**) |
+| Retrieved | 2026-11-07, no key needed |
+| Raw files | `DATA_DIR/raw/nasa_power/hourly/<postcode>_<year>.json`, exactly as the API sent them. Never committed |
+| Request | `community=re`, `time-standard=utc`, 13 parameters, coordinates = the postcode coordinate of `src.ml.geo` |
+| Parameters | `ALLSKY_SFC_SW_DWN` (global horizontal, Wh/m²), `ALLSKY_SFC_SW_DIFF`, `ALLSKY_SFC_SW_DNI`, `CLRSKY_SFC_SW_DWN` (clear-sky), `ALLSKY_KT`, `CLOUD_AMT` (%), `SZA` (°), `T2M` (°C), `RH2M` (%), `WS10M` (m/s), `WD10M` (°), `PS` (kPa), `PRECTOTCORR` (mm/h) |
+
+`weather_hourly.parquet`: one row per postcode and UTC hour (`time_utc`, `postcode`, then the parameters). NASA's fill value −999 becomes null. The API refuses a JSON answer longer than about two years, hence one request per year (400 requests, none failed).
+
+What was checked on 2026-11-07:
+- 100 postcodes × 35,064 hours (2010-01-01 00:00 to 2013-12-31 23:00 UTC), 3,506,400 rows; every request returned every parameter for every hour.
+- Only `ALLSKY_KT` has nulls (49.1%): NASA gives none at night. All other parameters are complete.
+- Plausible ranges: `T2M` −1.9 to 43.4 °C, `RH2M` 9 to 100 %, `PS` 96 to 103.5 kPa; all-sky irradiance never exceeds 1.2 × clear-sky + 10 Wh/m².
+
+Limits to keep in mind:
+- **Resolution is coarse.** POWER's cells are about 0.5° × 0.625° (meteorology) and 1° (clouds and radiation), so the 100 postcodes carry only **6 distinct radiation/cloud series and 7 temperature series**. Postcodes in the same cell have identical weather. The weather is regional, not per suburb; do not present it as measured at the house.
+- **Satellite and reanalysis estimates, not station measurements.**
+- **Timestamp meaning is not verified.** We have not checked whether the hour `HH` labels the start or the end of the hour; check this before joining to the half-hourly Ausgrid intervals.
+- **2012-13 is the held-out test year.** The weather for it is downloaded (the file covers 2010–2013) but it is an input, not a label; keep it out of anything tuned before the final evaluation.
