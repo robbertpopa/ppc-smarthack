@@ -143,5 +143,7 @@ These are the Python entry points other people call. Signatures can be refined, 
 
 **Abstention threshold from the model.** `AgentService` takes an optional `thresholds` callable, `pt_id -> float | None`. It is meant for P2's `threshold(pt_id)` (read from the model metadata). `None` keeps the station value (`spread_threshold`); a number replaces it for that plan; a value that cannot be used (zero, negative, NaN, minus infinity, the "no threshold met the target" answer) means always abstain, and is logged as a warning.
 
+**Plugging in P3's guard.** `agent.guard.make_grid_guard(grid.guard, grid, injections_for)` wraps `grid.guard(grid, plan, injections) -> {passed, violations}` into the guard the agent calls. `injections_for(plan)` returns the PV and load per house for the plan's interval; P1 and P3 agree on where it comes from. The adapter fails closed: an exception, a missing or non-boolean `passed`, or `passed` together with violations all block the plan, with the reason in `violations`. `v_max_pu` and `trafo_loading_pct` are copied only if the guard returns them.
+
 ## Mocks
 `src/common/mocks/` contains one valid example of each object (the ones above). The first commit of the repository (gate G0) includes them. Anything that is not covered by the contract waits.
