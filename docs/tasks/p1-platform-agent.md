@@ -10,7 +10,7 @@ Make the pieces of P2 and P3 work together as **one agent that decides and acts*
 ## What you deliver
 | By gate | Deliverable |
 |---|---|
-| G0 | Repo scaffold, `.gitignore`, contract, mocks, `make smoke`; budget alarm, bucket, registry |
+| G0 | Repo scaffold, `.gitignore`, contract, mocks, `make smoke`; Docker, Terraform for Azure and CI in the repo |
 | G1 | CI; mock-based app deployed at a URL; planner and API on mocks; first end-to-end run on real labels |
 | G2 | Abstention queue, approvals, action log; guard integrated; label job running in the cloud; auto-deploy |
 | G3 | Training and evaluation in the cloud matching the local run; kill switch; thermal model |
@@ -24,14 +24,14 @@ Make the pieces of P2 and P3 work together as **one agent that decides and acts*
 - `pyproject.toml` with pinned versions (Python 3.12, pandapower 3.5.6, simbench 1.6.3, scikit-learn 1.9.1, numpy, pandas, a small web stack for the API and UI).
 - Contract as code (dataclasses or pydantic) in `src/common/`, plus the four mocks from [09](../09-contract.md).
 - `make smoke`: imports everything, loads the mocks, runs one stubbed plan. It must pass before anyone merges.
-- Cloud basics ([10](../10-cloud.md)): check the account and access, **set a budget alarm first**, create the private bucket and the registry.
+- Cloud basics ([10](../10-cloud.md)): Docker, Terraform for Azure, the deploy workflow and `infra/azure/bootstrap.sh` are already on branch `platform/scaffold`. Check the Azure access, **set a budget alert first**, run the bootstrap and add the GitHub secrets.
 - Announce G0 in the group.
 
 ### Phase 1 (T+1–5): planner, deploy, review
 - `agent.plan(forecast, grid_state, config) -> plan`: limit per house = cautious quantile (`q05`) × house kWp. If `spread` is above the threshold, set `abstain: true` and use the static fallback (0.36 of kWp).
 - Stub guard that always passes (log a warning) until P3's guard lands.
 - A small API (read forecast, propose plan, approve, execute, read log, `/health`). All configuration from environment variables ([10](../10-cloud.md)).
-- `Dockerfile`, `docker-compose.yml`; GitHub Actions (lint, tests, `make smoke`); deploy the **mock-based app** to the demo host so P3 has a URL from the start; upload the datasets to the bucket.
+- `Dockerfile`, `docker-compose.yml`; GitHub Actions (lint, tests, `make smoke`); the first automatic deploy of the **mock-based app** to Azure Container Apps gives P3 a URL from the start; put the datasets on the file share.
 - **Review P3's merges** (the physics is on the critical path). Ask for the tests listed in P3's file before approving.
 - If there are no labels at T+3, take over `safe_share` and move P3 to batteries and the guard.
 
@@ -40,10 +40,10 @@ Make the pieces of P2 and P3 work together as **one agent that decides and acts*
 - **Guard integration:** call P3's `guard`; if it blocks, the plan is not executed and the log says why.
 - **Action log** (append-only JSONL, contract object 4), written through `LOG_URI`. Every decision traceable to the forecast that caused it.
 - **Explanations:** from P2's feature contributions, text built from templates using only numbers in the figures. If an LLM is used, it only rephrases those figures; a check rejects text with numbers not in the figures.
-- **Cloud:** batch job image; run label generation in parallel on the larger VM and write `labels.parquet` to S3; auto-deploy on merge to `main`.
+- **Cloud:** batch jobs run in the same image (`docker compose run`, or a Container Apps job); label generation writes `labels.parquet` to the file share; auto-deploy on merge to `main` is already in the pipeline.
 
 ### Phase 3 (T+9–13)
-- Run training and `src/eval/run.py` in the cloud with `ARTIFACT_URI` on S3; check the table matches the local run (same seeds).
+- Run training and `src/eval/run.py` in the cloud with `ARTIFACT_URI` on the mounted file share; check the table matches the local run (same seeds).
 - **Kill switch:** pending commands cancelled, houses return to the static fallback. Logged.
 - **Transformer thermal model** (`src/grid/thermal.py`) after IEC 60076-7: top-oil and hot-spot temperature, load ratio K, ambient temperature. Parameters are assumed (no measured transformer data); validate the implementation against the worked example in the standard or a published reference, and say so. Dynamic loading: allow short loads above 100% while the hot-spot temperature stays below the limit (a common limit is 98 °C for normal ageing; verify before quoting). Compare with the fixed 100% limit. Cut this first if the core is behind.
 - Serve the API to P3's operator screen; keep the contract stable.
