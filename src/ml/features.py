@@ -28,8 +28,8 @@ features that need it (never 0) and does not shift other rows.
 import numpy as np
 import pandas as pd
 
-from .split import SYDNEY
-from .sun import solar_elevation
+from src.ml.config import SYDNEY
+from src.ml.sun import solar_elevation
 
 STEP = pd.Timedelta(minutes=30)
 DAY = pd.Timedelta(hours=24)
