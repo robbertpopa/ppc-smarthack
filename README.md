@@ -20,7 +20,7 @@ Python 3.12. Install with `python -m pip install -e ".[sim,grid-tools,dev]"`.
 
 On Windows PowerShell set variables first: `$env:API_URL = "http://127.0.0.1:8000"`.
 
-Environment: `API_URL` is the agent API the screen calls, `ARTIFACT_URI` is where the screen looks for `eval/local/summary.json`, `LOG_URI` is the action log, and `DEMO_TOKEN` is required by the API for writes when set (type it in the screen's token field; it is not stored). See [docs/10-cloud.md](docs/10-cloud.md).
+Environment: `API_URL` is the agent API the screen calls, `ARTIFACT_URI` and `EVAL_RUN_ID` (default `local`) tell the screen where to read `eval/<run id>/summary.json`, `LOG_URI` is the action log, and `DEMO_TOKEN` is required by the API for writes when set (type it in the screen's token field; it is not stored). See [docs/10-cloud.md](docs/10-cloud.md).
 
 ### The operator screen
 Pick a day and a half-hour slot. The screen shows the station state (voltage, transformer and line load), the forecast band for the safe export share against the fixed limit, the plan with the limit per house (green: model limit and guard passed, yellow: fixed fallback or contract cap, red: blocked by the guard), the "not sure" queue with approve and reject, the kill switch and the action log. The comparison panel (fixed limit versus ours) reads `summary.json` from the evaluation output; with no file it shows no numbers. A `mock: true` summary is labelled "MOCK, NOT A RESULT". The older CSV viewer for the 210-house simulation is at `/simulation`.
@@ -37,7 +37,7 @@ The input data must be obtained separately; do not commit it. `--workers` runs p
 The default twin is a synthetic three-feeder station. `build_grid({'topology': 'simbench', 'houses': [...]})` gives a separate SimBench benchmark (its 150-degree transformer phase shift needs DC initialization; this is regression tested). Limitations and every assumed parameter are in [src/grid/ASSUMPTIONS.md](src/grid/ASSUMPTIONS.md).
 
 ### What the guard checks
-`src.grid.agent_guard.make_grid_guard` runs its own power flow on the whole station with the plan's limits and rejects the plan on voltage, line or transformer overload, battery bounds or a limit above the contract cap. It builds worst-case readings from the forecast (PV p90, load p10, split across houses by an assumed rule). With no PV and load forecast it rejects the plan as unverifiable instead of passing it. It is a simulation check, not a certified protection system.
+`src.grid.agent_guard.make_grid_guard` runs its own power flow on the whole station with the plan's limits and rejects the plan on voltage, line or transformer overload, battery bounds or a limit above the contract cap. It runs two worst-case cases built from the forecast, export (PV p90, load p10) and import (PV p10, load p90), split across houses by an assumed rule, and the plan must pass both. With no PV and load forecast it rejects the plan as unverifiable instead of passing it. It is a simulation check, not a certified protection system.
 
 ### Limitations
 Balanced three-phase grid, active power only, ideal inverters, a 1.05 pu limit taken from a press summary (the exact rule is unverified), a conservative 100% transformer limit, and no fairness analysis between houses. Figures from the exploration phase are not reproduced by this repository yet; use only what `src.eval.run` produces once it exists.
