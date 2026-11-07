@@ -3,7 +3,7 @@ COMPOSE = docker compose -f infra/docker-compose.yml
 TF_DIR = infra/terraform
 TF ?= terraform
 
-.PHONY: setup data profiles smoke test lint run docker-build up down docker-test tf-fmt tf-validate tf-init tf-plan tf-apply
+.PHONY: setup data profiles smoke test lint run docker-build up down docker-test batch tf-fmt tf-validate tf-init tf-plan tf-apply
 
 setup:
 	$(PY) -m pip install -e ".[dev,ml,sim]"
@@ -39,6 +39,9 @@ docker-test:
 	$(COMPOSE) --profile test run --rm test
 	$(COMPOSE) --profile test run --rm lint
 
+batch:
+	$(COMPOSE) --profile batch run --rm batch $(CMD)
+
 tf-fmt:
 	$(TF) -chdir=$(TF_DIR) fmt -recursive
 
@@ -54,3 +57,7 @@ tf-plan:
 
 tf-apply:
 	$(TF) -chdir=$(TF_DIR) apply
+
+.PHONY: replay
+replay:
+	$(PY) -m src.agent.replay --date $(DATE) $(ARGS)

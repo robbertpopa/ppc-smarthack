@@ -67,6 +67,7 @@ jobs:
       TF_IN_AUTOMATION: "true"
       TF_VAR_image_tag: ${{ github.event.pull_request.head.sha }}
       TF_VAR_demo_token: plan-placeholder
+      TF_VAR_budget_contact_emails: ${{ vars.BUDGET_EMAILS || '[]' }}
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
@@ -106,6 +107,7 @@ jobs:
       TF_IN_AUTOMATION: "true"
       TF_VAR_image_tag: ${{ github.sha }}
       TF_VAR_demo_token: ${{ secrets.DEMO_TOKEN }}
+      TF_VAR_budget_contact_emails: ${{ vars.BUDGET_EMAILS || '[]' }}
     steps:
       - name: Require a demo token
         run: test -n "$TF_VAR_demo_token" || { echo "the DEMO_TOKEN secret is not set"; exit 1; }

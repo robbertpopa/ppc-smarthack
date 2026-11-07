@@ -38,6 +38,24 @@ variable "app_memory" {
   default = "1Gi"
 }
 
+variable "job_cpu" {
+  description = "CPU of the batch job (labels, training, evaluation)."
+  type        = number
+  default     = 1.0
+}
+
+variable "job_memory" {
+  description = "Memory of the batch job; 1.0 CPU needs 2Gi on the consumption plan."
+  type        = string
+  default     = "2Gi"
+}
+
+variable "job_timeout_seconds" {
+  description = "A batch run is stopped after this long."
+  type        = number
+  default     = 3600
+}
+
 variable "demo_token" {
   description = "Token required for write endpoints of the public demo. Empty disables the check."
   type        = string

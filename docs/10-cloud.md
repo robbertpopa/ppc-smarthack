@@ -47,6 +47,8 @@ Azure resource group  rg-ppcsmart-demo
 | State | Terraform state in a separate storage account, created by the bootstrap script | State must live outside the stack it describes |
 | Region | `germanywestcentral` by default (variable) | EU region allowed by the Azure for Students region policy; change it in `variables.tf` and `bootstrap.sh` |
 
+**Environment mode.** Azure now creates a Container Apps environment in *Express* mode unless the request says otherwise, and Express environments reject Azure Files mounts and jobs (`ExpressEnvironmentResourceNotSupported`; this stopped our first deploy). The azurerm provider has no setting for the mode, and declaring a `workload_profile` block in `azurerm_container_app_environment` did not help (the deploy of that change still got an Express environment), so the environment is created with the `azapi` provider as `Microsoft.App/managedEnvironments` with `environmentMode = WorkloadProfiles` (preview API `2026-03-02-preview`). Check an environment with `az rest --method get --url ".../managedEnvironments/<name>?api-version=2026-03-02-preview"` and read `properties.environmentMode`.
+
 The app runs with **exactly one replica** because the action log is a single append-only file on a shared volume.
 
 ## Files
@@ -66,12 +68,20 @@ make docker-test   # tests and lint inside the container
 make tf-validate   # Terraform validation, no Azure access needed
 ```
 
+## Batch runs (labels, training, evaluation)
+The same image runs any command, locally and in the cloud, with `ARTIFACT_URI=/data/artifacts` and `DATA_DIR=/data/artifacts/data` pointing at the same layout.
+```
+make batch CMD="python -m src.eval.run"     # local: ./artifacts and ./data are mounted into the container
+```
+In the cloud the Terraform job `caj-ppcsmart-demo-batch` (Container Apps job, manual trigger, 1 CPU / 2 GiB, one hour at most) mounts the Azure Files share. Start it from GitHub: Actions → `batch` → Run workflow on `main`, with the command in the input. The workflow starts one execution of the job named in its `JOB_NAME` variable (it must match the Terraform job name) with that command, polls until it ends (up to 75 minutes, a little longer than the job's own one-hour limit) and fails if the job fails. If you cancel the workflow, a last step stops the execution so it does not keep running and billing. A job costs money only while it runs.
+Logs of a run: Log Analytics, table `ContainerAppConsoleLogs_CL`, filtered by the job name (logs appear after a minute or two).
+
 ## One-time setup (a person with Owner rights on the subscription)
 1. Install the Azure CLI, run `az login`.
 2. Run `SUBSCRIPTION_ID=<id> GITHUB_REPO=owner/repo infra/azure/bootstrap.sh`. It creates the state storage and two identities that GitHub can use through OIDC (one for deploys from `main`, one read-only for the plan job on pull requests), then prints the values to store. It needs `gh` logged in: it reads the OIDC subject prefix GitHub uses for this repository (new repositories use the immutable form `repo:owner@<id>/repo@<id>`).
 3. In the GitHub repository settings add the printed **secrets** (`AZURE_CLIENT_ID`, `AZURE_PLAN_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `DEMO_TOKEN`) and **variables** (`DEPLOY_ENABLED=true`, `TFSTATE_RG`, `TFSTATE_SA`, `TFSTATE_CONTAINER`).
 4. Optional, for local Terraform: create `infra/terraform/backend.hcl` (git-ignored) as the script prints, then `make tf-init` and `make tf-plan`.
-5. Optional budget: pass `-var 'budget_contact_emails=["you@example.com"]'`.
+5. Optional budget alert: set the repository variable `BUDGET_EMAILS` to a JSON list, for example `["you@example.com"]` (Settings, Secrets and variables, Actions, Variables, or `gh variable set BUDGET_EMAILS --body '["you@example.com"]'`). The deploy and the plan job pass it to Terraform; empty or unset means no budget. Whether a Students subscription accepts a budget is not verified: if the apply refuses it, clear the variable.
 
 The first push to `main` after this creates the whole stack.
 
@@ -112,6 +122,7 @@ Layout on the share:
 | **5** T+17–18 | | Rehearse on the cloud URL with the venue network. Teardown plan ready (`terraform destroy`) |
 
 ## Demo-day runbook
+The step-by-step version with the commands, the three scenes and the shut-down is in [13-runbook.md](13-runbook.md); this is the short form.
 1. Deploy the frozen commit at T+13; do not deploy again after T+17 unless something is broken.
 2. Check `/health`, one full scene (normal day, cloud passing, unsure case) and that the action log is written.
 3. Keep a local run (`make up`) on a laptop and the backup video open.
@@ -127,7 +138,7 @@ Layout on the share:
 - **Audit log:** append-only JSONL; each decision traceable to the forecast that caused it.
 
 ## Cost control
-- Budget alert (`budget_contact_emails`) set before the first deploy.
+- Budget alert: set the `BUDGET_EMAILS` repository variable before the first deploy.
 - Container Apps Basic-tier pieces only: one 0.5 vCPU / 1 GiB replica, Basic registry, LRS storage. Check the bill at every sync point.
 - Everything is deleted after the event.
 
@@ -141,6 +152,7 @@ Layout on the share:
 | Runtime image: `python -m src.smoke`, `/health`, container health check, propose → approve → execute, action log written by the non-root user to the named volume and kept across a restart | Verified locally with `docker compose` (not on Azure Files) |
 | `terraform plan` or `apply` against a real subscription | **Not run**: no Azure access from here |
 | `bootstrap.sh` against a real tenant | **Not run** (Azure CLI not installed here) |
+| Environment created as `WorkloadProfiles` through `azapi` (the first deploy created an Express one, which rejected the file share) | **Unverified until the next deploy** |
 | Azure Files mount permissions for the non-root user (`mount_options` in `main.tf`) | **Unverified until the first deploy**; if the log cannot be written, change the mount options or the container user |
 | The deploy job | **Never run**; expect to fix small things on the first real deploy |
 

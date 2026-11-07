@@ -21,3 +21,7 @@ output "storage_account" {
 output "artifacts_share" {
   value = azurerm_storage_share.artifacts.name
 }
+
+output "batch_job" {
+  value = azurerm_container_app_job.batch.name
+}

@@ -68,17 +68,35 @@ resource "azurerm_role_assignment" "acr_pull" {
   principal_id         = azurerm_user_assigned_identity.app.principal_id
 }
 
-resource "azurerm_container_app_environment" "env" {
-  name                       = "cae-${local.name}"
-  location                   = azurerm_resource_group.rg.location
-  resource_group_name        = azurerm_resource_group.rg.name
-  log_analytics_workspace_id = azurerm_log_analytics_workspace.logs.id
-  tags                       = local.tags
+resource "azapi_resource" "env" {
+  type                      = "Microsoft.App/managedEnvironments@2026-03-02-preview"
+  name                      = "cae-${local.name}-std"
+  parent_id                 = azurerm_resource_group.rg.id
+  location                  = azurerm_resource_group.rg.location
+  tags                      = local.tags
+  schema_validation_enabled = false
+
+  body = {
+    properties = {
+      environmentMode = "WorkloadProfiles"
+      workloadProfiles = [
+        { name = "Consumption", workloadProfileType = "Consumption" }
+      ]
+      appLogsConfiguration = {
+        destination = "log-analytics"
+        logAnalyticsConfiguration = {
+          customerId = azurerm_log_analytics_workspace.logs.workspace_id
+          sharedKey  = azurerm_log_analytics_workspace.logs.primary_shared_key
+        }
+      }
+    }
+  }
+
 }
 
 resource "azurerm_container_app_environment_storage" "artifacts" {
   name                         = "artifacts"
-  container_app_environment_id = azurerm_container_app_environment.env.id
+  container_app_environment_id = azapi_resource.env.id
   account_name                 = azurerm_storage_account.data.name
   share_name                   = azurerm_storage_share.artifacts.name
   access_key                   = azurerm_storage_account.data.primary_access_key
@@ -87,9 +105,10 @@ resource "azurerm_container_app_environment_storage" "artifacts" {
 
 resource "azurerm_container_app" "api" {
   name                         = "ca-${local.name}-api"
-  container_app_environment_id = azurerm_container_app_environment.env.id
+  container_app_environment_id = azapi_resource.env.id
   resource_group_name          = azurerm_resource_group.rg.name
   revision_mode                = "Single"
+  workload_profile_name        = "Consumption"
   tags                         = local.tags
 
   identity {
@@ -178,6 +197,69 @@ resource "azurerm_container_app" "api" {
         transport = "HTTP"
         port      = 8000
         path      = "/health"
+      }
+    }
+  }
+
+  depends_on = [azurerm_role_assignment.acr_pull]
+}
+
+resource "azurerm_container_app_job" "batch" {
+  name                         = "caj-${local.name}-batch"
+  location                     = azurerm_resource_group.rg.location
+  resource_group_name          = azurerm_resource_group.rg.name
+  container_app_environment_id = azapi_resource.env.id
+  replica_timeout_in_seconds   = var.job_timeout_seconds
+  workload_profile_name        = "Consumption"
+  replica_retry_limit          = 0
+  tags                         = local.tags
+
+  manual_trigger_config {
+    parallelism              = 1
+    replica_completion_count = 1
+  }
+
+  identity {
+    type         = "UserAssigned"
+    identity_ids = [azurerm_user_assigned_identity.app.id]
+  }
+
+  registry {
+    server   = azurerm_container_registry.acr.login_server
+    identity = azurerm_user_assigned_identity.app.id
+  }
+
+  template {
+    volume {
+      name          = "artifacts"
+      storage_type  = "AzureFile"
+      storage_name  = azurerm_container_app_environment_storage.artifacts.name
+      mount_options = "uid=1000,gid=1000,file_mode=0660,dir_mode=0770"
+    }
+
+    container {
+      name    = "batch"
+      image   = "${azurerm_container_registry.acr.login_server}/ppc-smarthack:${var.image_tag}"
+      cpu     = var.job_cpu
+      memory  = var.job_memory
+      command = ["python", "-m", "src.smoke"]
+
+      env {
+        name  = "APP_ENV"
+        value = "cloud"
+      }
+      env {
+        name  = "ARTIFACT_URI"
+        value = "/data/artifacts"
+      }
+      env {
+        name  = "DATA_DIR"
+        value = "/data/artifacts/data"
+      }
+
+      volume_mounts {
+        name = "artifacts"
+        path = "/data/artifacts"
       }
     }
   }
