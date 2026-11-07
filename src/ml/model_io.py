@@ -11,8 +11,6 @@ import shutil
 import subprocess
 from pathlib import Path
 
-import joblib
-
 from src.ml.config import artifact_uri
 
 
@@ -68,6 +66,8 @@ def save(models: dict[float, object], meta: dict, out) -> None:
     The files are written to a temporary folder first and swapped in at the end, so a
     failure never leaves new models next to the old metadata.
     """
+    import joblib
+
     out = Path(out)
     tmp = out.with_name(f".{out.name}.tmp")
     old = out.with_name(f".{out.name}.old")
@@ -86,6 +86,8 @@ def save(models: dict[float, object], meta: dict, out) -> None:
 
 def load(model_version: str, pt_id: str) -> tuple[dict[float, object], dict]:
     """Load the models and metadata, or raise naming the folder that was expected."""
+    import joblib
+
     path = model_dir(model_version, pt_id)
     meta_file = path / "metadata.json"
     if not meta_file.exists():
