@@ -61,6 +61,16 @@ def exported_kwh(share: pd.Series, surplus: pd.DataFrame, kwp: pd.Series) -> flo
     return float(np.nansum(exported)) * STEP_HOURS
 
 
+def export_by_interval(share: pd.Series, surplus: pd.DataFrame, kwp: pd.Series) -> pd.Series:
+    """Exported energy (kWh) of a policy in each interval; same rule as ``exported_kwh``."""
+    intervals = share.index.intersection(surplus.index)
+    cap = (
+        share.loc[intervals].to_numpy()[:, None] * kwp.reindex(surplus.columns).to_numpy()[None, :]
+    )
+    exported = np.nansum(np.minimum(surplus.loc[intervals].to_numpy(), cap), axis=1) * STEP_HOURS
+    return pd.Series(exported, index=intervals)
+
+
 def evaluate(
     share: pd.Series,
     labels: pd.DataFrame,
