@@ -10,10 +10,28 @@ services:
     environment:
       APP_ENV: ${APP_ENV:-local}
       SOURCE: ${SOURCE:-mock}
+      SCENARIO: ${SCENARIO:-A}
+      DATA_DIR: /data/artifacts/data
       DEMO_TOKEN: ${DEMO_TOKEN:-}
       LOG_URI: /data/artifacts/logs/actions.jsonl
     volumes:
       - artifacts:/data/artifacts
+    restart: unless-stopped
+
+  ui:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+      target: app
+    image: ppc-smarthack:local
+    command: ["uvicorn", "src.ui.app:app", "--host", "0.0.0.0", "--port", "8080"]
+    ports:
+      - "8080:8080"
+    environment:
+      APP_ENV: ${APP_ENV:-local}
+      API_URL: http://api:8000
+    depends_on:
+      - api
     restart: unless-stopped
 
   test:

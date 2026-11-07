@@ -6,8 +6,6 @@ from src.agent.guard import stub_guard
 from src.agent.log import ActionLog
 from src.agent.model_source import ModelSource
 from src.agent.service import AgentService
-from src.agent.sources import make_source
-from src.common.config import Settings
 from src.common.contract import Forecast, GridState, StationConfig
 from src.common.mock_data import load_mock
 
@@ -118,8 +116,3 @@ def test_a_working_model_gives_a_plan_from_its_cautious_quantile(tmp_path):
     plan = service(source(), tmp_path).propose(NOON)
     assert not plan.abstain and plan.source == "model"
     assert plan.safe_cap_share_used == good_forecast().safe_cap_share.q05
-
-
-def test_source_model_says_what_is_missing():
-    with pytest.raises(NotImplementedError, match="ml.predict"):
-        make_source(Settings(source="model"))

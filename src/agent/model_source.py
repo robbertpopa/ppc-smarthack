@@ -16,7 +16,9 @@ class ModelSource:
         station_state: Callable[[str, datetime], Any],
         grid_state_for: Callable[[str, datetime], Any],
         horizon_min: int = 60,
+        explain: Callable[[Any], Any] | None = None,
     ):
+        self.explain = explain
         self.predict = predict
         self.build_features = build_features
         self.station_state = station_state
@@ -40,6 +42,17 @@ class ModelSource:
             logger.warning("forecast for %s at %s is after the decision", pt_id, interval_start)
             return None
         return forecast
+
+    def factors(self, pt_id: str, interval_start: AwareDatetime) -> dict | None:
+        """Top factors and similar cases for the forecast; None when unavailable."""
+        if self.explain is None:
+            return None
+        decision = interval_start.astimezone(timezone.utc) - timedelta(minutes=self.horizon_min)
+        try:
+            return self.explain(self.build_features(self.station_state(pt_id, decision), decision))
+        except Exception as exc:
+            logger.warning("no explanation for %s at %s: %r", pt_id, interval_start, exc)
+            return None
 
     def grid_state(self, pt_id: str, interval_start: AwareDatetime) -> GridState:
         state = None

@@ -2,6 +2,10 @@ output "app_url" {
   value = "https://${azurerm_container_app.api.ingress[0].fqdn}"
 }
 
+output "ui_url" {
+  value = "https://${azurerm_container_app.ui.ingress[0].fqdn}"
+}
+
 output "acr_name" {
   value = azurerm_container_registry.acr.name
 }

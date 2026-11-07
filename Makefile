@@ -3,7 +3,7 @@ COMPOSE = docker compose -f infra/docker-compose.yml
 TF_DIR = infra/terraform
 TF ?= terraform
 
-.PHONY: setup data profiles smoke test lint run docker-build up down docker-test batch tf-fmt tf-validate tf-init tf-plan tf-apply
+.PHONY: setup data profiles smoke test lint run docker-build up down docker-test batch pipeline tf-fmt tf-validate tf-init tf-plan tf-apply
 
 setup:
 	$(PY) -m pip install -e ".[dev,ml,sim,report]"
@@ -38,6 +38,9 @@ down:
 docker-test:
 	$(COMPOSE) --profile test run --rm test
 	$(COMPOSE) --profile test run --rm lint
+
+pipeline:
+	$(COMPOSE) --profile batch run --rm batch python -m src.common.pipeline
 
 batch:
 	$(COMPOSE) --profile batch run --rm batch $(CMD)

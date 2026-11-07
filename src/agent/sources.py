@@ -53,10 +53,9 @@ def make_source(settings: Settings) -> Source:
     if settings.source == "mock":
         return MockSource()
     if settings.source == "model":
-        raise NotImplementedError(
-            "SOURCE=model needs ml.predict, ml.features.build and grid.power_flow, "
-            "which are not merged yet"
-        )
+        from src.agent.model_wiring import load_station, make_model_source
+
+        return make_model_source(settings, load_station(settings))
     raise NotImplementedError(f"unknown source {settings.source!r}")
 
 

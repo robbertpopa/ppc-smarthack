@@ -164,7 +164,15 @@ resource "azurerm_container_app" "api" {
       }
       env {
         name  = "SOURCE"
-        value = "mock"
+        value = var.agent_source
+      }
+      env {
+        name  = "SCENARIO"
+        value = var.scenario
+      }
+      env {
+        name  = "DATA_DIR"
+        value = "/data/artifacts/data"
       }
       env {
         name  = "LOG_URI"
@@ -197,6 +205,72 @@ resource "azurerm_container_app" "api" {
         transport = "HTTP"
         port      = 8000
         path      = "/health"
+      }
+    }
+  }
+
+  depends_on = [azurerm_role_assignment.acr_pull]
+}
+
+resource "azurerm_container_app" "ui" {
+  name                         = "ca-${local.name}-ui"
+  container_app_environment_id = azapi_resource.env.id
+  resource_group_name          = azurerm_resource_group.rg.name
+  revision_mode                = "Single"
+  workload_profile_name        = "Consumption"
+  tags                         = local.tags
+
+  identity {
+    type         = "UserAssigned"
+    identity_ids = [azurerm_user_assigned_identity.app.id]
+  }
+
+  registry {
+    server   = azurerm_container_registry.acr.login_server
+    identity = azurerm_user_assigned_identity.app.id
+  }
+
+  ingress {
+    external_enabled = true
+    target_port      = 8080
+    transport        = "auto"
+
+    traffic_weight {
+      percentage      = 100
+      latest_revision = true
+    }
+  }
+
+  template {
+    min_replicas = 1
+    max_replicas = 1
+
+    container {
+      name    = "ui"
+      image   = "${azurerm_container_registry.acr.login_server}/ppc-smarthack:${var.image_tag}"
+      cpu     = var.ui_cpu
+      memory  = var.ui_memory
+      command = ["uvicorn", "src.ui.app:app", "--host", "0.0.0.0", "--port", "8080"]
+
+      env {
+        name  = "APP_ENV"
+        value = "cloud"
+      }
+      env {
+        name  = "API_URL"
+        value = "https://${azurerm_container_app.api.ingress[0].fqdn}"
+      }
+
+      liveness_probe {
+        transport = "HTTP"
+        port      = 8080
+        path      = "/"
+      }
+
+      readiness_probe {
+        transport = "HTTP"
+        port      = 8080
+        path      = "/"
       }
     }
   }

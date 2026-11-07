@@ -11,6 +11,7 @@ class Settings:
     log_uri: str = "./artifacts/logs/actions.jsonl"
     api_url: str = "http://127.0.0.1:8000"
     source: str = "mock"
+    scenario: str = "A"
     demo_token: str | None = None
 
     @classmethod
@@ -24,5 +25,6 @@ class Settings:
             log_uri=env.get("LOG_URI", defaults.log_uri),
             api_url=env.get("API_URL", defaults.api_url),
             source=env.get("SOURCE", defaults.source),
+            scenario=env.get("SCENARIO", defaults.scenario),
             demo_token=env.get("DEMO_TOKEN") or None,
         )

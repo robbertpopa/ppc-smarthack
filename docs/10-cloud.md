@@ -74,6 +74,12 @@ The same image runs any command, locally and in the cloud, with `ARTIFACT_URI=/d
 make batch CMD="python -m src.eval.run"     # local: ./artifacts and ./data are mounted into the container
 ```
 In the cloud the Terraform job `caj-ppcsmart-demo-batch` (Container Apps job, manual trigger, 1 CPU / 2 GiB, one hour at most) mounts the Azure Files share. Start it from GitHub: Actions → `batch` → Run workflow on `main`, with the command in the input. The workflow starts one execution of the job named in its `JOB_NAME` variable (it must match the Terraform job name) with that command, polls until it ends (up to 75 minutes, a little longer than the job's own one-hour limit) and fails if the job fails. If you cancel the workflow, a last step stops the execution so it does not keep running and billing. A job costs money only while it runs.
+**Whole pipeline in one command:** `python -m src.common.pipeline --run-id cloud` trains the safe-cap and PV/load models for every scenario that has labels, then runs the evaluation table. Locally: `make batch CMD="python -m src.common.pipeline"`. In the cloud: Actions → `batch` with the same command. Compare `summary.json` of the cloud run with the local run (same seeds, same labels): the numbers should match. The pipeline only runs when someone starts it; nothing here deploys or runs by itself.
+
+**Operator screen:** Terraform also defines `ca-ppcsmart-demo-ui` (one replica, port 8080, `API_URL` set to the API's address). Its URL is the output `ui_url`. Locally `docker compose -f infra/docker-compose.yml up` serves the API on 8000 and the screen on 8080.
+
+**Checking a deployment:** `infra/check_deploy.sh <api-url> [ui-url]` reads `/health` and `/queue`, checks that a write without the demo token is refused and that the API uses HTTPS. It changes nothing.
+
 Logs of a run: Log Analytics, table `ContainerAppConsoleLogs_CL`, filtered by the job name (logs appear after a minute or two).
 
 ## One-time setup (a person with Owner rights on the subscription)
@@ -93,7 +99,8 @@ The first push to `main` after this creates the whole stack.
 | `ARTIFACT_URI` | Where models and evaluation outputs go; a path | `./artifacts` | `/data/artifacts` (the Azure Files share) |
 | `LOG_URI` | Where the action log is appended; a path | `./artifacts/logs/actions.jsonl` | `/data/artifacts/logs/actions.jsonl` |
 | `API_URL` | Base URL the UI calls | `http://127.0.0.1:8000` | the Container App URL (Terraform output `app_url`) |
-| `SOURCE` | `mock` until the real model and grid are connected | `mock` | `mock` |
+| `SOURCE` | `mock`, or `model` (real model, labels history and grid guard; needs `SCENARIO`, default `A`) | `mock` | Terraform variable `agent_source` (default `mock`) |
+| `SCENARIO` | `A`, `B` or `B-VAR`: the station used when `SOURCE=model` | `A` | Terraform variable `scenario` |
 | `DEMO_TOKEN` | Required header `X-Demo-Token` for write endpoints; empty disables the check | empty | secret from GitHub |
 
 Layout on the share:
