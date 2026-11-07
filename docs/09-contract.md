@@ -142,5 +142,7 @@ These are the Python entry points other people call. Signatures can be refined, 
 | P1 | `agent.plan(forecast, grid_state, config) -> plan` | Decision, with abstention and fallback |
 | P1 | `agent.execute(plan, user) -> action_event[]` | Applies an approved plan and logs it |
 
+**Abstention threshold from the model.** `AgentService` takes an optional `thresholds` callable, `pt_id -> float | None`. It is meant for P2's `threshold(pt_id)` (read from the model metadata). `None` keeps the station value (`spread_threshold`); a finite number above zero replaces it for that plan. Anything else always abstains, with a warning and the reason `no usable abstention threshold`: zero, a negative number, NaN, plus or minus infinity, a value that is not a number, and the "no threshold met the target" answer. A lookup that raises also abstains (reason `abstention threshold lookup failed`), the same way `ModelSource` turns a failed model into an abstention. The abstention is forced in the planner, so it holds even when the spread is exactly zero.
+
 ## Mocks
 `src/common/mocks/` contains one valid example of each object (the ones above). The first commit of the repository (gate G0) includes them. Anything that is not covered by the contract waits.

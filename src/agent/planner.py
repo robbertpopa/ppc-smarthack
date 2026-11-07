@@ -20,6 +20,7 @@ def make_plan(
     grid_state: GridState | None,
     station: StationConfig,
     interval_start: AwareDatetime | None = None,
+    force_abstain: str | None = None,
 ) -> Plan:
     if forecast is None and interval_start is None:
         raise ValueError("interval_start is required when there is no forecast")
@@ -46,6 +47,10 @@ def make_plan(
     if grid_state is not None and not grid_state.converged:
         reasons.append("grid state did not converge")
         reason_for_text = reason_for_text or "The grid state could not be computed"
+
+    if force_abstain:
+        reasons.append(force_abstain)
+        reason_for_text = reason_for_text or force_abstain.capitalize()
 
     abstain = bool(reasons)
     if abstain:
