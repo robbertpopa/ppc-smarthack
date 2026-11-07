@@ -49,5 +49,6 @@ tf-plan:
 tf-apply:
 	$(TF) -chdir=$(TF_DIR) apply
 
+.PHONY: replay
 replay:
 	$(PY) -m src.agent.replay --date $(DATE) $(ARGS)
