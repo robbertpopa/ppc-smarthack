@@ -3,6 +3,8 @@ from datetime import datetime, timezone
 
 import pytest
 
+pytest.importorskip("pandapower", reason="needs the sim extra")
+
 from src.agent.wiring import build_service
 from src.common.config import Settings
 from src.ml import forecast_pv_load, labels, train
