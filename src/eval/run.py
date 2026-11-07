@@ -193,13 +193,20 @@ def _clean(results: dict) -> dict:
 
 
 def run(
-    scenarios, run_id="local", use_artifacts=False, allow_mock=False, robustness=True, grid=None
+    scenarios,
+    run_id="local",
+    use_artifacts=False,
+    allow_mock=False,
+    robustness=True,
+    error_analysis=False,
+    grid=None,
 ) -> dict:
     """Evaluate every scenario and write the outputs. Returns the summary."""
     started = time.perf_counter()
     out = eval_dir(run_id)
     out.mkdir(parents=True, exist_ok=True)
     all_rows, summary_scenarios, calibrations, footer, any_mock = {}, {}, [], [], False
+    sections = []
     for scenario in scenarios:
         ctx = _prepare(scenario, allow_mock, use_artifacts, grid)
         pt_id = ctx["labels"]["pt_id"].iloc[0]
@@ -211,6 +218,10 @@ def run(
             variants = robust.run_variants(ctx, result)
             rows = {**rows, **variants["rows"]}
             extra = {"robustness": {k: _clean_note(v) for k, v in variants["notes"].items()}}
+        if error_analysis:
+            from src.eval import error_analysis as analysis
+
+            sections.append(analysis.analyse(ctx, result, rows, out, pt_id))
         any_mock |= ctx["mock"]
         all_rows[pt_id] = rows
         meta, test = ctx["meta"], ctx["test_labels"]
@@ -263,6 +274,8 @@ def run(
     (out / "summary.json").write_text(
         json.dumps(summary, indent=2, sort_keys=True, allow_nan=False) + "\n"
     )
+    if error_analysis:
+        analysis.write(sections, out, any_mock)
     print(f"evaluation written to {out} in {time.perf_counter() - started:.1f} s")
     return summary
 
@@ -276,6 +289,9 @@ def main(argv: list[str] | None = None) -> None:
         "--allow-mock", action="store_true", help="run on mock labels (not a result)"
     )
     parser.add_argument("--no-robustness", dest="robustness", action="store_false")
+    parser.add_argument(
+        "--error-analysis", action="store_true", help="also write the error analysis"
+    )
     args = parser.parse_args(argv)
     names = list(labels_io.SCENARIOS) if args.scenario == "all" else [args.scenario]
     names = [n for n in names if (labels_io.labels_path(n) / "labels.parquet").exists()]
@@ -284,7 +300,14 @@ def main(argv: list[str] | None = None) -> None:
             "no labels found: ask P3 for the real file, or use `python -m src.ml.labels mock`"
         )
     try:
-        run(names, args.run_id, args.use_artifacts, args.allow_mock, args.robustness)
+        run(
+            names,
+            args.run_id,
+            args.use_artifacts,
+            args.allow_mock,
+            args.robustness,
+            args.error_analysis,
+        )
     except MockLabelsError as err:
         raise SystemExit(str(err)) from err
 
