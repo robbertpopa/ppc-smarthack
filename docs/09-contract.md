@@ -17,8 +17,8 @@ One record per station and interval. `horizon_min` is how far ahead it looks (60
   "pt_id": "PT-A",
   "interval_start": "2025-06-21T10:00:00Z",
   "horizon_min": 60,
-  "safe_cap_share": {"q05": 0.31, "q10": 0.36, "q20": 0.42, "q50": 0.55, "q90": 0.80},
-  "spread": 0.49,
+  "safe_cap_share": {"q05": 0.52, "q10": 0.55, "q20": 0.58, "q50": 0.64, "q90": 0.71},
+  "spread": 0.19,
   "pv_kw": {"p10": 41.0, "p50": 58.5, "p90": 70.2},
   "load_kw": {"p10": 12.1, "p50": 15.3, "p90": 21.0},
   "available_at": "2025-06-21T09:00:00Z",
@@ -28,7 +28,8 @@ One record per station and interval. `horizon_min` is how far ahead it looks (60
 }
 ```
 - `safe_cap_share` is the highest export limit that will be safe, as a share of each house's installed kWp (0 to 1). Quantile `q05` is the cautious value the planner uses.
-- `spread = q90 − q05` is the uncertainty used for the "not sure" rule.
+- `spread = q90 − q05` is the uncertainty used for the "not sure" rule. The code rejects a record whose spread does not match, and one whose quantiles cross (sort them before returning).
+- Times must carry a time zone (UTC); naive datetimes are rejected.
 - `pv_kw` and `load_kw` are totals for the station; they may be `null` in phase 1.
 
 ## 2. `grid_state`: output of P3's twin (thermal fields by P1)
@@ -43,7 +44,7 @@ One record per station and interval. `horizon_min` is how far ahead it looks (60
   "line_loading_max_pct": 63.0,
   "trafo_loading_pct": 88.0,
   "trafo_hotspot_c": 92.5,
-  "batteries": [{"house_id": "H12", "soc_kwh": 6.4, "power_kw": 2.5}],
+  "batteries": [{"house_id": "H03", "soc_kwh": 6.4, "power_kw": 2.5}],
   "exported_kwh": 12.4,
   "curtailed_kwh": 1.1,
   "provenance": "simulated"
@@ -59,20 +60,32 @@ One record per station and interval. `horizon_min` is how far ahead it looks (60
   "pt_id": "PT-A",
   "interval_start": "2025-06-21T10:00:00Z",
   "limits": [
-    {"house_id": "H01", "export_limit_kw": 3.6, "battery_kw": 0.0},
-    {"house_id": "H02", "export_limit_kw": 5.4, "battery_kw": 2.5}
+    {"house_id": "H01", "export_limit_kw": 2.6, "battery_kw": 0.0},
+    {"house_id": "H02", "export_limit_kw": 4.16, "battery_kw": 0.0}
   ],
-  "safe_cap_share_used": 0.36,
+  "safe_cap_share_used": 0.52,
   "source": "model",
   "abstain": false,
-  "confidence": 0.82,
-  "reasons": ["spread 0.12 below threshold 0.30"],
+  "confidence": 0.683,
+  "reasons": ["spread 0.19 below threshold 0.30"],
   "guard": {"passed": true, "v_max_pu": 1.041, "trafo_loading_pct": 86.0, "violations": []},
-  "explanation": {"text": "...", "figures": [{"name": "spread", "value": 0.12}]},
+  "explanation": {
+    "text": "Each house may export up to 52% of its installed power. The model's uncertainty is 19%, below the 30% threshold, so its cautious estimate replaces the fixed 36% limit.",
+    "figures": [
+      {"name": "export_limit_pct", "value": 52},
+      {"name": "uncertainty_pct", "value": 19},
+      {"name": "threshold_pct", "value": 30},
+      {"name": "static_limit_pct", "value": 36}
+    ]
+  },
   "status": "proposed"
 }
 ```
+(Shortened: the full mock lists every house of the station.)
 - `source` is `model` or `fallback_static`.
+- Limit per house = share × installed kWp, capped by the house's contract limit (`contract_cap_kw`, the approved evacuation power, which stays a ceiling).
+- `confidence = 1 − spread / (2 × threshold)`, clipped to [0, 1]: 0.5 at the threshold, 0 when there is no usable forecast.
+- Explanation text may only contain numbers that appear in its `figures`; the code refuses to show it otherwise.
 - `abstain: true` means the case goes to a human; the limit actually applied is the static fallback.
 - `status`: `proposed` → `approved` / `rejected` → `executed`.
 
@@ -84,11 +97,31 @@ One record per station and interval. `horizon_min` is how far ahead it looks (60
   "plan_id": "PLAN-2025-06-21-1000-PT-A",
   "event": "plan_approved",
   "actor": "operator-demo",
-  "detail": {"reason": "within confidence threshold"},
-  "plan_sha": "9f2c..."
+  "detail": {"abstain": false},
+  "plan_sha": "9f2c4a7e1b0d3c58"
 }
 ```
 `event` is one of `plan_proposed`, `guard_blocked`, `plan_approved`, `plan_rejected`, `plan_executed`, `abstained`, `kill_switch`. Each decision must be traceable from the log to the forecast that caused it.
+
+## 5. `station_config`: the station the agent controls
+
+```json
+{
+  "pt_id": "PT-A",
+  "houses": [
+    {"house_id": "H01", "kwp": 5.0},
+    {"house_id": "H06", "kwp": 25.0, "contract_cap_kw": 9.0}
+  ],
+  "static_share": 0.36,
+  "spread_threshold": 0.30,
+  "review_budget": 20
+}
+```
+`static_share` is the fixed limit used as fallback, `spread_threshold` is the "not sure" cut-off, and `review_budget` is how many unsure cases a crew can review per day.
+
+## Reference implementation
+
+The contract lives in code in `src/common/contract.py` (pydantic models, mocks in `src/common/mocks/`). The agent API serves it: `GET /health`, `/station`, `/forecast`, `/grid_state`, `/plans`, `/plan/{id}`, `/queue`, `/log`, `/kill_switch`, and `POST /plan/propose`, `/plan/{id}/approve`, `/plan/{id}/reject`, `/plan/{id}/execute`, `/kill_switch`. Writes need the header `X-Demo-Token` when `DEMO_TOKEN` is set. Run it with `make run`.
 
 ## Function interfaces
 
