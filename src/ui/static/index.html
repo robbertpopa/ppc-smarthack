@@ -135,7 +135,8 @@ a{color:var(--accent)}
 <script>
 "use strict";
 const $ = id => document.getElementById(id);
-const state = {station: null, plan: null};
+const state = {station: null, plan: null, busy: false, allowed: {approve: false, reject: false, execute: false}};
+let gen = 0; // generation of the latest refresh: results of older ones are dropped
 const pct = v => v == null ? "—" : (v * 100).toFixed(0) + "%";
 const num = (v, d = 1, unit = "") => v == null ? "—" : Number(v).toFixed(d) + unit;
 const setErr = m => { $("err").textContent = m || ""; };
@@ -155,12 +156,19 @@ async function api(path, method = "GET", body) {
   return data;
 }
 
+// UTC start of the selected half-hour, or null when the day field is empty or invalid.
 function intervalStart() {
   const d = $("date").value, s = Number($("slot").value);
   const hh = String(Math.floor(s / 2)).padStart(2, "0"), mm = s % 2 ? "30" : "00";
   $("slotLabel").textContent = hh + ":" + mm;
-  return d + "T" + hh + ":" + mm + ":00Z";
+  return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d + "T" + hh + ":" + mm + ":00Z" : null;
 }
+
+function applyButtons() {
+  $("propose").disabled = state.busy;
+  ["approve", "reject", "execute"].forEach(i => { $(i).disabled = state.busy || !state.allowed[i]; });
+}
+function setBusy(on) { state.busy = on; applyButtons(); }
 
 function el(tag, text, cls) {
   const n = document.createElement(tag);
@@ -178,17 +186,19 @@ async function loadStation() {
   $("static").textContent = pct(s.static_share);
 }
 
-async function loadKill() {
+async function loadKill(t, my) {
   const k = await api("kill_switch");
+  if (my !== gen) return;
   setPill($("killState"), k.on ? "Kill switch: ON" : "Kill switch: off", k.on ? "bad" : "ok");
 }
 
 function provText(p) { return p ? "(" + p + ")" : ""; }
 
-async function loadForecast(t) {
+async function loadForecast(t, my) {
   const q = "?interval_start=" + encodeURIComponent(t);
   try {
     const f = await api("forecast" + q);
+    if (my !== gen) return;
     const c = f.safe_cap_share;
     $("q05").textContent = pct(c.q05); $("q50").textContent = pct(c.q50); $("spread").textContent = pct(f.spread);
     $("fcProv").textContent = provText(f.provenance) + " " + f.model_version;
@@ -199,14 +209,16 @@ async function loadForecast(t) {
     $("fcNote").textContent = sure ? "Spread is within the " + pct(state.station.spread_threshold) + " threshold: the cautious value can be used."
       : "Spread is above the " + pct(state.station.spread_threshold) + " threshold: the case goes to a human and the fixed limit applies.";
   } catch (e) {
+    if (my !== gen) return;
     ["q05", "q50", "spread"].forEach(i => $(i).textContent = "—");
     $("band").replaceChildren(); $("fcProv").textContent = ""; $("fcNote").textContent = "No forecast for this interval (" + e.message + ").";
   }
 }
 
-async function loadGrid(t) {
+async function loadGrid(t, my) {
   try {
     const g = await api("grid_state?interval_start=" + encodeURIComponent(t));
+    if (my !== gen) return;
     $("gsProv").textContent = provText(g.provenance);
     if (!g.converged) {
       ["vmax", "trafo", "line", "exp"].forEach(i => $(i).textContent = "—");
@@ -219,6 +231,7 @@ async function loadGrid(t) {
     $("exp").textContent = num(g.exported_kwh, 1) + " / " + num(g.curtailed_kwh, 1) + " kWh";
     $("gsNote").textContent = g.v_max_node ? "Highest voltage at " + g.v_max_node + "." : "";
   } catch (e) {
+    if (my !== gen) return;
     ["vmax", "trafo", "line", "exp"].forEach(i => $(i).textContent = "—");
     $("gsNote").textContent = "No grid state for this interval (" + e.message + ").";
   }
@@ -227,7 +240,7 @@ async function loadGrid(t) {
 function renderPlan(plan) {
   state.plan = plan;
   const houses = $("houses"); houses.replaceChildren();
-  ["approve", "reject", "execute"].forEach(i => { $(i).disabled = true; });
+  state.allowed = {approve: false, reject: false, execute: false};
   if (!plan) {
     setPill($("planStatus"), "No plan", "off");
     $("planSource").textContent = ""; $("planExplain").textContent = "No plan has been proposed for this interval.";
@@ -235,6 +248,7 @@ function renderPlan(plan) {
     state.station.houses.forEach(h => {
       const n = el("div", null, "house off"); n.append(el("div", h.house_id), el("b", "—")); houses.append(n);
     });
+    applyButtons();
     return;
   }
   const blocked = plan.guard && !plan.guard.passed;
@@ -255,16 +269,19 @@ function renderPlan(plan) {
     houses.append(n);
   });
   const open = plan.status === "proposed", approved = plan.status === "approved";
-  $("approve").disabled = !(open && !blocked); $("reject").disabled = !open; $("execute").disabled = !approved;
+  state.allowed = {approve: open && !blocked, reject: open, execute: approved};
+  applyButtons();
 }
 
-async function loadPlan(t) {
+async function loadPlan(t, my) {
   const all = await api("plans");
+  if (my !== gen) return;
   renderPlan(all.find(p => Date.parse(p.interval_start) === Date.parse(t)) || null);
 }
 
-async function loadQueue() {
+async function loadQueue(t, my) {
   const q = await api("queue");
+  if (my !== gen) return;
   $("queueCount").textContent = "(" + q.pending.length + " pending · reviewed today " + q.reviewed_today + "/" + q.review_budget + (q.over_budget ? " · OVER BUDGET" : "") + ")";
   const body = $("queue"); body.replaceChildren();
   if (!q.pending.length) { const r = el("tr"); const c = el("td", "Nothing waiting for review."); c.colSpan = 3; r.append(c); body.append(r); }
@@ -279,8 +296,9 @@ async function loadQueue() {
   });
 }
 
-async function loadLog() {
+async function loadLog(t, my) {
   const events = await api("log?limit=50");
+  if (my !== gen) return;
   const body = $("log"); body.replaceChildren();
   events.slice().reverse().forEach(e => {
     const r = el("tr");
@@ -324,30 +342,52 @@ async function loadComparison() {
 }
 
 async function refresh() {
+  const my = ++gen;
   setErr("");
   const t = intervalStart();
+  if (!t) { setErr("Pick a valid day."); setBusy(false); return; }
+  setBusy(true);
   try {
     if (!state.station) await loadStation();
-    await Promise.all([loadForecast(t), loadGrid(t), loadPlan(t), loadQueue(), loadLog(), loadKill()]);
-  } catch (e) { setErr("Could not reach the agent API: " + e.message); }
+    await Promise.all([loadForecast, loadGrid, loadPlan, loadQueue, loadLog, loadKill].map(f => f(t, my)));
+  } catch (e) {
+    if (my === gen) setErr("Could not reach the agent API: " + e.message);
+  } finally {
+    if (my === gen) setBusy(false);
+  }
 }
 
 async function act(fn) {
   setErr("");
+  setBusy(true);
   try { await fn(); } catch (e) { setErr(e.status === 403 || e.status === 503 ? "Write refused: " + e.message + ". Enter the demo token." : e.message); }
   await refresh();
 }
+
+// The plan on screen, only if it belongs to the interval that is selected right now.
+function currentPlan() {
+  const t = intervalStart();
+  if (!state.plan || !t || Date.parse(state.plan.interval_start) !== Date.parse(t)) {
+    setErr("The plan on screen is out of date. Wait for the refresh.");
+    return null;
+  }
+  return state.plan;
+}
 function decide(id, what) { return act(() => api("plan/" + id + "/" + what, "POST", {actor: $("actor").value || "operator"})); }
 
-$("propose").onclick = () => act(() => api("plan/propose", "POST", {interval_start: intervalStart(), actor: $("actor").value || "operator"}));
-$("approve").onclick = () => state.plan && decide(state.plan.plan_id, "approve");
-$("reject").onclick = () => state.plan && decide(state.plan.plan_id, "reject");
-$("execute").onclick = () => state.plan && decide(state.plan.plan_id, "execute");
+$("propose").onclick = () => {
+  const t = intervalStart();
+  if (!t) { setErr("Pick a valid day."); return; }
+  act(() => api("plan/propose", "POST", {interval_start: t, actor: $("actor").value || "operator"}));
+};
+["approve", "reject", "execute"].forEach(what => {
+  $(what).onclick = () => { const plan = currentPlan(); if (plan) decide(plan.plan_id, what); };
+});
 $("killOn").onclick = () => act(() => api("kill_switch", "POST", {on: true, actor: $("actor").value || "operator"}));
 $("killOff").onclick = () => act(() => api("kill_switch", "POST", {on: false, actor: $("actor").value || "operator"}));
 let timer;
-$("slot").addEventListener("input", () => { intervalStart(); clearTimeout(timer); timer = setTimeout(refresh, 150); });
-$("date").addEventListener("change", refresh);
+$("slot").addEventListener("input", () => { intervalStart(); setBusy(true); clearTimeout(timer); timer = setTimeout(refresh, 150); });
+$("date").addEventListener("change", () => { setBusy(true); refresh(); });
 
 $("date").value = new Date().toISOString().slice(0, 10);
 intervalStart();
