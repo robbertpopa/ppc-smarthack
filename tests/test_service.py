@@ -118,3 +118,20 @@ def test_unknown_plan_is_not_found(tmp_path):
 def test_log_uri_must_be_local():
     with pytest.raises(NotImplementedError):
         open_log("s3://bucket/actions.jsonl")
+
+
+def test_same_instant_in_another_timezone_is_the_same_plan(tmp_path):
+    service, log = make_service(tmp_path)
+    first = service.propose(NOON)
+    plus_two = datetime.fromisoformat("2025-06-21T12:00:00+02:00")
+    assert service.propose(plus_two).plan_id == first.plan_id
+    assert events(log) == ["plan_proposed"]
+
+
+def test_unaligned_times_land_in_the_half_hour_slot(tmp_path):
+    service, log = make_service(tmp_path)
+    first = service.propose(NOON.replace(minute=7))
+    assert first.plan_id.endswith("2025-06-21-1000-PT-A")
+    assert service.propose(NOON.replace(minute=8)) == first
+    assert service.propose(NOON.replace(minute=31)).plan_id.endswith("1030-PT-A")
+    assert events(log) == ["plan_proposed", "plan_proposed"]

@@ -59,3 +59,12 @@ def build_explanation(
 def grounded(explanation: Explanation) -> bool:
     allowed = {float(f.value) for f in explanation.figures}
     return all(float(n) in allowed for n in NUMBER.findall(explanation.text))
+
+
+def ensure_grounded(explanation: Explanation) -> Explanation:
+    if grounded(explanation):
+        return explanation
+    return Explanation(
+        text="The limit follows the planner rules; the figures list the numbers used.",
+        figures=explanation.figures,
+    )

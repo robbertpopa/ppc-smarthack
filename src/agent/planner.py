@@ -1,4 +1,6 @@
-from src.agent.explain import build_explanation
+from datetime import timezone
+
+from src.agent.explain import build_explanation, ensure_grounded
 from src.common.contract import (
     AwareDatetime,
     Forecast,
@@ -10,7 +12,7 @@ from src.common.contract import (
 
 
 def plan_id_for(pt_id: str, interval_start: AwareDatetime) -> str:
-    return f"PLAN-{interval_start:%Y-%m-%d-%H%M}-{pt_id}"
+    return f"PLAN-{interval_start.astimezone(timezone.utc):%Y-%m-%d-%H%M}-{pt_id}"
 
 
 def make_plan(
@@ -73,14 +75,16 @@ def make_plan(
         abstain=abstain,
         confidence=round(confidence, 3),
         reasons=reasons,
-        explanation=build_explanation(
-            source=source,
-            share=share,
-            static_share=station.static_share,
-            spread=spread,
-            threshold=station.spread_threshold,
-            grid_state=grid_state,
-            reason=reason_for_text,
+        explanation=ensure_grounded(
+            build_explanation(
+                source=source,
+                share=share,
+                static_share=station.static_share,
+                spread=spread,
+                threshold=station.spread_threshold,
+                grid_state=grid_state,
+                reason=reason_for_text,
+            )
         ),
         status="proposed",
     )

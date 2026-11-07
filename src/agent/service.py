@@ -6,7 +6,7 @@ from threading import RLock
 from src.agent.guard import Guard
 from src.agent.log import ActionLog
 from src.agent.planner import make_plan
-from src.agent.sources import Source
+from src.agent.sources import Source, floor_to_half_hour
 from src.common.contract import ActionEvent, AwareDatetime, EventType, Plan, StationConfig
 
 
@@ -66,6 +66,7 @@ class AgentService:
 
     def propose(self, interval_start: AwareDatetime, actor: str = "agent") -> Plan:
         with self._lock:
+            interval_start = floor_to_half_hour(interval_start.astimezone(timezone.utc))
             pt_id = self.station.pt_id
             forecast = self.source.forecast(pt_id, interval_start)
             grid_state = self.source.grid_state(pt_id, interval_start)

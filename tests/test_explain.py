@@ -37,3 +37,12 @@ def test_text_with_an_unlisted_number_is_rejected():
         text="The limit is 52% and voltage 1.09.", figures=[Figure(name="a", value=52)]
     )
     assert not grounded(exp)
+
+
+def test_ungrounded_explanation_is_replaced_before_it_is_served(parts, monkeypatch):
+    forecast, grid_state, station = parts
+    bad = Explanation(text="The limit is 99% today.", figures=[Figure(name="a", value=52)])
+    monkeypatch.setattr("src.agent.planner.build_explanation", lambda **_: bad)
+    plan = make_plan(forecast, grid_state, station)
+    assert grounded(plan.explanation) and "99" not in plan.explanation.text
+    assert plan.explanation.figures == bad.figures
