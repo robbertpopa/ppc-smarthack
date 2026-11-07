@@ -112,3 +112,40 @@ Gross generation, kWh, summed straight from the raw CSV versus the profiles; the
 Remarks:
 - **Over-limit generation comes from a few houses.** In 2010-11, 906 readings exceed 1.2 × kWp, and 6 houses account for them (customers 262, 215 and 299 for 858 of them). The peak is up to 1.48 × kWp. A recorded capacity that is too low is more likely than bad meter data. We apply the rule as planned; revisit if those houses matter.
 - Ausgrid's notes say the date is `DDMMMYYYY` and that `Row Quality` is column 54; the files differ (see the table above), so parsing detects the date format from the values and the layout from the header.
+
+## Where the houses are (postcode and coordinates)
+Two small files describe the location of the 300 houses. They live in `DATA_DIR/reference/` and are never committed. They are added once with:
+
+```
+python -m src.ml.data geo --from <ausgrid_postcodes_geo.csv> --postcodes <"Solar home 2010-2011 post codes.csv">
+```
+
+| File | Origin | Columns |
+|---|---|---|
+| `ausgrid_postcodes_geo.csv` | made by the team from the postcodes | `Customer, Generator Capacity, Postcode, lat, lon, localities` |
+| `Solar home 2010-2011 post codes.csv` | Ausgrid's own file (not in the zip we download; one title line, then the header) | `Customer, Generator Capacity, Postcode` |
+
+What was checked on 2026-11-07 (and is checked again by the command and by `geo.check_against_*`):
+- 300 customers, numbered 1 to 300, unique in both files. `Customer` is the number in the half-hourly files, so customer 1 is `AG-0001`.
+- The geo file is a superset of Ausgrid's list: same customers, same generator capacity and postcode for every house.
+- Both agree with `profiles.parquet` for all 300 houses (`kwp` and `postcode`).
+- The coordinates are **per postcode**: 100 postcodes, 100 distinct coordinates, none missing, all inside New South Wales (latitude -34.11 to -32.63, longitude 150.98 to 152.31). So the precision is a suburb centre, about a kilometre, **not the position of a house**. Do not present it as one.
+
+### Sources
+| File | Source | Status |
+|---|---|---|
+| `ausgrid_postcodes_geo.csv`: `lat`, `lon`, `localities` | `australian_postcodes.csv` from the GitHub repository [matthewproctor/australianpostcodes](https://github.com/matthewproctor/australianpostcodes), downloaded from https://raw.githubusercontent.com/matthewproctor/australianpostcodes/master/australian_postcodes.csv (the repository describes itself as "a community sourced comprehensive database of Australian Post Codes with geolocation data") | Recorded 2026-11-07, from the team member who built the file |
+| `ausgrid_postcodes_geo.csv`: `Customer`, `Generator Capacity`, `Postcode` | Ausgrid's solar home data, as in the half-hourly files (see Sources above) | Same as the main dataset |
+| `Solar home 2010-2011 post codes.csv` | Ausgrid's own file, published with the solar home data. It is **not** in the zip we download | SHA-256 `c27b7836f72bbac1ff466de96662c383afaedf76684ad8761c37c4e13a0f672b`. **Source not recorded: TODO for whoever downloaded it.** Write the page or link it came from, the date and the licence, here and in the README |
+
+**Licence of the coordinates: none declared.** GitHub reports no licence for the repository, and its README says the postcodes originate in Australia Post's database, which it describes as "technically not meant to be republished". So:
+- We do **not** commit or redistribute the geo file; it stays in `DATA_DIR/reference/`, which is outside git.
+- The README and the slides must name the source and say that the coordinates are community-sourced from Australia Post data with no licence stated.
+- If the coordinates are shown on a public screen (the map), consider replacing them with postal-area centres from the Australian Bureau of Statistics, which publishes its boundary files under Creative Commons Attribution (to be verified before use).
+
+**Still not recorded:** how one coordinate and three suburb names were chosen per postcode out of the many rows the source holds for it (the geo file has exactly one coordinate per postcode and at most three names). Whoever built the geo file should add the rule here.
+
+Where it fits (`src/ml/geo.py` loads and validates it; nothing uses it yet):
+1. **Station composition.** Today a station is 30 houses picked at random (mock) or in file order (P3's twin). Houses in one postcode area share the same weather, which is what a real low-voltage station sees. Choosing a station from one area makes the clouds hit all of its houses together, which is the case the model has to handle.
+2. **Map for the operator screen** (P3): a point per postcode, sized by installed power.
+3. **Regional feature or check**: whether the error depends on the coast, Sydney or Newcastle.
