@@ -13,12 +13,13 @@ If no threshold meets the target, ``tau`` is ``-inf``: always abstain. That is r
 never quietly relaxed.
 """
 
+import json
 import math
 
 import numpy as np
 import pandas as pd
 
-from src.eval.metrics import FIXED_SHARE, evaluate
+from src.eval.metrics import EPS, FIXED_SHARE, evaluate
 from src.ml import model_io
 
 STALE_MINUTES = 60
@@ -52,6 +53,49 @@ def candidates(spread: pd.Series) -> np.ndarray:
     return np.unique(np.quantile(spread.to_numpy(), np.linspace(0, 1, 101)))
 
 
+def sweep(spread, q05, labels, surplus, kwp, flagged=None) -> pd.DataFrame:
+    """Score every candidate ``tau`` once, plus ``-inf`` (always abstain).
+
+    One row per ``tau`` with the numbers at that threshold: violation rate with the
+    fallback, abstention rate, flagged cases per day, export index, ``coverage`` (share
+    not sent to a person) and ``risk`` (violation rate of ``q05`` among those).
+    ``choose_threshold`` and ``risk_coverage`` are views of this table.
+    """
+    safe = labels.set_index("interval_start")["safe_share"].reindex(spread.index)
+    unsafe = q05 > safe + EPS
+    reference, rows = None, []
+    for tau in [-math.inf, *candidates(spread)]:
+        applied, abstain = _policy(spread, q05, tau, flagged)
+        result = evaluate(applied, labels, surplus, kwp, abstain=abstain, reference_kwh=reference)
+        reference = result["reference_kwh"]
+        kept = ~abstain
+        rows.append(
+            {
+                "tau": float(tau),
+                "violation_rate": result["violation_rate"],
+                "abstain_rate": result["abstain_rate"],
+                "per_day_mean": result["per_day_mean"],
+                "per_day_max": result["per_day_max"],
+                "export_index": result["export_index"],
+                "n_intervals": result["n_intervals"],
+                "coverage": float(kept.mean()),
+                "risk": float(unsafe[kept].mean()) if kept.any() else float("nan"),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def pick(rows: pd.DataFrame, target: float) -> dict:
+    """The row with the highest finite ``tau`` that meets ``target`` (else ``-inf``)."""
+    finite = rows[np.isfinite(rows["tau"])]
+    feasible = finite[finite["violation_rate"] <= target]
+    if feasible.empty:
+        chosen = rows[rows["tau"] == -math.inf].iloc[0]
+        return {**chosen.to_dict(), "reachable": False, "target": target}
+    chosen = feasible.loc[feasible["tau"].idxmax()]
+    return {**chosen.to_dict(), "reachable": True, "target": target}
+
+
 def choose_threshold(spread, q05, labels, surplus, kwp, target: float, flagged=None) -> dict:
     """Highest ``tau`` whose violation rate on ``labels`` is at most ``target``.
 
@@ -59,42 +103,50 @@ def choose_threshold(spread, q05, labels, surplus, kwp, target: float, flagged=N
     rows. ``flagged`` marks intervals that abstain whatever the spread (input checks).
     Returns ``tau`` (``-inf`` if unreachable), ``reachable`` and the numbers at ``tau``.
     """
-    rows = []
-    for tau in candidates(spread):
-        applied, abstain = _policy(spread, q05, tau, flagged)
-        rows.append(_row(float(tau), applied, abstain, labels, surplus, kwp))
-    feasible = [r for r in rows if r["violation_rate"] <= target]
-    if not feasible:
-        applied, abstain = _policy(spread, q05, -math.inf, flagged)
-        chosen = _row(-math.inf, applied, abstain, labels, surplus, kwp)
-        return {**chosen, "reachable": False, "target": target}
-    best = max(feasible, key=lambda r: r["tau"])
-    return {**best, "reachable": True, "target": target}
+    return pick(sweep(spread, q05, labels, surplus, kwp, flagged), target)
+
+
+def curve(rows: pd.DataFrame) -> pd.DataFrame:
+    """Risk-coverage table from a ``sweep`` (the always-abstain row is left out)."""
+    kept = rows[np.isfinite(rows["tau"])]
+    return kept[["tau", "coverage", "risk", "violation_rate", "export_index"]].reset_index(
+        drop=True
+    )
 
 
 def risk_coverage(spread, q05, labels, surplus, kwp, flagged=None) -> pd.DataFrame:
-    """For every candidate ``tau``: coverage against the risk of what is not flagged.
+    """For every candidate ``tau``: coverage against the risk of what is not flagged."""
+    return curve(sweep(spread, q05, labels, surplus, kwp, flagged))
 
-    ``coverage`` is the share not sent to a person; ``risk`` is the violation rate of
-    ``q05`` among those intervals. ``violation_rate`` is the one with the fallback.
+
+def holdout_check(spread, q05, labels, surplus, kwp, target: float, flagged=None) -> dict:
+    """Choose ``tau`` on the first half of the validation period, score it on the second.
+
+    The final threshold is chosen on all of validation, so its reported violation rate sits
+    at the target by construction. This shows how the same rule behaves on data it did not
+    choose from; a large gap means the target will likely be exceeded in use.
     """
-    out = []
-    for tau in candidates(spread):
-        applied, abstain = _policy(spread, q05, tau, flagged)
-        row = _row(float(tau), applied, abstain, labels, surplus, kwp)
-        kept = ~abstain
-        safe = labels.set_index("interval_start")["safe_share"].reindex(applied.index)
-        violated = (q05 > safe + 1e-6)[kept]
-        out.append(
-            {
-                "tau": row["tau"],
-                "coverage": float(kept.mean()),
-                "risk": float(violated.mean()) if kept.any() else float("nan"),
-                "violation_rate": row["violation_rate"],
-                "export_index": row["export_index"],
-            }
-        )
-    return pd.DataFrame(out)
+    cut = spread.index.sort_values()[len(spread) // 2]
+    first = spread.index < cut
+    in_first = labels["interval_start"] < cut
+
+    def part(mask):
+        return None if flagged is None else flagged[mask]
+
+    chosen = pick(
+        sweep(spread[first], q05[first], labels[in_first], surplus, kwp, part(first)), target
+    )
+    if not chosen["reachable"] or first.all() or not (~first).any():
+        return {"tau_first_half": None, "violation_rate_second_half": None}
+    applied, abstain = _policy(spread[~first], q05[~first], chosen["tau"], part(~first))
+    second = evaluate(applied, labels[~in_first], surplus, kwp, abstain=abstain)
+    return {
+        "tau_first_half": chosen["tau"],
+        "violation_rate_first_half": chosen["violation_rate"],
+        "violation_rate_second_half": second["violation_rate"],
+        "abstain_rate_second_half": second["abstain_rate"],
+        "gap_to_target": second["violation_rate"] - target,
+    }
 
 
 def _missing(value) -> bool:
@@ -130,11 +182,18 @@ def threshold(pt_id: str, version: str | None = None) -> float:
     """The spread threshold of a station, read from the model metadata.
 
     ``-inf`` means no threshold met the violation target: always abstain. The planner must
-    not hard-code a threshold.
+    not hard-code a threshold. The metadata is read once per training and cached, so this
+    is cheap on the decision path and a retrained model is still noticed.
     """
     from src.ml.predict import model_version
 
-    meta = model_io.load_metadata(version or model_version(), pt_id)
+    def loader(folder):
+        return json.loads((folder / "metadata.json").read_text())
+
+    folder = model_io.model_dir(version or model_version(), pt_id)
+    if model_io.stamp(folder) is None:
+        raise FileNotFoundError(f"no model at {folder} (expected {folder / 'metadata.json'})")
+    meta = model_io.cached("metadata", folder, loader)
     info = meta.get("abstention")
     if not info:
         raise ValueError(f"model {pt_id} has no abstention threshold in its metadata")

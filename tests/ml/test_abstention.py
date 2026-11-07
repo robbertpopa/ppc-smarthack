@@ -156,3 +156,116 @@ def test_threshold_is_minus_infinity_when_unreachable(tmp_path, monkeypatch):
         json.dumps({"abstention": {"reachable": False, "tau": None}})
     )
     assert abstention.threshold("PT-X") == -math.inf
+
+
+def test_sweep_is_the_single_source_for_choice_and_curve():
+    spread, q05, labels, surplus = risky_when_unsure()
+    rows = abstention.sweep(spread, q05, labels, surplus, KWP)
+    assert rows["tau"].iloc[0] == -math.inf and rows["tau"].iloc[1:].is_monotonic_increasing
+    chosen = abstention.pick(rows, 0.02)
+    assert (
+        chosen["tau"] == abstention.choose_threshold(spread, q05, labels, surplus, KWP, 0.02)["tau"]
+    )
+    curve = abstention.risk_coverage(spread, q05, labels, surplus, KWP)
+    assert len(curve) == len(rows) - 1 and np.isfinite(curve["tau"]).all()
+
+
+def test_the_holdout_check_scores_the_threshold_on_data_it_did_not_choose_from():
+    spread, q05, labels, surplus = risky_when_unsure()
+    check = abstention.holdout_check(spread, q05, labels, surplus, KWP, target=0.02)
+    assert check["tau_first_half"] is not None
+    assert check["violation_rate_second_half"] is not None
+    assert check["gap_to_target"] == pytest.approx(check["violation_rate_second_half"] - 0.02)
+    # a case where the risky intervals sit only in the second half: the first half looks safe
+    safe = np.where(np.arange(N) >= N // 2, 0.4, 0.6)
+    spread, q05, labels, surplus = case(safe, spread=np.tile(np.linspace(0, 1, N // 2), 2))
+    drift = abstention.holdout_check(spread, q05, labels, surplus, KWP, target=0.02)
+    assert drift["violation_rate_second_half"] > 0.02  # the gap is reported, not hidden
+    assert drift["gap_to_target"] > 0
+
+
+def test_threshold_is_cached_and_follows_a_retrain(tmp_path, monkeypatch):
+    import os
+
+    monkeypatch.setenv("ARTIFACT_URI", str(tmp_path))
+    model_io.clear_caches()
+    folder = model_io.model_dir("safe-cap-qgb-v1", "PT-X")
+    folder.mkdir(parents=True)
+    meta = folder / "metadata.json"
+    meta.write_text(json.dumps({"abstention": {"reachable": True, "tau": 0.2}}))
+    reads = []
+    real = type(meta).read_text
+    monkeypatch.setattr(
+        type(meta), "read_text", lambda self, *a, **k: reads.append(1) or real(self, *a, **k)
+    )
+    assert abstention.threshold("PT-X") == 0.2 and abstention.threshold("PT-X") == 0.2
+    assert len(reads) == 1  # the second call did not read the file
+    meta.write_text(json.dumps({"abstention": {"reachable": True, "tau": 0.3}}))
+    stat = meta.stat()
+    os.utime(meta, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))
+    assert abstention.threshold("PT-X") == 0.3  # a retrain is noticed
+
+
+def test_extra_files_are_swapped_in_together_with_the_models(tmp_path):
+    out = tmp_path / "PT-A"
+    model_io.save(
+        {0.05: {"fake": "model"}},
+        {"quantiles": [0.05]},
+        out,
+        extra=lambda d: (d / "x.csv").write_text("1"),
+    )
+    assert (out / "x.csv").read_text() == "1" and (out / "q05.joblib").exists()
+
+    def failing(folder):
+        raise RuntimeError("boom")
+
+    with pytest.raises(RuntimeError):
+        model_io.save({0.05: {"fake": "newer"}}, {"quantiles": [0.05], "v": 2}, out, extra=failing)
+    assert json.loads((out / "metadata.json").read_text()) == {
+        "quantiles": [0.05]
+    }  # old set intact
+    assert (out / "x.csv").read_text() == "1"
+
+
+def test_a_remembered_failure_raises_a_fresh_exception_and_does_not_leak(tmp_path):
+    model_io.clear_caches()
+    folder = tmp_path / "none"
+
+    def loader(path):
+        raise FileNotFoundError(f"no model at {path}")
+
+    errors = []
+    for _ in range(300):
+        try:
+            model_io.cached("t", folder, loader)
+        except FileNotFoundError as error:
+            errors.append(error)
+    assert len({id(e) for e in errors}) == len(errors)  # a new object every time
+    depth = [len(__import__("traceback").extract_tb(e.__traceback__)) for e in errors]
+    assert max(depth) == min(depth) <= 3  # the traceback does not grow with the number of calls
+    assert str(errors[0]) == str(errors[-1])
+
+
+def test_only_deterministic_failures_are_remembered(tmp_path):
+    model_io.clear_caches()
+    calls = []
+
+    def temporary(path):
+        calls.append(1)
+        raise OSError("disk hiccup")
+
+    for _ in range(3):
+        with pytest.raises(OSError):
+            model_io.cached("temp", tmp_path, temporary)
+    assert len(calls) == 3  # tried again every time
+
+    broken = []
+
+    def stale(path):
+        broken.append(1)
+        raise ValueError("trained on other features")
+
+    for _ in range(3):
+        with pytest.raises(ValueError, match="other features"):
+            model_io.cached("stale", tmp_path, stale)
+    assert len(broken) == 1  # remembered until the model is retrained

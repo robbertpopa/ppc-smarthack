@@ -42,12 +42,15 @@ def to_csv(frame: pd.DataFrame) -> str:
     return frame.to_csv(index=False, float_format=f"%.{DECIMALS}f", lineterminator="\n")
 
 
-def _cell(value) -> str:
+COUNT_COLUMNS = ("per_day_max", "n_intervals")
+
+
+def _cell(column: str, value) -> str:
     if value is None or (isinstance(value, float) and pd.isna(value)):
         return "–"
-    if isinstance(value, (int, float)) and float(value).is_integer() and abs(value) >= 1:
-        return f"{value:.0f}" if abs(value) >= 1000 else f"{value:.{DECIMALS}f}"
-    return f"{value:.{DECIMALS}f}" if isinstance(value, float) else str(value)
+    if column in COUNT_COLUMNS:  # whole numbers, whatever their size
+        return f"{value:.0f}"
+    return f"{value:.{DECIMALS}f}"
 
 
 def to_markdown(frame: pd.DataFrame, title: str, footer: list[str]) -> str:
@@ -56,7 +59,7 @@ def to_markdown(frame: pd.DataFrame, title: str, footer: list[str]) -> str:
     out.append("| " + " | ".join(headers) + " |")
     out.append("|" + "|".join(["---"] * len(headers)) + "|")
     for _, row in frame.iterrows():
-        cells = [row["station"], row["policy"], *[_cell(row[c]) for c, _ in COLUMNS]]
+        cells = [row["station"], row["policy"], *[_cell(c, row[c]) for c, _ in COLUMNS]]
         out.append("| " + " | ".join(cells) + " |")
     out += ["", *[f"- {line}" for line in footer], ""]
     return "\n".join(out)

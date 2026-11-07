@@ -1,4 +1,4 @@
-import importlib
+import os
 import time
 
 import numpy as np
@@ -6,10 +6,10 @@ import pandas as pd
 import pytest
 
 from src.common.contract import Forecast
-from src.ml import features, labels, train
-from src.ml import predict as predict_function  # the package re-exports the function
+from src.ml import features, labels, model_io, train
+from src.ml import predict as predict_module
+from src.ml.predict import predict as predict_function
 
-predict_module = importlib.import_module("src.ml.predict")
 FAST = [{"max_iter": 40, "learning_rate": 0.1, "max_leaf_nodes": 15, "min_samples_leaf": 40}]
 
 
@@ -36,8 +36,10 @@ def feats(trained, decision):
     return features.build(trained, decision)
 
 
-def test_the_package_exports_predict_as_a_function():
-    assert callable(predict_function) and predict_function is predict_module.predict
+def test_the_module_is_not_hidden_by_the_function():
+    assert hasattr(predict_module, "predict") and callable(predict_function)
+    assert predict_module.predict is predict_function
+    assert hasattr(predict_module, "clear_cache")  # still a module: it has module attributes
 
 
 def test_output_is_a_valid_contract_forecast(feats, decision):
@@ -104,6 +106,7 @@ def test_a_call_after_the_first_is_fast(feats, capsys):
     per_call = (time.perf_counter() - start) / 20 * 1000
     with capsys.disabled():
         print(f"\npredict: {per_call:.1f} ms per call after the first")
+    assert per_call < 50
 
 
 def test_it_plugs_into_the_agents_model_source(trained, decision):
@@ -118,3 +121,43 @@ def test_it_plugs_into_the_agents_model_source(trained, decision):
     start = decision + pd.Timedelta(minutes=60)
     forecast = source.forecast("PT-A", start.to_pydatetime())
     assert isinstance(forecast, Forecast) and forecast.interval_start == start
+
+
+def test_features_for_another_horizon_are_refused(trained, decision):
+    long = features.build(trained, decision, horizon_min=180)
+    with pytest.raises(ValueError, match="horizon_min=60"):
+        predict_function(long)
+
+
+def test_a_retrained_model_is_picked_up_without_a_restart(trained, feats, monkeypatch):
+    predict_module.clear_cache()
+    loads = []
+    real = model_io.load_dir
+    monkeypatch.setattr(model_io, "load_dir", lambda path: loads.append(path) or real(path))
+    predict_function(feats)
+    predict_function(feats)
+    assert len(loads) == 1  # cached
+    meta = model_io.model_dir("safe-cap-qgb-v1", "PT-A") / "metadata.json"
+    stat = meta.stat()
+    os.utime(meta, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))  # as if retrained
+    predict_function(feats)
+    assert len(loads) == 2
+
+
+def test_a_missing_model_is_remembered_and_found_when_it_appears(tmp_path, monkeypatch, feats):
+    monkeypatch.setenv("ARTIFACT_URI", str(tmp_path))
+    with pytest.raises(FileNotFoundError):
+        predict_function(feats)
+    with pytest.raises(FileNotFoundError):  # second call answers from the cache
+        predict_function(feats)
+
+
+def test_the_older_clear_cache_names_still_work_and_clear_everything(trained, feats):
+    from src.ml import explain, forecast_pv_load
+
+    predict_function(feats)
+    assert model_io._caches  # something is cached
+    for module in (forecast_pv_load, explain):
+        predict_function(feats)
+        module.clear_cache()
+        assert not model_io._caches

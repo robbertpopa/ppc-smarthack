@@ -31,7 +31,6 @@ HORIZONS = (60, 180, 360)
 QUANTILES = (0.10, 0.50, 0.90)
 TARGETS = ("pv_kw", "load_kw")
 DAY = pd.Timedelta(hours=24)
-_cache: dict = {}
 
 
 def band(values: np.ndarray) -> Band:
@@ -85,18 +84,19 @@ def train(scenario: str, seed: int = 0, horizons=HORIZONS, params=None, save: bo
                 models[_name(target, horizon, q)] = model
                 pred[q] = model.predict(val[features.FEATURES])
             y = val[target].to_numpy()
-            ordered = np.sort(np.column_stack([pred[q] for q in QUANTILES]), axis=1)
+            # the bands that are served are sorted, so the loss is scored on the sorted bands
+            ordered = np.clip(
+                np.sort(np.column_stack([pred[q] for q in QUANTILES]), axis=1), 0, None
+            )
+            served = {q: ordered[:, i] for i, q in enumerate(QUANTILES)}
             base = {q: val[f"{target}_yesterday"].to_numpy() for q in QUANTILES}
-            model_loss, base_loss = _pinball(y, pred), _pinball(y, base)
+            model_loss, base_loss = _pinball(y, served), _pinball(y, base)
             report[f"{target}_h{horizon}"] = {
                 "pinball_model": model_loss,
                 "pinball_yesterday": base_loss,
                 "beats_yesterday": model_loss < base_loss,
                 "coverage_p10_p90_model": float(
                     np.mean((y >= ordered[:, 0]) & (y <= ordered[:, 2]))
-                ),
-                "coverage_p10_p90_yesterday": float(
-                    np.mean(y == val[f"{target}_yesterday"].to_numpy())
                 ),
                 "n_val": len(val),
             }
@@ -125,26 +125,32 @@ def train(scenario: str, seed: int = 0, horizons=HORIZONS, params=None, save: bo
 
 
 def _load(pt_id: str):
-    import joblib
+    def loader(folder):
+        import joblib
 
-    key = str(model_io.model_dir(MODEL_VERSION, pt_id))
-    if key not in _cache:
         meta = model_io.load_metadata(MODEL_VERSION, pt_id)
         if meta["features"] != features.FEATURES:
             raise ValueError(f"{MODEL_VERSION}/{pt_id} was trained on other features; retrain it")
-        path = model_io.model_dir(MODEL_VERSION, pt_id)
         names = [
             _name(t, h, q)
             for t in meta["targets"]
             for h in meta["horizons"]
             for q in meta["quantiles"]
         ]
-        _cache[key] = ({n: joblib.load(path / f"{n}.joblib") for n in names}, meta)
-    return _cache[key]
+        try:
+            return {n: joblib.load(folder / f"{n}.joblib") for n in names}, meta
+        except FileNotFoundError as error:  # not "no model yet": the folder is incomplete
+            raise ValueError(f"{MODEL_VERSION}/{pt_id} is incomplete: {error}") from error
+
+    return model_io.cached("pv-load", model_io.model_dir(MODEL_VERSION, pt_id), loader)
 
 
 def clear_cache() -> None:
-    _cache.clear()
+    """Forget every loaded model; the same as ``src.ml.predict.clear_cache``.
+
+    Kept so existing callers keep working: all the model caches are one registry now.
+    """
+    model_io.clear_caches()
 
 
 def predict_pv_load(feats: dict, horizon_min: int = 60) -> dict[str, Band | None]:

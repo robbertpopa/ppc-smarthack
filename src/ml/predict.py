@@ -1,8 +1,9 @@
 """``predict(features) -> forecast``: the trained model as a contract object.
 
 Called by the agent (``ModelSource``) inside the API container; no external model API.
-Models are loaded once per process and cached by ``(model_version, pt_id)``. The model
-version comes from ``MODEL_VERSION`` (default ``safe-cap-qgb-v1``).
+Models are loaded once per training and station (the cache notices a model retrained into
+the same folder). The model version comes from ``MODEL_VERSION`` (default
+``safe-cap-qgb-v1``).
 """
 
 import logging
@@ -17,28 +18,32 @@ from src.ml import model_io
 logger = logging.getLogger(__name__)
 DEFAULT_MODEL_VERSION = "safe-cap-qgb-v1"
 SAFE_CAP_HORIZON_MIN = 60
-_cache: dict[str, tuple[dict, dict]] = {}
 
 
 def model_version() -> str:
     return os.environ.get("MODEL_VERSION", DEFAULT_MODEL_VERSION)
 
 
+_warned: set[tuple[str, int | None]] = set()
+
+
 def clear_cache() -> None:
-    _cache.clear()
+    """Forget every loaded model (this module's, the PV and load models, the explanations)."""
+    model_io.clear_caches()
+    _warned.clear()
 
 
 def _load(version: str, pt_id: str):
-    key = str(model_io.model_dir(version, pt_id))
-    if key not in _cache:
-        models, meta = model_io.load(version, pt_id)
+    def loader(folder):
+        models, meta = model_io.load_dir(folder)
         if meta["features"] != feature_set.FEATURES:
             raise ValueError(
                 f"model {version}/{pt_id} was trained on other features than the code now builds; "
                 "retrain it"
             )
-        _cache[key] = (models, meta)
-    return _cache[key]
+        return models, meta
+
+    return model_io.cached("safe-cap", model_io.model_dir(version, pt_id), loader)
 
 
 def _timestamp(features: dict, key: str) -> pd.Timestamp:
@@ -51,15 +56,26 @@ def _timestamp(features: dict, key: str) -> pd.Timestamp:
 
 
 def _pv_load(features: dict) -> dict:
-    """PV and load bands from the second model if it exists; the safe cap never needs it."""
+    """PV and load bands from the second model if it exists; the safe cap never needs it.
+
+    No second model yet is normal and silent. Any other problem with it (an older folder,
+    a missing file, even a bug) must not stop the safe-cap forecast, so it is logged and the
+    bands are left out. It is logged once per training of that folder, not on every call,
+    and with its traceback when it is not one of the expected kinds.
+    """
     from src.ml import forecast_pv_load
 
     try:
         return forecast_pv_load.predict_pv_load(features, SAFE_CAP_HORIZON_MIN)
     except FileNotFoundError:
         return {}
-    except ValueError as exc:  # a stale second model must not break the safe cap
-        logger.warning("no PV and load forecast: %s", exc)
+    except Exception as exc:
+        folder = model_io.model_dir(forecast_pv_load.MODEL_VERSION, str(features.get("pt_id")))
+        key = (str(folder), model_io.stamp(folder))
+        if key not in _warned:
+            _warned.add(key)
+            expected = isinstance(exc, (ValueError, OSError))
+            logger.warning("no PV and load forecast: %r", exc, exc_info=not expected)
         return {}
 
 
@@ -78,6 +94,12 @@ def predict(features: dict, horizon_min: int = SAFE_CAP_HORIZON_MIN) -> Forecast
         raise ValueError("features must include pt_id")
     target_start = _timestamp(features, "target_start")
     decision_time = _timestamp(features, "decision_time")
+    ahead = target_start - decision_time
+    if ahead != pd.Timedelta(minutes=horizon_min):
+        raise ValueError(
+            f"the features look {ahead} ahead but horizon_min={horizon_min}: "
+            "build them for the same horizon"
+        )
 
     models, meta = _load(model_version(), pt_id)
     pv_load = _pv_load(features)

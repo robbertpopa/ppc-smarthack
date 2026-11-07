@@ -24,14 +24,15 @@ import numpy as np
 import pandas as pd
 
 from src.eval import table
-from src.eval.metrics import FIXED_SHARE, evaluate, surplus_kw
+from src.eval.metrics import FIXED_SHARE, evaluate, load_profiles, surplus_kw
 from src.ml import abstention, baselines, calibration, features, model_io, train
 from src.ml import labels as labels_io
 from src.ml.config import SYDNEY, artifact_uri, profiles_path, violation_target
-from src.ml.split import split
+from src.ml.split import TEST_START, daylight, split
 
 MOCK_TITLE = "MOCK – NOT A RESULT"
 TITLE = "Evaluation on the test period"
+LOOK_BACK = pd.Timedelta(days=2)
 KEYS = ("fixed", "last_known", "same_hour_yesterday", "model_q05", "model_fallback", "oracle")
 
 
@@ -39,11 +40,28 @@ class MockLabelsError(RuntimeError):
     pass
 
 
+def _require_report_extra() -> None:
+    """The error analysis draws plots; matplotlib lives in the optional ``report`` extra."""
+    try:
+        import matplotlib  # noqa: F401
+    except ImportError as error:
+        raise SystemExit(
+            "--error-analysis needs matplotlib: install it with `pip install '.[report]'` "
+            "(it is kept out of the serving image on purpose)"
+        ) from error
+
+
 def eval_dir(run_id: str) -> Path:
     return Path(artifact_uri()) / "eval" / run_id
 
 
-def _load_models(scenario: str, labels: pd.DataFrame, use_artifacts: bool, grid):
+def _load_models(scenario: str, labels: pd.DataFrame, run_id: str, use_artifacts: bool, grid):
+    """Models for the evaluation.
+
+    By default they are trained fresh into this run's own folder
+    (``eval/<run-id>/models/<pt_id>``), so an evaluation never overwrites the models the
+    API serves from ``ARTIFACT_URI/models``. ``--use-artifacts`` scores the deployed ones.
+    """
     pt_id = labels["pt_id"].iloc[0]
     if use_artifacts:
         models, meta = model_io.load(train.MODEL_VERSION, pt_id)
@@ -55,12 +73,43 @@ def _load_models(scenario: str, labels: pd.DataFrame, use_artifacts: bool, grid)
                 "retrain or drop --use-artifacts"
             )
     else:
-        train.train(scenario, grid=grid)
-        models, meta = model_io.load(train.MODEL_VERSION, pt_id)
+        own = eval_dir(run_id) / "models"
+        train.train(scenario, grid=grid, out_root=own)
+        models, meta = model_io.load_dir(own / pt_id)
     return models, meta
 
 
-def _prepare(scenario: str, allow_mock: bool, use_artifacts: bool, grid) -> dict:
+def _surplus(test_labels, houses, mock: bool, allow_mock: bool):
+    """Surplus per house for the export numbers, or fail: it is the main metric.
+
+    Only a mock run that was explicitly allowed may go without profiles (export is then
+    NaN everywhere). Otherwise the profiles must cover every scored test interval.
+    """
+    if not profiles_path().exists():
+        if mock and allow_mock:
+            return None, None, None
+        raise FileNotFoundError(
+            f"{profiles_path()} not found: without per-house profiles there are no export "
+            "numbers. Run `python -m src.ml.data download` and `... profiles` (and for the "
+            "final evaluation `download --include-held-out` first)"
+        )
+    profiles = load_profiles(houses)
+    surplus = surplus_kw(profiles, houses)
+    kwp = houses.set_index("house_id")["kwp"]
+    scored = test_labels.loc[
+        daylight(test_labels) & test_labels["safe_share"].notna(), "interval_start"
+    ]
+    missing = pd.DatetimeIndex(scored).difference(surplus.index)
+    if len(missing):
+        raise ValueError(
+            f"profiles.parquet does not cover {len(missing)} of {len(scored)} scored test "
+            "intervals; for the final evaluation run "
+            "`python -m src.ml.data download --include-held-out` and then `... profiles`"
+        )
+    return profiles, surplus, kwp
+
+
+def _prepare(scenario: str, run_id: str, allow_mock: bool, use_artifacts: bool, grid) -> dict:
     labels = labels_io.load(scenario)
     mock = labels_io.is_mock(labels)
     if mock and not allow_mock:
@@ -75,17 +124,8 @@ def _prepare(scenario: str, allow_mock: bool, use_artifacts: bool, grid) -> dict
             "(2012-07-01 to 2013-06-30)"
         )
     houses = labels_io.load_station_houses(scenario)
-    surplus = kwp = profiles = None
-    if profiles_path().exists():
-        profiles = pd.read_parquet(profiles_path())
-        surplus = surplus_kw(profiles, houses)
-        kwp = houses.set_index("house_id")["kwp"]
-        if not surplus.index.intersection(pd.DatetimeIndex(test_labels["interval_start"])).size:
-            raise ValueError(
-                "profiles.parquet does not cover the test period; for the final evaluation run "
-                "`python -m src.ml.data download --include-held-out` and then `... profiles`"
-            )
-    models, meta = _load_models(scenario, labels, use_artifacts, grid)
+    profiles, surplus, kwp = _surplus(test_labels, houses, mock, allow_mock)
+    models, meta = _load_models(scenario, labels, run_id, use_artifacts, grid)
     return {
         "scenario": scenario, "labels": labels, "test_labels": test_labels, "houses": houses,
         "profiles": profiles, "surplus": surplus, "kwp": kwp, "models": models, "meta": meta,
@@ -113,6 +153,9 @@ def score_model(ctx: dict, labels: pd.DataFrame) -> dict:
     whose inputs (``load_kw``, ``pv_kw``, ``net_kw``) were corrupted. The target
     ``safe_share`` is never touched, so the scored rows are the same.
     """
+    # features need at most 24 h of history, so the test period plus two days is enough
+    start = pd.Timestamp(TEST_START).tz_localize(SYDNEY).tz_convert("UTC") - LOOK_BACK
+    labels = labels[labels["interval_start"] >= start]
     rows = split(train.training_rows(labels))["test"]
     X = rows[features.FEATURES]
     pred = train.predict_quantiles(ctx["models"], X)
@@ -202,13 +245,15 @@ def run(
     grid=None,
 ) -> dict:
     """Evaluate every scenario and write the outputs. Returns the summary."""
+    if error_analysis:
+        _require_report_extra()
     started = time.perf_counter()
     out = eval_dir(run_id)
     out.mkdir(parents=True, exist_ok=True)
     all_rows, summary_scenarios, calibrations, footer, any_mock = {}, {}, [], [], False
     sections = []
     for scenario in scenarios:
-        ctx = _prepare(scenario, allow_mock, use_artifacts, grid)
+        ctx = _prepare(scenario, run_id, allow_mock, use_artifacts, grid)
         pt_id = ctx["labels"]["pt_id"].iloc[0]
         result = policies(ctx)
         rows, extra = result["rows"], {}

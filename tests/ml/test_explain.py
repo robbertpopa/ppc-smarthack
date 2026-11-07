@@ -1,14 +1,14 @@
-import importlib
 import time
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from src.ml import explain as explain_function
+from src.ml import explain as explain_module
 from src.ml import features, labels, train
+from src.ml import predict as predict_module
+from src.ml.explain import explain as explain_function
 
-explain_module = importlib.import_module("src.ml.explain")
 FAST = [{"max_iter": 40, "learning_rate": 0.1, "max_leaf_nodes": 15, "min_samples_leaf": 40}]
 
 
@@ -69,7 +69,8 @@ def test_output_is_numbers_and_iso_times_only(toy):
         assert isinstance(figure["value"], float) and isinstance(figure["effect"], float)
     for case in out["similar"]:
         assert pd.Timestamp(case["interval_start"]).tz is not None
-        assert isinstance(case["q05"], float) and isinstance(case["safe_share"], float)
+        assert isinstance(case["safe_share"], float) and isinstance(case["in_sample"], bool)
+        assert case["in_sample"] == (case["q05"] is None)  # q05 only for validation cases
 
 
 def test_it_is_deterministic(toy):
@@ -110,7 +111,7 @@ def trained(tmp_path_factory):
     mp.setenv("ARTIFACT_URI", str(root / "artifacts"))
     labels.main(["mock", "--scenario", "A"])
     train.train("A", grid=FAST)
-    explain_module.clear_cache()
+    predict_module.clear_cache()
     yield labels.load("A")
     mp.undo()
 
@@ -142,3 +143,13 @@ def test_explain_requires_identity(trained):
 
 def test_labels_cover_every_feature():
     assert set(explain_module.LABELS) == set(features.FEATURES)
+
+
+def test_explanation_data_from_an_older_version_asks_for_a_retrain(tmp_path, toy):
+    art = dict(toy[1])
+    art["index"] = art["index"].drop(columns="in_sample")  # as written before in_sample existed
+    explain_module.save_artifacts(art, tmp_path)
+    with pytest.raises(ValueError, match="older version: retrain"):
+        explain_module.load_artifacts(tmp_path)
+    explain_module.save_artifacts(toy[1], tmp_path)  # current data loads fine
+    assert "in_sample" in explain_module.load_artifacts(tmp_path)["index"].columns
