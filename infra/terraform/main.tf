@@ -203,6 +203,68 @@ resource "azurerm_container_app" "api" {
   depends_on = [azurerm_role_assignment.acr_pull]
 }
 
+resource "azurerm_container_app_job" "batch" {
+  name                         = "caj-${local.name}-batch"
+  location                     = azurerm_resource_group.rg.location
+  resource_group_name          = azurerm_resource_group.rg.name
+  container_app_environment_id = azapi_resource.env.id
+  replica_timeout_in_seconds   = var.job_timeout_seconds
+  replica_retry_limit          = 0
+  tags                         = local.tags
+
+  manual_trigger_config {
+    parallelism              = 1
+    replica_completion_count = 1
+  }
+
+  identity {
+    type         = "UserAssigned"
+    identity_ids = [azurerm_user_assigned_identity.app.id]
+  }
+
+  registry {
+    server   = azurerm_container_registry.acr.login_server
+    identity = azurerm_user_assigned_identity.app.id
+  }
+
+  template {
+    volume {
+      name          = "artifacts"
+      storage_type  = "AzureFile"
+      storage_name  = azurerm_container_app_environment_storage.artifacts.name
+      mount_options = "uid=1000,gid=1000,file_mode=0660,dir_mode=0770"
+    }
+
+    container {
+      name    = "batch"
+      image   = "${azurerm_container_registry.acr.login_server}/ppc-smarthack:${var.image_tag}"
+      cpu     = var.job_cpu
+      memory  = var.job_memory
+      command = ["python", "-m", "src.smoke"]
+
+      env {
+        name  = "APP_ENV"
+        value = "cloud"
+      }
+      env {
+        name  = "ARTIFACT_URI"
+        value = "/data/artifacts"
+      }
+      env {
+        name  = "DATA_DIR"
+        value = "/data/artifacts/data"
+      }
+
+      volume_mounts {
+        name = "artifacts"
+        path = "/data/artifacts"
+      }
+    }
+  }
+
+  depends_on = [azurerm_role_assignment.acr_pull]
+}
+
 resource "azurerm_consumption_budget_resource_group" "rg" {
   count             = length(var.budget_contact_emails) > 0 ? 1 : 0
   name              = "budget-${local.name}"
