@@ -17,10 +17,12 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from src.common.config import Settings
 
 STATIC = Path(__file__).parent / "static"
+MOCK_INSIGHT = Path(__file__).parent / "mocks" / "ai_insight.json"
 # One name or id: letters, digits, "_" and "-", optionally joined by single dots. No "." or "..".
 NAME = r"[\w\-]+(?:\.[\w\-]+)*"
 READ = re.compile(rf"(health|station|forecast|grid_state|plans|plan/{NAME}|queue|log|kill_switch)")
@@ -60,6 +62,37 @@ def create_app(settings: Settings | None = None, run_id: str | None = None) -> F
             return {"available": True, "summary": json.loads(path.read_text(encoding="utf-8"))}
         except (OSError, ValueError):
             raise HTTPException(status_code=502, detail="summary.json is unreadable") from None
+
+    @app.get("/geo/station")
+    def geo_station():
+        """Geometry for the map slot (P4): GeoJSON at <ARTIFACT_URI>/geo/station.geojson."""
+        path = Path(settings.artifact_uri) / "geo" / "station.geojson"
+        if not path.is_file():
+            return JSONResponse({"available": False}, status_code=404)
+        try:
+            return {"available": True, "geojson": json.loads(path.read_text(encoding="utf-8"))}
+        except (OSError, ValueError):
+            raise HTTPException(status_code=502, detail="station.geojson is unreadable") from None
+
+    @app.get("/ai/insight")
+    def ai_insight(plan_id: str | None = None):
+        """What the model says about a plan: drivers and a step trace.
+
+        Reads <ARTIFACT_URI>/ai/<plan_id>.json when it exists. Until the model side writes
+        those files it returns the packaged mock, marked `mock: true` so the screen labels it.
+        """
+        if plan_id is not None and not RUN_ID.fullmatch(plan_id):
+            raise HTTPException(status_code=400, detail="invalid plan id")
+        real = Path(settings.artifact_uri) / "ai" / f"{plan_id}.json" if plan_id else None
+        try:
+            if real is not None and real.is_file():
+                return {"mock": False, "insight": json.loads(real.read_text(encoding="utf-8"))}
+            return {"mock": True, "insight": json.loads(MOCK_INSIGHT.read_text(encoding="utf-8"))}
+        except (OSError, ValueError):
+            raise HTTPException(status_code=502, detail="AI insight file is unreadable") from None
+
+    # The map module (P4) lives in static/map/ and is optional: the screen works without it.
+    app.mount("/static/map", StaticFiles(directory=STATIC / "map"), name="map")
 
     @app.api_route("/api/{path:path}", methods=["GET", "POST"])
     async def proxy(path: str, request: Request):
