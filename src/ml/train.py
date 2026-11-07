@@ -23,6 +23,7 @@ from src.eval.metrics import evaluate, load_profiles, surplus_kw
 from src.ml import abstention, baselines, calibration, features, model_io
 from src.ml import labels as labels_io
 from src.ml.config import crew_cases_per_day, violation_target
+from src.ml.explain import build_artifacts, save_artifacts
 from src.ml.split import daylight, split
 
 QUANTILES: tuple[float, ...] = (0.05, 0.10, 0.20, 0.50, 0.90)
@@ -196,6 +197,7 @@ def train(scenario: str, seed: int = 0, grid: list[dict] | None = None, save: bo
         }
         out = model_io.model_dir(MODEL_VERSION, pt_id)
         model_io.save(models, meta, out)
+        save_artifacts(build_artifacts(models, train_rows, val_rows, seed), out)
         curve.to_csv(out / "risk_coverage.csv", index=False)
     return report
 
