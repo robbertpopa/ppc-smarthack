@@ -205,3 +205,20 @@ def test_held_out_year_is_skipped_from_a_local_zip(env, tmp_path):
             zf.writestr(name, text)
 
     assert len(data.use_local_copy(env_zip)) == 2
+
+
+def test_held_out_flag_works_after_a_default_download(env):
+    data.download()
+
+    csvs = data.download(
+        include_held_out=True
+    )  # zip is cached: extract the held-out year, no network
+
+    assert len(csvs) == 3 and len(env) == 1
+
+
+def test_half_hourly_csvs_skip_the_held_out_year_unless_asked(env):
+    data.download(include_held_out=True)
+
+    assert len(data.half_hourly_csvs(data.ausgrid_dir())) == 2
+    assert len(data.half_hourly_csvs(data.ausgrid_dir(), include_held_out=True)) == 3
