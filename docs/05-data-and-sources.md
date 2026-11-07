@@ -2,12 +2,11 @@
 
 Hackathon rule: data must be public, synthetic, or collected by the team, **with sources stated**. The datasets below were downloaded **locally** for exploration and are **not committed** to the repository (size and licences).
 
-## Datasets used in exploration
+## Datasets and tools used
 | Dataset | Content | Role | Notes |
 |---|---|---|---|
 | **Ausgrid "Solar home electricity data"** (Sydney, 2010–2013) | 300 homes with panels, 30-minute: consumption, generation, export | Real consumption and generation profiles | The original was withdrawn by Ausgrid; we used an unofficial copy (pierreh.eu). Verified: 3 years, 300 homes, different format in 2010–2011 |
 | **SimBench** (German test grids) | Realistic LV/MV grids in pandapower format | Grids on which we run the power flow | Open licence; cables and transformers are German, not Romanian |
-| **GoiEner** (Basque Country, Spain) | Real prosumer meters | Cross-check of the curve shapes | Used for exploration only |
 | **pandapower** | AC power flow | Computes the "ground truth": highest safe limit | Open source |
 
 ## Links
@@ -15,14 +14,13 @@ Hackathon rule: data must be public, synthetic, or collected by the team, **with
 - Ausgrid, original page (withdrawn): https://www.ausgrid.com.au/Industry/Our-Research/Data-to-share/Solar-home-electricity-data
 - Ausgrid, archived page: http://web.archive.org/web/20240721012112/https://www.ausgrid.com.au/Industry/Our-Research/Data-to-share/Solar-home-electricity-data
 - SimBench: https://github.com/e2nIEE/simbench (docs: https://simbench.readthedocs.io/)
-- GoiEner: https://zenodo.org/records/7362094 (paper: https://www.goiener.com/wp-content/uploads/2024/01/s41597-023-02846-0.pdf)
-- Enefit (Kaggle, read as precedent only): https://www.kaggle.com/competitions/predict-energy-behavior-of-prosumers
 
-Links were extracted from the exploration session and not re-checked. The licence of the Ausgrid copy is not verified.
+Links were extracted from the exploration session and not re-checked. The README inside the Ausgrid copy states a Creative Commons Attribution 3.0 Australia licence; we have not verified that with Ausgrid. Details: `src/ml/DATA.md`.
 
-## Datasets tried and not used
-- **UK Power Networks (Low Carbon London):** the API returned 403/empty exports; dropped.
-- **Enefit (Kaggle, Estonia):** not obtained; relevant for prosumers and forecasting.
+## Load and generation data: Ausgrid only
+Ausgrid "Solar home electricity data" is the **only** consumption and generation dataset we use. No other prosumer or load dataset is used, and none is needed to train or evaluate the model.
+
+## Not available
 - **Real PPC / Rețele Electrice data:** we have none; to request in the first hour (see [07](07-next-steps.md)).
 
 ## What we validated on the data
