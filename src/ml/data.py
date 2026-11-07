@@ -206,6 +206,34 @@ def report(folder: Path) -> None:
             print(f"    header (line {info.header_index + 1}): {(info.header or '')[:100]}")
 
 
+def profiles() -> Path:
+    """Build ``DATA_DIR/profiles.parquet`` from the raw files and print the quality summary."""
+    from src.ml import ausgrid  # imported here: ausgrid itself imports this module
+
+    table = ausgrid.build_profiles(ausgrid_dir())
+    out = data_dir() / "profiles.parquet"
+    tmp = out.with_name(out.name + ".part")
+    try:
+        table.to_parquet(tmp, index=False)
+        os.replace(tmp, out)
+    finally:
+        tmp.unlink(missing_ok=True)
+    print(ausgrid.summarize(table))
+    print("gross generation, kWh (raw CSV vs profiles; raw = profile + removed by rules):")
+    checks = ausgrid.generation_check(ausgrid_dir(), table)
+    for row in checks:
+        print(
+            f"  {row['file']}: raw {row['raw_gg_kwh']:,.1f}  profiles {row['profile_gg_kwh']:,.1f}"
+        )
+    raw_total = sum(r["raw_gg_kwh"] for r in checks)
+    kept = sum(r["profile_gg_kwh"] for r in checks) + table.attrs["rules"].get(
+        "gg_kwh_removed", 0.0
+    )
+    print(f"  total: raw {raw_total:,.1f}  profiles + removed {kept:,.1f}")
+    print(f"wrote {out} ({out.stat().st_size / 1e6:.1f} MB)")
+    return out
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m src.ml.data")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -214,8 +242,12 @@ def main(argv: list[str] | None = None) -> int:
     dl.add_argument(
         "--from", dest="source", type=Path, help="use a local zip or folder, no network"
     )
+    sub.add_parser("profiles", help="clean the raw files into DATA_DIR/profiles.parquet")
     args = parser.parse_args(argv)
 
+    if args.command == "profiles":
+        profiles()
+        return 0
     csvs = use_local_copy(args.source) if args.source else download(force=args.force)
     report(ausgrid_dir())
     print(f"{len(csvs)} half-hourly CSV file(s) in {ausgrid_dir()}")
