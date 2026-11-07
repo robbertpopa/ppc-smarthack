@@ -107,7 +107,7 @@ def test_a_missing_interval_gives_nan_and_shifts_nothing(station, frame):
         full, hole = both[f"{name}_full"], both[f"{name}_gap"]
         assert ((full == hole) | (full.isna() & hole.isna()) | hole.isna()).all(), name
     hit = both.set_index("target_start")
-    assert hit.loc[gone + 3 * STEP, "net_now_full"] == hit.loc[gone + 3 * STEP, "net_now_full"]
+    assert not np.isnan(hit.loc[gone + 3 * STEP, "net_now_full"])
     assert np.isnan(hit.loc[gone + 3 * STEP, "net_now_gap"])
     assert not np.isnan(hit.loc[gone + 4 * STEP, "net_lag_1_full"])
     assert np.isnan(hit.loc[gone + 4 * STEP, "net_lag_1_gap"])
@@ -117,6 +117,10 @@ def test_a_missing_interval_gives_nan_and_shifts_nothing(station, frame):
 def test_build_rejects_naive_time_and_several_stations(station):
     with pytest.raises(ValueError, match="timezone"):
         features.build(station, pd.Timestamp("2011-03-05 02:00"))
+    with pytest.raises(ValueError, match="half-hour grid"):
+        features.build(station, pd.Timestamp("2011-03-05 02:07", tz="UTC"))
+    with pytest.raises(ValueError, match="half-hour grid"):
+        features.build(station, pd.Timestamp("2011-03-05 02:00", tz="UTC"), horizon_min=45)
     two = pd.concat([station, station.assign(pt_id="PT-B")], ignore_index=True)
     with pytest.raises(ValueError, match="exactly one station"):
         features.build(two, pd.Timestamp("2011-03-05 02:00", tz="UTC"))

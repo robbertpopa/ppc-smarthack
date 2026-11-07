@@ -132,6 +132,8 @@ def build(station_state: pd.DataFrame, t: pd.Timestamp, horizon_min: int = HORIZ
     if t.tzinfo is None:
         raise ValueError("decision time t must be timezone-aware")
     t = t.tz_convert("UTC")
+    if t != t.floor(STEP) or pd.Timedelta(minutes=horizon_min) % STEP:
+        raise ValueError("decision time t and horizon_min must lie on the half-hour grid")
     known = station_state[station_state["available_at"] <= t]
     known = known[known["interval_start"] > t - pd.Timedelta(hours=26 + horizon_min / 60)]
     stations = station_state["pt_id"].unique()
