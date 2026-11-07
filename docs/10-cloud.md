@@ -114,6 +114,7 @@ Layout on the share:
 | **5** T+17–18 | | Rehearse on the cloud URL with the venue network. Teardown plan ready (`terraform destroy`) |
 
 ## Demo-day runbook
+The step-by-step version with the commands, the three scenes and the shut-down is in [13-runbook.md](13-runbook.md); this is the short form.
 1. Deploy the frozen commit at T+13; do not deploy again after T+17 unless something is broken.
 2. Check `/health`, one full scene (normal day, cloud passing, unsure case) and that the action log is written.
 3. Keep a local run (`make up`) on a laptop and the backup video open.
