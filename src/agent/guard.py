@@ -43,7 +43,7 @@ def make_grid_guard(
 ) -> Guard:
     def guard(plan: Plan, grid_state: GridState | None) -> GuardResult:
         try:
-            result = grid_guard(grid, plan, injections_for(plan))
+            result = grid_guard(grid, plan.model_dump(mode="json"), injections_for(plan))
         except Exception as exc:
             return _blocked(f"guard failed: {type(exc).__name__}: {exc}")
         passed = _field(result, "passed")

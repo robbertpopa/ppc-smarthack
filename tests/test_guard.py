@@ -28,7 +28,22 @@ def test_the_grid_guard_gets_the_grid_the_plan_and_the_injections(plan):
 
     result = adapt(grid_guard)(plan, None)
     assert result.passed and result.violations == []
-    assert seen == {"grid": "grid", "plan": plan, "injections": {"H01": 1.0}}
+    assert seen == {
+        "grid": "grid",
+        "plan": plan.model_dump(mode="json"),
+        "injections": {"H01": 1.0},
+    }
+    assert isinstance(seen["plan"], dict) and seen["plan"]["interval_start"].endswith("Z")
+
+
+def test_a_guard_written_for_plain_dicts_works(plan):
+    def dict_guard(grid, got_plan, injections):
+        ids = {x["house_id"] for x in got_plan["limits"]}
+        houses = {h.house_id for h in load_mock("station", StationConfig).houses}
+        ok = got_plan.get("pt_id") == "PT-A" and ids == houses
+        return {"passed": ok, "violations": [] if ok else ["wrong plan shape"]}
+
+    assert adapt(dict_guard)(plan, None).passed
 
 
 def test_violations_block_the_plan_and_are_reported(plan):
