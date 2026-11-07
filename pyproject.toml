@@ -26,6 +26,7 @@ include = ["src*"]
 
 [tool.setuptools.package-data]
 "src.common" = ["mocks/*.json"]
+"src.ui" = ["static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

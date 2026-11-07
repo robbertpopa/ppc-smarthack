@@ -1,4 +1,6 @@
+import http.client
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -8,7 +10,59 @@ from fastapi import Response
 from fastapi.testclient import TestClient
 
 from src.common.config import Settings
-from src.ui.app import create_app
+from src.ui.app import create_app, forward, is_allowed
+
+OK = Response(b"{}", media_type="application/json")
+
+
+class AllowlistTests(unittest.TestCase):
+    def test_agent_reads_and_writes_are_allowed(self):
+        for path in (
+            "health",
+            "station",
+            "forecast",
+            "grid_state",
+            "plans",
+            "queue",
+            "log",
+            "kill_switch",
+            "plan/PLAN-2025-06-21-1000-PT-A",
+            "plan/v1.2",
+        ):
+            self.assertTrue(is_allowed("GET", path), path)
+        for path in (
+            "plan/propose",
+            "plan/PLAN-2025-06-21-1000-PT-A/approve",
+            "plan/x/reject",
+            "plan/x/execute",
+            "kill_switch",
+        ):
+            self.assertTrue(is_allowed("POST", path), path)
+
+    def test_the_whole_path_must_match(self):
+        for path in (
+            "health\n",
+            "health/",
+            "health ",
+            "/health",
+            "plan/..",
+            "plan/.",
+            "plan/.hidden",
+            "plan/a..b",
+            "plan/%2e%2e",
+            "plan/../../etc",
+            "plan/x/approve",
+            "plans/x",
+            "",
+        ):
+            self.assertFalse(is_allowed("GET", path), repr(path))
+        for path in ("plan/../approve", "plan/x/approve\n", "plan/x/delete", "health", "plan/x"):
+            self.assertFalse(is_allowed("POST", path), repr(path))
+
+    def test_other_methods_are_refused(self):
+        for method in ("PUT", "DELETE", "PATCH", "HEAD"):
+            self.assertFalse(is_allowed(method, "health"))
+            self.assertFalse(is_allowed(method, "kill_switch"))
 
 
 class UiAppTests(unittest.TestCase):
@@ -23,59 +77,98 @@ class UiAppTests(unittest.TestCase):
         self.assertIn("Station operator screen", client.get("/").text)
         self.assertEqual(client.get("/simulation").status_code, 200)
 
-    def test_info_reports_the_configured_api(self):
+    def test_proxy_forwards_the_query_to_the_configured_api(self):
+        client = self.client()
+        with patch("src.ui.app.forward", return_value=OK) as f:
+            response = client.get("/api/forecast?interval_start=2025-06-21T10:00:00Z")
+        self.assertEqual(response.status_code, 200)
         self.assertEqual(
-            self.client().get("/ui/info").json()["api_url"], "http://agent.example:9000"
+            f.call_args.args[0],
+            "http://agent.example:9000/forecast?interval_start=2025-06-21T10:00:00Z",
         )
 
-    def test_proxy_forwards_allowed_calls_with_the_token(self):
+    def test_proxy_forwards_the_kill_switch_post_with_the_token(self):
         client = self.client()
-        with patch(
-            "src.ui.app.forward", return_value=Response(b"{}", media_type="application/json")
-        ) as f:
-            self.assertEqual(
-                client.get("/api/forecast?interval_start=2025-06-21T10:00:00Z").status_code, 200
+        with patch("src.ui.app.forward", return_value=OK) as f:
+            client.post(
+                "/api/kill_switch", json={"on": True, "actor": "x"}, headers={"x-demo-token": "t"}
             )
-            self.assertEqual(
-                f.call_args.args[0],
-                "http://agent.example:9000/forecast?interval_start=2025-06-21T10:00:00Z",
-            )
-            client.post("/api/plan/propose", json={"actor": "x"}, headers={"x-demo-token": "t"})
-            self.assertEqual(f.call_args.args[3]["x-demo-token"], "t")
-            self.assertEqual(f.call_args.args[1], "POST")
+        url, method, body, headers = f.call_args.args
+        self.assertEqual(url, "http://agent.example:9000/kill_switch")
+        self.assertEqual(method, "POST")
+        self.assertEqual(json.loads(body), {"on": True, "actor": "x"})
+        self.assertEqual(headers["x-demo-token"], "t")
 
-    def test_proxy_refuses_other_paths_and_wrong_methods(self):
+    def test_proxy_forwards_only_content_type_and_the_demo_token(self):
+        client = self.client()
+        with patch("src.ui.app.forward", return_value=OK) as f:
+            client.post(
+                "/api/plan/propose",
+                json={"actor": "x"},
+                headers={
+                    "x-demo-token": "t",
+                    "authorization": "Bearer secret",
+                    "cookie": "session=1",
+                    "x-forwarded-for": "1.2.3.4",
+                },
+            )
+        self.assertEqual(set(f.call_args.args[3]), {"content-type", "x-demo-token"})
+
+    def test_the_proxy_route_refuses_what_the_allowlist_refuses(self):
         client = self.client()
         with patch("src.ui.app.forward") as f:
+            # A raw newline cannot reach the route through this client; the matcher test
+            # above covers "health\n". Encoded dots do reach it, decoded to "..".
+            self.assertEqual(client.get("/api/plan/%2e%2e").status_code, 404)
+            self.assertEqual(client.get("/api/plan/%2e%2e/approve").status_code, 404)
             self.assertEqual(client.get("/api/openapi.json").status_code, 404)
-            self.assertEqual(client.get("/api/plan/../../etc").status_code, 404)
             self.assertEqual(client.post("/api/forecast", json={}).status_code, 404)
             self.assertEqual(client.get("/api/plan/x/approve").status_code, 404)
+            self.assertEqual(client.put("/api/kill_switch", json={}).status_code, 405)
             f.assert_not_called()
 
-    def test_unreachable_api_is_reported(self):
-        client = self.client()
-        response = client.get("/api/health")
+    def test_unreachable_api_is_a_502(self):
+        response = self.client().get("/api/health")
         self.assertEqual(response.status_code, 502)
         self.assertEqual(response.json()["error"], "api_unreachable")
+
+    def test_a_dropped_connection_is_a_502_not_a_500(self):
+        for error in (
+            http.client.RemoteDisconnected("closed"),
+            ConnectionResetError("reset"),
+            http.client.IncompleteRead(b"x"),
+            TimeoutError(),
+        ):
+            with patch("urllib.request.urlopen", side_effect=error):
+                response = forward("http://agent.example/health", "GET", None, {})
+            self.assertEqual(response.status_code, 502, repr(error))
 
     def test_summary_missing_gives_404_not_numbers(self):
         response = self.client().get("/eval/summary")
         self.assertEqual(response.status_code, 404)
         self.assertFalse(response.json()["available"])
 
-    def test_summary_is_read_from_the_artifacts(self):
-        client = self.client(run_id="local")
-        folder = Path(self.tmp.name) / "eval" / "local"
+    def write_summary(self, run_id):
+        folder = Path(self.tmp.name) / "eval" / run_id
         folder.mkdir(parents=True)
         (folder / "summary.json").write_text(
-            json.dumps({"run_id": "local", "mock": True, "scenarios": {}})
+            json.dumps({"run_id": run_id, "mock": True, "scenarios": {}})
         )
-        body = client.get("/eval/summary").json()
-        self.assertTrue(body["summary"]["mock"])
 
-    def test_run_id_cannot_escape_the_folder(self):
-        self.assertEqual(self.client(run_id="../x").get("/eval/summary").status_code, 400)
+    def test_summary_is_read_from_the_artifacts(self):
+        client = self.client()
+        self.write_summary("local")
+        self.assertTrue(client.get("/eval/summary").json()["summary"]["mock"])
+
+    def test_run_id_comes_from_the_environment(self):
+        with patch.dict(os.environ, {"EVAL_RUN_ID": "run-2.1"}):
+            client = self.client()
+        self.write_summary("run-2.1")
+        self.assertEqual(client.get("/eval/summary").json()["summary"]["run_id"], "run-2.1")
+
+    def test_run_id_cannot_escape_the_eval_folder(self):
+        for bad in ("..", "../x", ".", ".hidden", "a/b", "x\n"):
+            self.assertEqual(self.client(run_id=bad).get("/eval/summary").status_code, 400, bad)
 
 
 if __name__ == "__main__":
