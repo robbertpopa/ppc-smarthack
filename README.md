@@ -3,7 +3,21 @@
 Team preparation for the PPC challenge at Smarthack XI: **"24h to Power PPC: AI in energy, from data to action"**.
 
 ## Project status
-Preparation phase. This repository contains **documentation only**. Code is written and committed during the 24 hours of the hackathon, as the rules require.
+Hackathon prototype in progress. The repository contains documentation and a local grid-twin prototype; integration with the agent and ML is pending.
+
+## Local P3 prototype
+
+Use Python 3.12 as required by the project. Install the project simulation and development dependencies with `python -m pip install -e ".[sim,dev]"`, then `python -m pip install -r requirements-grid.txt` for the additional local comparison and Parquet tools. Run `python -m pytest` for the project tests and `python -m src.grid.compare_station` to compare pandapower and OpenDSS voltages on the synthetic station.
+
+To generate a provisional one-day label file, use:
+
+```sh
+python -m src.grid.labels --source "PATH_TO/Solar home 2012-2013.csv" --output labels.parquet --days 1
+```
+
+The input data must be obtained separately; do not commit it. Add `--pv-scale 4` for a synthetic stress scenario, not measured generation. The label schema and battery sign convention still require agreement with P2 and P1. The local prototype UI in `src/ui/index.html` reads `simulare-case-detalii.csv` from the local simulation; it is not connected to the agent API. See `src/grid/ASSUMPTIONS.md` for limitations. The initial one-day labels are not sufficient for model training.
+
+The default twin uses a synthetic three-feeder station. `build_grid({'topology': 'simbench', 'houses': [...]})` provides a separate SimBench benchmark, with households allocated to existing load buses. The benchmark transformer's phase shift requires DC initialization; this is regression tested. Use `python -m src.grid.compare_recorded PATH_TO/simulare-case-detalii.csv` to compare voltage against OpenDSS at five recorded profile intervals on the synthetic feeder. Use `python -m src.grid.audit_labels --source PATH_TO_AUSGRID_CSV --labels PATH_TO_LABELS` to audit sampled boundaries; null labels must not be treated as zero.
 
 ## Chosen direction
 **Dynamic export limits for prosumers, at the MV/LV transformer-station level.** An agent computes how much each house may export right now, instead of using the fixed limit from the grid connection approval. A team-trained ML model (quantile regression) predicts the highest safe limit one hour ahead; when it is unsure, the agent falls back to the fixed limit and sends the case to a human.

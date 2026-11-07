@@ -1,0 +1,4 @@
+pandapower==3.5.6
+simbench==1.6.3
+opendssdirect.py==0.9.4
+pyarrow==26.0.1
