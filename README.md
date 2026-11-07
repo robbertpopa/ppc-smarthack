@@ -3,21 +3,44 @@
 Team preparation for the PPC challenge at Smarthack XI: **"24h to Power PPC: AI in energy, from data to action"**.
 
 ## Project status
-Hackathon prototype in progress. The repository contains documentation and a local grid-twin prototype; integration with the agent and ML is pending.
+Hackathon prototype. Working today: the agent API with a review queue, kill switch and action log (P1); the grid twin, the guard and the operator screen (P3), all running on **mock forecasts**. Not yet connected: the trained model (P2), the evaluation table, and the shared `src.agent.api` still uses the stub guard (the grid guard is wired in `src.grid.demo_api`).
 
-## Local P3 prototype
+Everything shown is simulated. The grid is synthetic (or a German SimBench benchmark), the profiles are Australian (Ausgrid), and nothing controls real inverters.
 
-Use Python 3.12 as required by the project. Install the simulation, comparison/Parquet tool and development dependencies with `python -m pip install -e ".[sim,grid-tools,dev]"`. Run `python -m pytest` for the project tests and `python -m src.grid.compare_station` to compare pandapower and OpenDSS voltages on the synthetic station.
+## Run it
 
-To generate a provisional one-day label file, use:
+Python 3.12. Install with `python -m pip install -e ".[sim,grid-tools,dev]"`.
+
+| What | Command |
+|---|---|
+| Tests, lint, smoke | `python -m pytest`, `python -m ruff check src tests`, `python -m src.smoke` |
+| Agent API with the grid guard | `python -m uvicorn src.grid.demo_api:app --port 8000` |
+| Operator screen | `API_URL=http://127.0.0.1:8000 python -m uvicorn src.ui.app:app --port 8001`, then open http://127.0.0.1:8001 |
+| Evaluation table | `python -m src.eval.run` (P2's script: **not in the repository yet**) |
+
+On Windows PowerShell set variables first: `$env:API_URL = "http://127.0.0.1:8000"`.
+
+Environment: `API_URL` is the agent API the screen calls, `ARTIFACT_URI` is where the screen looks for `eval/local/summary.json`, `LOG_URI` is the action log, and `DEMO_TOKEN` is required by the API for writes when set (type it in the screen's token field; it is not stored). See [docs/10-cloud.md](docs/10-cloud.md).
+
+### The operator screen
+Pick a day and a half-hour slot. The screen shows the station state (voltage, transformer and line load), the forecast band for the safe export share against the fixed limit, the plan with the limit per house (green: model limit and guard passed, yellow: fixed fallback or contract cap, red: blocked by the guard), the "not sure" queue with approve and reject, the kill switch and the action log. The comparison panel (fixed limit versus ours) reads `summary.json` from the evaluation output; with no file it shows no numbers. A `mock: true` summary is labelled "MOCK, NOT A RESULT". The older CSV viewer for the 210-house simulation is at `/simulation`.
+
+### Grid twin and labels
+`python -m src.grid.compare_station` compares pandapower and OpenDSS voltages on the synthetic station. To generate a provisional label file:
 
 ```sh
 python -m src.grid.labels --source "PATH_TO/Solar home 2012-2013.csv" --output labels.parquet --days 1
 ```
 
-The input data must be obtained separately; do not commit it. Add `--pv-scale 4` for a synthetic stress scenario, not measured generation. The label schema and battery sign convention still require agreement with P2 and P1. The local prototype UI in `src/ui/index.html` reads `simulare-case-detalii.csv` from the local simulation; it is not connected to the agent API. See `src/grid/ASSUMPTIONS.md` for limitations. The initial one-day labels are not sufficient for model training.
+The input data must be obtained separately; do not commit it. Add `--pv-scale 4` for a synthetic stress scenario, not measured generation. The label schema and battery sign convention still require agreement with P2 and P1, and one day of labels is not enough for model training. `python -m src.grid.audit_labels --source PATH_TO_AUSGRID_CSV --labels PATH_TO_LABELS` audits sampled boundaries; null labels must not be treated as zero. `python -m src.grid.compare_recorded PATH_TO/simulare-case-detalii.csv` compares voltage against OpenDSS at five recorded intervals.
 
-The default twin uses a synthetic three-feeder station. `build_grid({'topology': 'simbench', 'houses': [...]})` provides a separate SimBench benchmark, with households allocated to existing load buses. The benchmark transformer's phase shift requires DC initialization; this is regression tested. Use `python -m src.grid.compare_recorded PATH_TO/simulare-case-detalii.csv` to compare voltage against OpenDSS at five recorded profile intervals on the synthetic feeder. Use `python -m src.grid.audit_labels --source PATH_TO_AUSGRID_CSV --labels PATH_TO_LABELS` to audit sampled boundaries; null labels must not be treated as zero.
+The default twin is a synthetic three-feeder station. `build_grid({'topology': 'simbench', 'houses': [...]})` gives a separate SimBench benchmark (its 150-degree transformer phase shift needs DC initialization; this is regression tested). Limitations and every assumed parameter are in [src/grid/ASSUMPTIONS.md](src/grid/ASSUMPTIONS.md).
+
+### What the guard checks
+`src.grid.agent_guard.make_grid_guard` runs its own power flow on the whole station with the plan's limits and rejects the plan on voltage, line or transformer overload, battery bounds or a limit above the contract cap. It builds worst-case readings from the forecast (PV p90, load p10, split across houses by an assumed rule). With no PV and load forecast it rejects the plan as unverifiable instead of passing it. It is a simulation check, not a certified protection system.
+
+### Limitations
+Balanced three-phase grid, active power only, ideal inverters, a 1.05 pu limit taken from a press summary (the exact rule is unverified), a conservative 100% transformer limit, and no fairness analysis between houses. Figures from the exploration phase are not reproduced by this repository yet; use only what `src.eval.run` produces once it exists.
 
 ## Chosen direction
 **Dynamic export limits for prosumers, at the MV/LV transformer-station level.** An agent computes how much each house may export right now, instead of using the fixed limit from the grid connection approval. A team-trained ML model (quantile regression) predicts the highest safe limit one hour ahead; when it is unsure, the agent falls back to the fixed limit and sends the case to a human.
