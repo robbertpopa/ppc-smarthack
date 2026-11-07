@@ -2,7 +2,7 @@
 
 **Owns:** the repository scaffold, `src/common/` (the contract), `src/agent/` (planner, API, action log), `infra/` (Docker, CI, deploy), `Makefile`, `src/grid/thermal.py`, and the cloud. **Reviews** everyone's merges.
 
-Read first: [../08-parallel-plan.md](../08-parallel-plan.md), [../09-contract.md](../09-contract.md), [../10-cloud.md](../10-cloud.md), [../01-theme-and-criteria.md](../01-theme-and-criteria.md).
+Read first: [../08-parallel-plan.md](../08-parallel-plan.md), [../09-contract.md](../09-contract.md), [../10-cloud.md](../10-cloud.md), [../01-theme-and-criteria.md](../01-theme-and-criteria.md), [../11-commit-plan.md](../11-commit-plan.md) (commit and merge order).
 
 ## Goal
 Make the pieces of P2 and P3 work together as **one agent that decides and acts**, and make the whole thing run in the cloud. The agent picks a limit per house, abstains when unsure, asks a human, validates with the guard, executes, logs and explains. You also keep the team unblocked: scaffold first, review fast, integrate early.

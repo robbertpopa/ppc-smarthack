@@ -75,6 +75,9 @@ Sleep in shifts of about 2 hours, always at least two people awake.
 T+1 (contract), T+3 (labels file ready, baseline numbers), T+5 (G1), T+9 (G2), T+13 (freeze), T+17 (code freeze). Between syncs, post in the group chat if blocked for more than 20 minutes.
 
 ## Git rules
+
+The full order of branches and commits per person, the commit rules for people and coding assistants, and file ownership are in [11-commit-plan.md](11-commit-plan.md).
+
 - `main` always runs (`make smoke` passes).
 - One branch per task, named `<area>/<thing>` (for example `ml/quantile-model`). Merge to `main` about every 90 minutes.
 - Conventional commits (`feat:`, `fix:`, `docs:`, `chore:`), no co-author trailers, English only.

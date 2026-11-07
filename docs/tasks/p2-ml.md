@@ -1,6 +1,6 @@
 # P2: ML and evaluation
 
-**Owns:** `src/ml/`, `src/eval/`. Read first: [../08-parallel-plan.md](../08-parallel-plan.md), [../09-contract.md](../09-contract.md), [../04-chosen-idea.md](../04-chosen-idea.md), [../05-data-and-sources.md](../05-data-and-sources.md).
+**Owns:** `src/ml/`, `src/eval/`. Read first: [../08-parallel-plan.md](../08-parallel-plan.md), [../09-contract.md](../09-contract.md), [../04-chosen-idea.md](../04-chosen-idea.md), [../05-data-and-sources.md](../05-data-and-sources.md), [../11-commit-plan.md](../11-commit-plan.md) (commit and merge order).
 
 **Branch-sized briefs:** this role is split into one task file per branch in [p2/](p2/README.md) (order, dependencies, parallel lanes, acceptance tests).
 

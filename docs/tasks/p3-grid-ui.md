@@ -1,6 +1,6 @@
 # P3: grid twin, then interface and presentation
 
-**Owns:** `src/grid/` (except `thermal.py`, which P1 owns), `src/ui/`, `README.md`, `pitch/`. Read first: [../08-parallel-plan.md](../08-parallel-plan.md), [../09-contract.md](../09-contract.md), [../04-chosen-idea.md](../04-chosen-idea.md).
+**Owns:** `src/grid/` (except `thermal.py`, which P1 owns), `src/ui/`, `README.md`, `pitch/`. Read first: [../08-parallel-plan.md](../08-parallel-plan.md), [../09-contract.md](../09-contract.md), [../04-chosen-idea.md](../04-chosen-idea.md), [../11-commit-plan.md](../11-commit-plan.md) (commit and merge order).
 
 ## Goal
 Part 1 (hours 0–9): build a deterministic digital twin of one low-voltage station (pandapower on a SimBench grid) that produces the **ground-truth labels** for P2's model, simulates batteries, and acts as the **guard** that checks every plan before it is executed. It is not ML; it must be correct. P1 reviews your merges in this phase.
