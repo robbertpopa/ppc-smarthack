@@ -136,7 +136,7 @@ What was checked on 2026-11-07 (and is checked again by the command and by `geo.
 |---|---|---|
 | `ausgrid_postcodes_geo.csv`: `lat`, `lon`, `localities` | `australian_postcodes.csv` from the GitHub repository [matthewproctor/australianpostcodes](https://github.com/matthewproctor/australianpostcodes), downloaded from https://raw.githubusercontent.com/matthewproctor/australianpostcodes/master/australian_postcodes.csv (the repository describes itself as "a community sourced comprehensive database of Australian Post Codes with geolocation data") | Recorded 2026-11-07, from the team member who built the file |
 | `ausgrid_postcodes_geo.csv`: `Customer`, `Generator Capacity`, `Postcode` | Ausgrid's solar home data, as in the half-hourly files (see Sources above) | Same as the main dataset |
-| `Solar home 2010-2011 post codes.csv` | Ausgrid's own file, published with the solar home data. It is **not** in the zip we download | **Source not recorded: TODO for whoever downloaded it.** Write the page or link it came from and the date, here and in the README |
+| `Solar home 2010-2011 post codes.csv` | Ausgrid's own file, published with the solar home data. It is **not** in the zip we download | SHA-256 `c27b7836f72bbac1ff466de96662c383afaedf76684ad8761c37c4e13a0f672b`. **Source not recorded: TODO for whoever downloaded it.** Write the page or link it came from, the date and the licence, here and in the README |
 
 **Licence of the coordinates: none declared.** GitHub reports no licence for the repository, and its README says the postcodes originate in Australia Post's database, which it describes as "technically not meant to be republished". So:
 - We do **not** commit or redistribute the geo file; it stays in `DATA_DIR/reference/`, which is outside git.
