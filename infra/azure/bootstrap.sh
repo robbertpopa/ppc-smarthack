@@ -43,12 +43,6 @@ az ad app federated-credential create --id "$APP_ID" --parameters "{
   \"subject\": \"${SUB_PREFIX}:ref:refs/heads/main\",
   \"audiences\": [\"api://AzureADTokenExchange\"]
 }" >/dev/null
-az ad app federated-credential create --id "$APP_ID" --parameters "{
-  \"name\": \"github-pull-request\",
-  \"issuer\": \"https://token.actions.githubusercontent.com\",
-  \"subject\": \"${SUB_PREFIX}:pull_request\",
-  \"audiences\": [\"api://AzureADTokenExchange\"]
-}" >/dev/null
 
 SCOPE="/subscriptions/${SUBSCRIPTION_ID}"
 for ROLE in "Contributor" "User Access Administrator"; do
@@ -58,6 +52,20 @@ done
 az role assignment create --assignee-object-id "$SP_ID" --assignee-principal-type ServicePrincipal \
   --role "Storage Blob Data Contributor" --scope "$STATE_SA_ID" >/dev/null
 
+PLAN_APP_ID="$(az ad app create --display-name "${APP_NAME}-plan" --query appId -o tsv)"
+az ad sp create --id "$PLAN_APP_ID" >/dev/null
+PLAN_SP_ID="$(az ad sp show --id "$PLAN_APP_ID" --query id -o tsv)"
+az ad app federated-credential create --id "$PLAN_APP_ID" --parameters "{
+  \"name\": \"github-pull-request\",
+  \"issuer\": \"https://token.actions.githubusercontent.com\",
+  \"subject\": \"${SUB_PREFIX}:pull_request\",
+  \"audiences\": [\"api://AzureADTokenExchange\"]
+}" >/dev/null
+az role assignment create --assignee-object-id "$PLAN_SP_ID" --assignee-principal-type ServicePrincipal \
+  --role "Reader" --scope "$SCOPE" >/dev/null
+az role assignment create --assignee-object-id "$PLAN_SP_ID" --assignee-principal-type ServicePrincipal \
+  --role "Storage Blob Data Reader" --scope "$STATE_SA_ID" >/dev/null
+
 cat <<EOF
 
 Done. In the GitHub repository settings add:
@@ -65,7 +73,8 @@ Done. In the GitHub repository settings add:
   Secrets:   AZURE_CLIENT_ID=${APP_ID}
              AZURE_TENANT_ID=${TENANT_ID}
              AZURE_SUBSCRIPTION_ID=${SUBSCRIPTION_ID}
-             DEMO_TOKEN=<a token of your choice, optional>
+             AZURE_PLAN_CLIENT_ID=${PLAN_APP_ID}
+             DEMO_TOKEN=<a token of your choice, required for the deploy>
   Variables: DEPLOY_ENABLED=true
              TFSTATE_RG=${STATE_RG}
              TFSTATE_SA=${STATE_SA}
@@ -79,6 +88,8 @@ For local Terraform, create infra/terraform/backend.hcl (git-ignored) with:
   key                  = "ppc-smarthack.tfstate"
   use_azuread_auth     = true
 
-The identity has Contributor and User Access Administrator on the whole subscription so that
-Terraform can create role assignments. Narrow it to a resource group if your policy requires it.
+The deploy identity (main only) has Contributor and User Access Administrator on the whole
+subscription so that Terraform can create role assignments. Narrow it to a resource group if your
+policy requires it. The plan identity (pull requests) can only read: Reader on the subscription and
+Storage Blob Data Reader on the state account.
 EOF

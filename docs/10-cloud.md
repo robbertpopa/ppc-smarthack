@@ -20,7 +20,7 @@ GitHub (public repo)
    v
 GitHub Actions
   test (pip)   docker (tests + lint + smoke inside the image)   terraform (fmt + validate)
-  plan (PRs to main from this repo only: terraform plan against the real state, summary on the run page)
+  plan (PRs to main from this repo only: read-only identity, terraform plan without refresh, summary on the run page)
    | all green, on main, DEPLOY_ENABLED=true
    v
 deploy job (Azure login with OIDC, no stored secret)
@@ -68,8 +68,8 @@ make tf-validate   # Terraform validation, no Azure access needed
 
 ## One-time setup (a person with Owner rights on the subscription)
 1. Install the Azure CLI, run `az login`.
-2. Run `SUBSCRIPTION_ID=<id> GITHUB_REPO=owner/repo infra/azure/bootstrap.sh`. It creates the state storage and an identity that GitHub can use through OIDC, then prints the values to store. It needs `gh` logged in: it reads the OIDC subject prefix GitHub uses for this repository (new repositories use the immutable form `repo:owner@<id>/repo@<id>`), and registers logins for runs on `main` and for pull requests.
-3. In the GitHub repository settings add the printed **secrets** (`AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, optional `DEMO_TOKEN`) and **variables** (`DEPLOY_ENABLED=true`, `TFSTATE_RG`, `TFSTATE_SA`, `TFSTATE_CONTAINER`).
+2. Run `SUBSCRIPTION_ID=<id> GITHUB_REPO=owner/repo infra/azure/bootstrap.sh`. It creates the state storage and two identities that GitHub can use through OIDC (one for deploys from `main`, one read-only for the plan job on pull requests), then prints the values to store. It needs `gh` logged in: it reads the OIDC subject prefix GitHub uses for this repository (new repositories use the immutable form `repo:owner@<id>/repo@<id>`).
+3. In the GitHub repository settings add the printed **secrets** (`AZURE_CLIENT_ID`, `AZURE_PLAN_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `DEMO_TOKEN`) and **variables** (`DEPLOY_ENABLED=true`, `TFSTATE_RG`, `TFSTATE_SA`, `TFSTATE_CONTAINER`).
 4. Optional, for local Terraform: create `infra/terraform/backend.hcl` (git-ignored) as the script prints, then `make tf-init` and `make tf-plan`.
 5. Optional budget: pass `-var 'budget_contact_emails=["you@example.com"]'`.
 
@@ -121,8 +121,8 @@ Layout on the share:
 ## Security and compliance
 - **Data:** only public or synthetic data goes to the share, with sources documented ([05](05-data-and-sources.md)). If PPC gives real data, **ask first whether it may leave the premises or the EU**; if unclear, keep it local and use the cloud for the synthetic pipeline only.
 - **Access:** the app pulls its image with a managed identity (role `AcrPull`), the registry has no admin user, the state storage has no public blob access, GitHub authenticates with OIDC and no long-lived key.
-- **Broad bootstrap identity:** the GitHub identity gets Contributor and User Access Administrator on the subscription so that Terraform can create role assignments. Narrow it to the resource group if the policy requires it.
-- **Public demo:** read-only unless `X-Demo-Token` is given; the kill switch and approvals are writes.
+- **Two identities:** the deploy identity (logins from `main` only) gets Contributor and User Access Administrator on the subscription so that Terraform can create role assignments; narrow it to the resource group if the policy requires it. The plan identity (logins from pull requests) gets Reader on the subscription and Storage Blob Data Reader on the state account only, because a pull request can change the workflow and Terraform files and runs them before review. Its plan does not refresh and does not lock the state, so it shows the difference between the code and the last applied state, not drift in Azure. The `DEMO_TOKEN` is not passed to it.
+- **Public demo:** read-only unless `X-Demo-Token` is given; the kill switch and approvals are writes. In the cloud the API refuses every write when no token is set, and the deploy job fails when the `DEMO_TOKEN` secret is empty.
 - **LLM:** off by default; explanations come from templates. If enabled, it receives aggregates only and every call is logged.
 - **Audit log:** append-only JSONL; each decision traceable to the forecast that caused it.
 
