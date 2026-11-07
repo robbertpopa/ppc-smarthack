@@ -47,9 +47,10 @@ def steady_state(
 ) -> ThermalState:
     _check(load_ratio)
     p = params
-    oil_rise = p.rated_top_oil_rise_k * (
-        (1 + p.loss_ratio * load_ratio**2) / (1 + p.loss_ratio)
-    ) ** p.oil_exponent
+    oil_rise = (
+        p.rated_top_oil_rise_k
+        * ((1 + p.loss_ratio * load_ratio**2) / (1 + p.loss_ratio)) ** p.oil_exponent
+    )
     winding = p.rated_hot_spot_gradient_k * load_ratio**p.winding_exponent
     return ThermalState(
         top_oil_c=ambient_c + oil_rise,
