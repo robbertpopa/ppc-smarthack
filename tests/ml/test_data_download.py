@@ -23,6 +23,11 @@ MEMBERS = {
         f"{HEADER_NEW}\r\n"
         "1,3.78,2076,GC,1/07/2011,0.1,0.2,\r\n"
     ),
+    "Ausgrid_solar_home_data/Solar home 2012-2013.csv": (  # the held-out test year
+        '"2012-2013 Solar home electricity data",,,,,,,\n'
+        f"{HEADER_NEW}\r\n"
+        "1,3.78,2076,GC,1/07/2012,0.3,0.4,\r\n"
+    ),
     "Ausgrid_solar_home_data/monthly/SolarMonthlyData.csv": (
         f"{MONTHLY_HEADER}\n1,SC,01.2007,31,DAY\n"
     ),
@@ -64,7 +69,7 @@ def test_first_download_extracts_and_writes_sums(env):
     sums = data.read_sums(data.raw_dir())
     assert data.ZIP_NAME in sums
     assert "ausgrid/Ausgrid_solar_home_data/notes.pdf" in sums
-    assert len(sums) == 1 + len(MEMBERS)  # the zip plus every extracted file
+    assert len(sums) == 1 + len(MEMBERS) - 1  # the zip plus every extracted file but the held-out
     assert sums[data.ZIP_NAME] == data.sha256(data.raw_dir() / data.ZIP_NAME)
 
 
@@ -153,3 +158,50 @@ def test_local_folder_copy_skips_extracts_and_subfolders(env, tmp_path):
     assert names == ["Solar home 2010-2011.csv", "notes.pdf"]
     assert env == []  # no network
     assert "ausgrid/notes.pdf" in data.read_sums(data.raw_dir())
+
+
+def test_held_out_year_is_not_extracted_by_default(env):
+    csvs = data.download()
+
+    assert [p.name for p in csvs] == ["Solar home 2010-2011.csv", "Solar home 2011-2012.csv"]
+    assert not list(data.ausgrid_dir().rglob("*2012-2013*"))
+    assert not any("2012-2013" in rel for rel in data.read_sums(data.raw_dir()))
+
+
+def test_held_out_year_needs_an_explicit_flag(env):
+    csvs = data.download(include_held_out=True)
+
+    assert [p.name for p in csvs][-1] == "Solar home 2012-2013.csv"
+    assert len(csvs) == 3
+
+
+def test_leftover_held_out_file_is_removed_without_network(env):
+    data.download(include_held_out=True)
+
+    csvs = data.download()  # default run: the leftover must go, from the zip already on disk
+
+    assert len(csvs) == 2 and not list(data.ausgrid_dir().rglob("*2012-2013*"))
+    assert len(env) == 1
+
+
+def test_local_copy_keeps_the_held_out_year_out_unless_asked(env, tmp_path):
+    src = tmp_path / "local"
+    src.mkdir()
+    for name, text in MEMBERS.items():
+        if name.count("/") == 1 and name.endswith(".csv"):
+            (src / Path(name).name).write_text(text)
+
+    assert [p.name for p in data.use_local_copy(src)] == [
+        "Solar home 2010-2011.csv",
+        "Solar home 2011-2012.csv",
+    ]
+    assert len(data.use_local_copy(src, include_held_out=True)) == 3
+
+
+def test_held_out_year_is_skipped_from_a_local_zip(env, tmp_path):
+    env_zip = tmp_path / "copy.zip"
+    with zipfile.ZipFile(env_zip, "w") as zf:
+        for name, text in MEMBERS.items():
+            zf.writestr(name, text)
+
+    assert len(data.use_local_copy(env_zip)) == 2

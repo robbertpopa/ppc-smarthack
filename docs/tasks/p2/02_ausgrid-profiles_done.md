@@ -22,21 +22,23 @@ One row per house and half hour: `house_id` (`AG-0001`), `interval_start` (UTC, 
 - Missing stays missing: whole missing days have no rows; houses without controlled load have null `cl_kw`, not 0.
 
 ## Cleaning rules (every rule counted in `result.attrs["rules"]` and printed)
-Duplicate readings dropped; spring-forward filler dropped; fall-back merged hour set to null; negative readings set to null; `gg_kw > 1.2 × kwp` set to null; duplicate rows across files dropped. Counts for the run on the data available locally are in `DATA.md`. In 2010-11 the over-limit rule hit mostly 3 houses (262, 215, 299), which suggests an understated kWp rather than bad data.
+Duplicate readings dropped; spring-forward filler dropped; fall-back merged hour set to null; negative readings set to null; `gg_kw > 1.2 × kwp` set to null; duplicate rows across files dropped. Counts for the run on 2010-11 and 2011-12 are in `DATA.md`. In 2010-11 the over-limit rule hit mostly 3 houses (262, 215, 299), which suggests an understated kWp rather than bad data.
 
 ## Acceptance
 | Check | Result |
 |---|---|
-| Tests with in-test CSVs for both formats: `0:30` / `0:00` columns, kWh to kW, nulls, format detection | Pass (13 tests; 24 in `tests/ml` with task 01) |
-| 300 houses, 48 intervals per house-day, no duplicate key | 300 houses, no duplicates. 48 intervals on normal days, **46 and 50 on the two change days** by design |
+| Tests with in-test CSVs for both formats: `0:30` / `0:00` columns, kWh to kW, nulls, format detection | Pass (13 tests; 29 in `tests/ml` with task 01) |
+| 300 houses, 48 intervals per house-day, no duplicate key | 300 houses, 10,526,400 rows, no duplicates. 48 intervals on normal days (218,100), **46 and 50 on the two change days** (600 each) by design |
 | Generation per year equals a direct sum over the raw CSV | Pass: raw total equals profiles plus what the rules removed, printed per file |
 | One-house test file equals house 1 in the full file | Pass |
-| Same result on pandas 2.2.3 and 3.1.1; `make smoke`, `make lint`, full test suite | Pass (80 tests in the project) |
+| Same result on pandas 2.2.3 and 3.1.1; `make smoke`, `make lint`, full test suite | Pass (85 passed, 2 skipped in the project; the skipped ones are P3's grid tests, which need the `grid-tools` extra) |
+
+## Held-out test year (fixed on this branch)
+The 2012-13 file is the team's test set. The first version of this task included it by mistake (`--from` copied it, and the first `profiles` run used it). Now `download` and `--from` skip it unless `--include-held-out` is given, tests cover that, and `profiles.parquet` was rebuilt from 2010-11 and 2011-12 only (ends 2012-06-30). The file had been opened for format and daylight-saving checks before the fix; nothing was tuned on it (stated in `DATA.md`).
 
 ## Not done / open
-- **The 2012-13 file was included by mistake.** The team keeps that year as the test set. `--from` copied it, so the local `data/raw/ausgrid/` and `profiles.parquet` contain it, and the figures in `DATA.md` cover three years. Fix to do next: delete that file locally, restrict `--from` to the named years, rebuild, and update the `DATA.md` numbers. Nothing was sent to P3.
-- **Request for P1:** add `pyarrow` to `pyproject.toml` (parquet needs it; `pandas` alone is not enough), and `make profiles`.
-- **Message to P3 is not sent.** It should carry the schema above, kW (not kWh), interval start in UTC, and the 46 / 48 / 50 day lengths.
+- **Request for P1:** add `pyarrow` to the base or `ml` dependencies in `pyproject.toml` (P3 put it only in the `grid-tools` extra); parquet writing needs it. Also a `make profiles` target.
+- **Message to P3 is not sent.** It should carry the schema above, kW (not kWh), interval start in UTC, and the 46 / 48 / 50 day lengths. P3's `src/grid/ausgrid.py` reads the raw CSV directly, takes the 48 columns as they are (no daylight-saving handling) and treats a missing controlled load as 0; switching to `profiles.parquet` would fix both.
 
-## Hand-off (once the held-out year is removed)
-"P2-02 done: `DATA_DIR/profiles.parquet` (house_id, interval_start UTC, gc_kw, cl_kw, gg_kw, kwp, …), kW not kWh, timestamps are interval start. Time zone: Sydney local time with daylight saving; change days have 46 and 50 intervals. P3 can start labels."
+## Hand-off
+"P2-02 done: `DATA_DIR/profiles.parquet` (house_id, interval_start UTC, gc_kw, cl_kw, gg_kw, kwp, …), kW not kWh, timestamps are interval start, 2010-07 to 2012-06 (2012-13 is the held-out test year). Time zone: Sydney local time with daylight saving; change days have 46 and 50 intervals. P3 can start labels."

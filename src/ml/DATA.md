@@ -5,7 +5,13 @@ Only dataset used by the ML pipeline. Raw files live in `DATA_DIR/raw/ausgrid/` 
 ```
 python -m src.ml.data download                 # fetch the zip, verify, extract
 python -m src.ml.data download --from <dir|zip>  # offline: use a local copy
+python -m src.ml.data download --include-held-out  # final evaluation only, see below
 ```
+
+## Held-out test year
+`Solar home 2012-2013.csv` (July 2012 to June 2013) is the **test set** and is kept sealed until the final evaluation (rule 2 in `docs/tasks/p2/README.md`). `download` and `--from` skip it by default, so `DATA_DIR/raw/ausgrid/` and `profiles.parquet` contain 2010-11 and 2011-12 only. `--include-held-out` brings it back; use it only for the final evaluation run.
+
+Full disclosure: before this rule existed, the file was opened to check its format and its daylight-saving pattern, and the first `profiles` run included it. No model existed at that point and nothing was tuned on it. Its content is not described in this file beyond the layout the parser needs.
 
 ## Sources
 | What | URL |
@@ -30,7 +36,7 @@ The SHA-256 of the **zip** is not recorded yet: it is written to `raw/SHA256SUMS
 | `Solar home 2012-2013.csv` | `e4be46b3c9991c65735a9545319a2f1c33be8e639c75a17a88e0323a8e5098be` |
 
 ## What the copy contains
-- Three half-hourly files, one per financial year (July to June), 300 houses each. These are the only files we use.
+- Three half-hourly files, one per financial year (July to June), 300 houses each. These are the only files we use; 2012-13 is held out (see above).
 - A monthly dataset (2,657 solar and 4,064 non-solar homes, 2007–2014) and the Ausgrid notes PDF. Monthly data is not used: its header is `Customer ID,Netwk Bill Rate Type,Consumption Month,Sum,Unit of me`, so `half_hourly_csvs()` skips it.
 
 ## Format of the half-hourly files (as observed)
@@ -43,25 +49,24 @@ Each row is one house, one category and one day; the 48 half-hour values are col
 | Columns | 53 | 54 (adds `Row Quality`) | 54 (adds `Row Quality`) |
 | Date format | `1-Jul-10` | `1/07/2011` | `1/07/2012` |
 | Line ending | `\n` | `\r\n`, trailing comma | `\r\n`, trailing comma |
-| Data rows | 269,735 | 270,304 | 268,557 |
+| Data rows | 269,735 | 270,304 | held out |
 | Days covered | 365 | 366 (leap year) | 365 |
 
 Common header: `Customer,Generator Capacity,Postcode,Consumption Category,date,0:30,1:00,…,23:30,0:00`.
 
 - `Consumption Category`: `GC` general consumption, `CL` controlled load (off-peak hot water), `GG` gross generation. Values are **kWh per half hour**.
 - Columns are labelled by the time the half-hour **ends**; `0:00` is the last interval of the day (Ausgrid notes, column 6).
-- `Row Quality`: blank = actual meter values, `NA` = some values estimated or substituted. 2011-12: 100 `NA` rows; 2012-13: 431. The 2010-11 file has no such column.
+- `Row Quality`: blank = actual meter values, `NA` = some values estimated or substituted. 2011-12 has 100 `NA` rows. The 2010-11 file has no such column.
 - Customers are numbered 1–300 in every file. `Generator Capacity` (kWp) is constant per customer in each file.
-- `CL` exists for only 139 / 139 / 138 houses, so missing is not 0.
-- 2010-11 and 2011-12 have every house-day (300 × days). 2012-13 has 109,419 `GC` and `GG` rows against 109,500 expected, so **81 house-days are missing**.
-- No duplicate (customer, category, date) rows and no empty value cells in any file.
+- `CL` exists for only 139 of the 300 houses in both years, so missing is not 0.
+- 2010-11 and 2011-12 have every house-day (300 × days).
+- No duplicate (customer, category, date) rows and no empty value cells in the two years used.
 
 ## Time zone (found in task 02)
 The 48 columns are **Sydney wall-clock time with daylight saving** (`Australia/Sydney`), as the Ausgrid notes say ("EST … and EDT during the summer period"). Evidence from the data:
 - The centre of gravity of gross generation sits at about 11.9 h in winter and 13.0 h in summer, and it jumps by one hour exactly on the clock-change days (2010-10-03, 2011-04-03, 2011-10-02, 2012-04-01), not gradually.
 - Spring forward (first Sunday of October, e.g. 2011-10-02): columns `2:30` and `3:00` (02:00–03:00, an hour that does not exist) hold exactly `0` for every house. They are filler, not readings.
 - Fall back (first Sunday of April, e.g. 2012-04-01): the same two columns hold about **double** the usual value, because the repeated 02:00–03:00 hour is summed into one. It cannot be split into its two UTC intervals.
-- 2012-13 behaves the same (2012-10-07: zeros; 2013-04-07: doubled).
 
 How `profiles.parquet` handles it: every timestamp is converted to UTC with the tz database. The spring-forward filler is dropped (a 46-interval day). On fall-back days the four UTC intervals of the repeated hour are kept as rows with **null** values (a 50-interval day), because the true split is unknown. So the number of intervals per house-day is 48 on normal days, 46 and 50 on the two change days.
 
@@ -79,23 +84,21 @@ How `profiles.parquet` handles it: every timestamp is converted to UTC with the 
 | `postcode` | str | as given |
 | `quality` | str, nullable | `"NA"` if Ausgrid flagged any of that house's GC/CL/GG rows for the day as non-actual (some values estimated); null otherwise. The 2010-11 file has no flag, so its rows are null, which does not prove the values are actual |
 
-Not stored: whole missing days (81 house-days in 2012-13) stay missing, no filling.
+Not stored: whole missing days stay missing, no filling (there are none in 2010-11 and 2011-12).
 
-## Quality summary (all three files, run on 2026-11-07)
-> **To redo:** this run included the 2012-13 file, which the team keeps as the held-out test year. The figures below must be regenerated on 2010-11 and 2011-12 only.
-
-- 300 houses, 15,778,512 rows, 2010-07-01 00:00 to 2013-06-30 23:30 (Sydney time).
-- Intervals per house-day: 326,919 days with 48; 900 with 46 (spring forward); 900 with 50 (fall back). Total house-days = 300 × 1,096 − 81.
-- Nulls: `gc_kw` 3,600 and `gg_kw` 6,983 (the four fall-back intervals per house-day, plus the over-limit rule below); `cl_kw` 54.0% (houses without controlled load, not zero); `quality` 99.9%.
+## Quality summary (2010-11 and 2011-12, run on 2026-11-07)
+- 300 houses, 10,526,400 rows, 2010-07-01 00:00 to 2012-06-30 23:30 (Sydney time).
+- Intervals per house-day: 218,100 days with 48; 600 with 46 (spring forward); 600 with 50 (fall back). Total house-days = 300 × 731, none missing.
+- Nulls: `gc_kw` 2,400 and `gg_kw` 4,417 (the four fall-back intervals per house-day, plus the over-limit rule below); `cl_kw` 53.8% (houses without controlled load, not zero); `quality` 99.97%.
 
 | Cleaning rule | Readings |
 |---|---:|
-| Readings read | 38,812,608 |
+| Readings read | 25,921,872 |
 | Duplicate (house, category, interval) readings dropped | 0 |
-| Spring-forward filler dropped (non-existent hour) | 4,432 |
-| Fall-back merged hour set to null | 4,430 |
+| Spring-forward filler dropped (non-existent hour) | 2,956 |
+| Fall-back merged hour set to null | 2,954 |
 | Negative readings set to null | 0 |
-| `gg_kw` above 1.2 × `kwp` set to null | 3,383 |
+| `gg_kw` above 1.2 × `kwp` set to null | 2,017 |
 | Duplicate (house, interval) rows across files | 0 |
 
 Gross generation, kWh, summed straight from the raw CSV versus the profiles; the raw total equals profiles plus what the rules removed:
@@ -104,8 +107,7 @@ Gross generation, kWh, summed straight from the raw CSV versus the profiles; the
 |---|---:|---:|
 | 2010-2011 | 635,572.9 | 634,985.6 |
 | 2011-2012 | 624,954.0 | 624,236.8 |
-| 2012-2013 | 654,300.1 | 653,391.2 |
-| Total | 1,914,827.0 | 1,914,827.0 (profiles + removed) |
+| Total | 1,260,526.9 | 1,260,526.9 (profiles + removed) |
 
 Remarks:
 - **Over-limit generation comes from a few houses.** In 2010-11, 906 readings exceed 1.2 × kWp, and 6 houses account for them (customers 262, 215 and 299 for 858 of them). The peak is up to 1.48 × kWp. A recorded capacity that is too low is more likely than bad meter data. We apply the rule as planned; revisit if those houses matter.

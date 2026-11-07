@@ -1,9 +1,13 @@
 """Download, verify and describe the raw Ausgrid "Solar home electricity data".
 
-    python -m src.ml.data download [--force] [--from DIR_OR_ZIP]
+    python -m src.ml.data download [--force] [--from DIR_OR_ZIP] [--include-held-out]
 
 Raw files go to ``DATA_DIR/raw/``: the zip, ``ausgrid/`` (extracted) and
 ``SHA256SUMS``. Data is never committed. Parsing and cleaning live in task 02.
+
+The 2012-13 file is the held-out test year (docs/tasks/p2/README.md, rule 2). It is
+not extracted or copied unless ``--include-held-out`` is given, so nothing built
+from ``DATA_DIR/raw/ausgrid/`` can touch it by accident.
 """
 
 from __future__ import annotations
@@ -27,6 +31,12 @@ USER_AGENT = "smarthack-ppc-team"
 TIMEOUT_S = 60
 # What `--from DIR` takes from the top level of a local copy of the data.
 LOCAL_COPY_GLOBS = ("Solar home 20??-20??.csv", "*.pdf", "README.md")
+# Financial years that stay out of the raw folder until the final evaluation.
+HELD_OUT_YEARS = ("2012-2013",)
+
+
+def is_held_out(name: str) -> bool:
+    return any(year in name for year in HELD_OUT_YEARS)
 
 
 def raw_dir() -> Path:
@@ -72,8 +82,10 @@ def _matches(raw: Path, sums: dict[str, str], rel: str) -> bool:
     return rel in sums and path.is_file() and sha256(path) == sums[rel]
 
 
-def _extracted_ok(raw: Path, sums: dict[str, str]) -> bool:
+def _extracted_ok(raw: Path, sums: dict[str, str], include_held_out: bool = False) -> bool:
     rels = [rel for rel in sums if rel != ZIP_NAME]
+    if not include_held_out and any(is_held_out(rel) for rel in rels):
+        return False  # a held-out file is lying in the folder: extract again without it
     return bool(rels) and all(_matches(raw, sums, rel) for rel in rels)
 
 
@@ -99,12 +111,15 @@ def _reset(dest: Path) -> None:
     dest.mkdir(parents=True)
 
 
-def _extract_zip(zip_path: Path, dest: Path) -> None:
+def _extract_zip(zip_path: Path, dest: Path, include_held_out: bool = False) -> None:
     _reset(dest)
     root = dest.resolve()
     with zipfile.ZipFile(zip_path) as zf:
         for member in zf.infolist():
             if member.is_dir() or member.filename.startswith("__MACOSX/"):
+                continue
+            if not include_held_out and is_held_out(member.filename):
+                print(f"held out, not extracted: {member.filename}")
                 continue
             target = (dest / member.filename).resolve()
             if not target.is_relative_to(root):
@@ -114,7 +129,7 @@ def _extract_zip(zip_path: Path, dest: Path) -> None:
                 shutil.copyfileobj(src, out, 1 << 20)
 
 
-def download(force: bool = False) -> list[Path]:
+def download(force: bool = False, include_held_out: bool = False) -> list[Path]:
     """Fetch and extract the raw data unless SHA256SUMS says it is current.
 
     Returns the extracted half-hourly CSV paths (found by header, not by name).
@@ -127,21 +142,24 @@ def download(force: bool = False) -> list[Path]:
         _download_file(SOURCE_URL, raw / ZIP_NAME)
     else:
         print("zip already downloaded and matches SHA256SUMS: nothing to download")
-    if fresh or not _extracted_ok(raw, sums):
-        _extract_zip(raw / ZIP_NAME, dest)
+    if fresh or not _extracted_ok(raw, sums, include_held_out):
+        _extract_zip(raw / ZIP_NAME, dest, include_held_out)
         write_sums(raw)
     return half_hourly_csvs(dest)
 
 
-def use_local_copy(src: Path) -> list[Path]:
+def use_local_copy(src: Path, include_held_out: bool = False) -> list[Path]:
     """Offline alternative: take a local zip or an already extracted folder."""
     raw, dest = raw_dir(), ausgrid_dir()
     if src.is_file():
-        _extract_zip(src, dest)
+        _extract_zip(src, dest, include_held_out)
     elif src.is_dir():
         _reset(dest)
         for pattern in LOCAL_COPY_GLOBS:
             for path in sorted(src.glob(pattern)):
+                if not include_held_out and is_held_out(path.name):
+                    print(f"held out, not copied: {path.name}")
+                    continue
                 shutil.copy2(path, dest / path.name)
     else:
         raise FileNotFoundError(src)
@@ -242,13 +260,21 @@ def main(argv: list[str] | None = None) -> int:
     dl.add_argument(
         "--from", dest="source", type=Path, help="use a local zip or folder, no network"
     )
+    dl.add_argument(
+        "--include-held-out",
+        action="store_true",
+        help=f"also take the held-out year ({', '.join(HELD_OUT_YEARS)}); final evaluation only",
+    )
     sub.add_parser("profiles", help="clean the raw files into DATA_DIR/profiles.parquet")
     args = parser.parse_args(argv)
 
     if args.command == "profiles":
         profiles()
         return 0
-    csvs = use_local_copy(args.source) if args.source else download(force=args.force)
+    if args.source:
+        csvs = use_local_copy(args.source, args.include_held_out)
+    else:
+        csvs = download(force=args.force, include_held_out=args.include_held_out)
     report(ausgrid_dir())
     print(f"{len(csvs)} half-hourly CSV file(s) in {ausgrid_dir()}")
     return 0
