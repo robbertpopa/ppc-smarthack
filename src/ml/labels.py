@@ -151,7 +151,7 @@ def _mock_inputs(profiles: pd.DataFrame | None, rng: np.random.Generator):
         return station, sorted(ids), kwp.loc[sorted(ids)].to_numpy()
 
     index = pd.date_range(
-        "2010-06-30 14:00", "2012-06-30 13:30", freq="30min", tz="UTC", name="interval_start"
+        "2010-06-30 14:00", "2013-06-30 13:30", freq="30min", tz="UTC", name="interval_start"
     )
     kwp = np.full(MOCK_HOUSES, 2.0)
     sun = np.clip(np.sin(np.radians(solar_elevation(index + pd.Timedelta(minutes=15)))), 0, None)
@@ -176,6 +176,8 @@ def make_mock_with_houses(profiles: pd.DataFrame | None, scenario: str, seed: in
     Plausible but meaningless: ``clip(0.9 - 0.6 pv/kwp + 0.3 load/kwp + noise, 0.05, 1)``
     on daylight half hours of a station of 30 random houses. Rows where the totals are
     missing get ``converged = False`` and a null share, as a failed power flow would.
+    Without profiles the sine fallback spans train, validation and test, so the whole
+    evaluation can be exercised; with real profiles the mock stops at 2012-06.
     """
     name = pt_id(scenario)
     rng = np.random.default_rng([seed, zlib.crc32(scenario.encode())])
