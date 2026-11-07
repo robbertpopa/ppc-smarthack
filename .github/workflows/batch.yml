@@ -1,0 +1,64 @@
+name: batch
+
+on:
+  workflow_dispatch:
+    inputs:
+      command:
+        description: "Command to run in the image, for example: python -m src.eval.run"
+        required: true
+        default: "python -m src.smoke"
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: batch
+  cancel-in-progress: false
+
+jobs:
+  run:
+    if: github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    env:
+      AZURE_RG: rg-ppcsmart-demo
+      JOB_NAME: caj-ppcsmart-demo-batch
+      COMMAND: ${{ inputs.command }}
+    steps:
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Start the job
+        id: start
+        run: |
+          IMAGE="$(az containerapp job show --name "$JOB_NAME" --resource-group "$AZURE_RG" --query 'properties.template.containers[0].image' -o tsv)"
+          read -r -a PARTS <<< "$COMMAND"
+          ARGS=()
+          if [ "${#PARTS[@]}" -gt 1 ]; then ARGS=(--args "${PARTS[@]:1}"); fi
+          EXECUTION="$(az containerapp job start --name "$JOB_NAME" --resource-group "$AZURE_RG" \
+            --image "$IMAGE" --container-name batch --command "${PARTS[0]}" "${ARGS[@]}" \
+            --query name -o tsv)"
+          echo "execution=$EXECUTION" >> "$GITHUB_OUTPUT"
+          echo "Started $EXECUTION of $JOB_NAME: $COMMAND"
+      - name: Wait for the result
+        run: |
+          for _ in $(seq 1 150); do
+            STATUS="$(az containerapp job execution show --name "$JOB_NAME" \
+              --resource-group "$AZURE_RG" --job-execution-name "${{ steps.start.outputs.execution }}" \
+              --query properties.status -o tsv)"
+            echo "status: $STATUS"
+            case "$STATUS" in
+              Succeeded) exit 0 ;;
+              Failed|Stopped|Degraded) exit 1 ;;
+            esac
+            sleep 30
+          done
+          echo "timed out waiting for the job"
+          exit 1
+      - name: Stop the job if the workflow was cancelled
+        if: cancelled() && steps.start.outputs.execution != ''
+        run: |
+          az containerapp job stop --name "$JOB_NAME" --resource-group "$AZURE_RG" \
+            --job-execution-name "${{ steps.start.outputs.execution }}"

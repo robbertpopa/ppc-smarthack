@@ -34,5 +34,20 @@ services:
     image: ppc-smarthack:dev
     command: ruff check src tests
 
+  batch:
+    profiles: ["batch"]
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+      target: app
+    image: ppc-smarthack:local
+    environment:
+      APP_ENV: local
+      ARTIFACT_URI: /data/artifacts
+      DATA_DIR: /data/artifacts/data
+    volumes:
+      - ../artifacts:/data/artifacts
+      - ../data:/data/artifacts/data
+
 volumes:
   artifacts:

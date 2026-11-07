@@ -68,6 +68,14 @@ make docker-test   # tests and lint inside the container
 make tf-validate   # Terraform validation, no Azure access needed
 ```
 
+## Batch runs (labels, training, evaluation)
+The same image runs any command, locally and in the cloud, with `ARTIFACT_URI=/data/artifacts` and `DATA_DIR=/data/artifacts/data` pointing at the same layout.
+```
+make batch CMD="python -m src.eval.run"     # local: ./artifacts and ./data are mounted into the container
+```
+In the cloud the Terraform job `caj-ppcsmart-demo-batch` (Container Apps job, manual trigger, 1 CPU / 2 GiB, one hour at most) mounts the Azure Files share. Start it from GitHub: Actions → `batch` → Run workflow on `main`, with the command in the input. The workflow starts one execution of the job named in its `JOB_NAME` variable (it must match the Terraform job name) with that command, polls until it ends (up to 75 minutes, a little longer than the job's own one-hour limit) and fails if the job fails. If you cancel the workflow, a last step stops the execution so it does not keep running and billing. A job costs money only while it runs.
+Logs of a run: Log Analytics, table `ContainerAppConsoleLogs_CL`, filtered by the job name (logs appear after a minute or two).
+
 ## One-time setup (a person with Owner rights on the subscription)
 1. Install the Azure CLI, run `az login`.
 2. Run `SUBSCRIPTION_ID=<id> GITHUB_REPO=owner/repo infra/azure/bootstrap.sh`. It creates the state storage and two identities that GitHub can use through OIDC (one for deploys from `main`, one read-only for the plan job on pull requests), then prints the values to store. It needs `gh` logged in: it reads the OIDC subject prefix GitHub uses for this repository (new repositories use the immutable form `repo:owner@<id>/repo@<id>`).
