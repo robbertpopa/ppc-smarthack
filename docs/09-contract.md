@@ -137,7 +137,8 @@ These are the Python entry points other people call. Signatures can be refined, 
 | P3 | `grid.power_flow(grid, injections) -> grid_state` | One AC power flow |
 | P3 | `grid.safe_share(grid, injections) -> float` | The label: highest share in [0, 1] that respects the limits |
 | P3 | `grid.guard(grid, plan, injections) -> {passed, violations}` | Checks a plan with its own power flow |
-| P1 | `grid.thermal.step(state, load_ratio, ambient_c) -> hotspot_c` | Transformer hot-spot temperature after one step |
+| P1 | `grid.thermal.step(state, load_ratio, ambient_c, dt_min=30) -> ThermalState` | Transformer temperatures after one step; `.hotspot_c` fills `grid_state.trafo_hotspot_c`. See [12-thermal-model.md](12-thermal-model.md) |
+| P1 | `grid.thermal.headroom(state, ambient_c, dt_min=30) -> float` | Highest load ratio for the next step that keeps the hot-spot under its limit; the fixed baseline is 1.0 |
 | P1 | `agent.plan(forecast, grid_state, config) -> plan` | Decision, with abstention and fallback |
 | P1 | `agent.execute(plan, user) -> action_event[]` | Applies an approved plan and logs it |
 
