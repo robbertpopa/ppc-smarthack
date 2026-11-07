@@ -2,6 +2,8 @@
 
 **Owns:** `src/ml/`, `src/eval/`. Read first: [../08-parallel-plan.md](../08-parallel-plan.md), [../09-contract.md](../09-contract.md), [../04-chosen-idea.md](../04-chosen-idea.md), [../05-data-and-sources.md](../05-data-and-sources.md).
 
+**Branch-sized briefs:** this role is split into one task file per branch in [p2/](p2/README.md) (order, dependencies, parallel lanes, acceptance tests).
+
 ## Goal
 Train models that predict **the highest safe export limit one hour ahead**, with calibrated uncertainty, and prove with a separate test period that they beat simple baselines. Produce the evaluation table the jury will read.
 

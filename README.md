@@ -24,7 +24,7 @@ The figures from our exploration come from simulation (German SimBench grids, Au
 | [docs/08-parallel-plan.md](docs/08-parallel-plan.md) | Parallel plan for three people, gates, git rules |
 | [docs/09-contract.md](docs/09-contract.md) | Shared interfaces and mock examples |
 | [docs/10-cloud.md](docs/10-cloud.md) | Cloud design: services, bucket layout, CI/CD, runbook, cost and security |
-| [docs/tasks/](docs/tasks/) | Instructions per person: [P1 (platform, cloud, agent)](docs/tasks/p1-platform-agent.md), [P2 (ML)](docs/tasks/p2-ml.md), [P3 (grid, UI)](docs/tasks/p3-grid-ui.md) |
+| [docs/tasks/](docs/tasks/) | Instructions per person: [P1 (platform, cloud, agent)](docs/tasks/p1-platform-agent.md), [P2 (ML)](docs/tasks/p2-ml.md) with [per-branch briefs](docs/tasks/p2/README.md), [P3 (grid, UI)](docs/tasks/p3-grid-ui.md) |
 
 ## Conventions
 - Branch: `main`.
