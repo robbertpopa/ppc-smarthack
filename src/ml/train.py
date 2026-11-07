@@ -20,8 +20,9 @@ from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.metrics import mean_pinball_loss
 
 from src.eval.metrics import evaluate, load_profiles, surplus_kw
-from src.ml import baselines, features, model_io
+from src.ml import abstention, baselines, calibration, features, model_io
 from src.ml import labels as labels_io
+from src.ml.config import crew_cases_per_day, violation_target
 from src.ml.split import daylight, split
 
 QUANTILES: tuple[float, ...] = (0.05, 0.10, 0.20, 0.50, 0.90)
@@ -128,17 +129,40 @@ def train(scenario: str, seed: int = 0, grid: list[dict] | None = None, save: bo
     val_labels = split(labels)["val"]
     q05 = pd.Series(pred[:, 0], index=pd.DatetimeIndex(val_rows["target_start"]))
     policy, base = _economics(labels, val_labels, q05, surplus, kwp)
+    index = pd.DatetimeIndex(val_rows["target_start"])
+    spread = pd.Series(pred[:, -1] - pred[:, 0], index=index)
+    flagged = pd.Series(
+        [bool(abstention.quality_flags(r)) for r in X_val.to_dict("records")], index=index
+    )
+    target = violation_target()
+    chosen = abstention.choose_threshold(spread, q05, val_labels, surplus, kwp, target, flagged)
+    curve = abstention.risk_coverage(spread, q05, val_labels, surplus, kwp, flagged)
+    budget = crew_cases_per_day()
     report = {
         "pt_id": pt_id,
         "n_train": len(train_rows),
         "n_val": len(val_rows),
         "params": params,
         "pinball_val": best["pinball"],
-        "coverage_val": {
-            str(q): float(np.mean(y_val < pred[:, i])) for i, q in enumerate(QUANTILES)
-        },
+        "coverage_val": calibration.quantile_coverage(y_val, pred, QUANTILES),
         "q05_policy": {k: policy[k] for k in ("violation_rate", "export_index", "n_intervals")},
         "baselines_val": base.to_dict(orient="index"),
+        "abstention": {
+            "tau": chosen["tau"] if chosen["reachable"] else None,
+            "reachable": chosen["reachable"],
+            "violation_target": target,
+            "target_reason": (
+                "share of daylight validation intervals allowed to exceed the safe limit; "
+                "2% is the level the exploration reached with a fallback (team to confirm)"
+            ),
+            "violation_rate_with_fallback": chosen["violation_rate"],
+            "abstain_rate": chosen["abstain_rate"],
+            "flagged_per_day_mean": chosen["per_day_mean"],
+            "flagged_per_day_max": chosen["per_day_max"],
+            "crew_cases_per_day": budget,
+            "crew_budget_holds": bool(chosen["per_day_max"] <= budget),
+            "share_flagged_by_input_checks": float(flagged.mean()),
+        },
     }
 
     if save:
@@ -167,9 +191,12 @@ def train(scenario: str, seed: int = 0, grid: list[dict] | None = None, save: bo
                 {"params": s["params"], "mean_pinball_val": s["mean_pinball_val"]} for s in search
             ],
             "validation": report,
+            "abstention": report["abstention"],
             "sklearn_version": sklearn.__version__,
         }
-        model_io.save(models, meta, model_io.model_dir(MODEL_VERSION, pt_id))
+        out = model_io.model_dir(MODEL_VERSION, pt_id)
+        model_io.save(models, meta, out)
+        curve.to_csv(out / "risk_coverage.csv", index=False)
     return report
 
 
@@ -191,6 +218,13 @@ def main(argv: list[str] | None = None) -> None:
             f"validated on {report['n_val']}"
         )
         print("  q05 coverage on validation:", round(report["coverage_val"]["0.05"], 4))
+        info = report["abstention"]
+        print(
+            f"  abstention: tau={info['tau']}, abstain {info['abstain_rate']:.3f}, "
+            f"violations {info['violation_rate_with_fallback']:.4f} "
+            f"(target {info['violation_target']}), flagged per day max "
+            f"{info['flagged_per_day_max']:.0f} vs crew {info['crew_cases_per_day']}"
+        )
         print("  q05 as the limit:", {k: round(v, 4) for k, v in report["q05_policy"].items()})
         for name_, row in report["baselines_val"].items():
             rate, export = row["violation_rate"], row["export_index"]
