@@ -11,12 +11,22 @@ next to it, so a policy cannot look good by exporting unsafely.
 import numpy as np
 import pandas as pd
 
-from src.ml.config import SYDNEY
+from src.common.contract import StationConfig
+from src.ml.config import SYDNEY, profiles_path
 from src.ml.split import daylight
 
-FIXED_SHARE = 0.36  # the fixed limit every policy is compared with
+FIXED_SHARE = StationConfig.model_fields["static_share"].default  # the fixed limit to beat
 EPS = 1e-6
 STEP_HOURS = 0.5
+
+
+def load_profiles(station_houses: pd.DataFrame) -> pd.DataFrame:
+    """Read only the columns and source houses that ``surplus_kw`` needs."""
+    return pd.read_parquet(
+        profiles_path(),
+        columns=["interval_start", "house_id", "gc_kw", "cl_kw", "gg_kw"],
+        filters=[("house_id", "in", station_houses["source_house_id"].unique().tolist())],
+    )
 
 
 def surplus_kw(profiles: pd.DataFrame, station_houses: pd.DataFrame) -> pd.DataFrame:
@@ -43,9 +53,10 @@ def exported_kwh(share: pd.Series, surplus: pd.DataFrame, kwp: pd.Series) -> flo
     nothing; every policy is scored on the same intervals, so the comparison stays fair.
     """
     intervals = share.index.intersection(surplus.index)
-    cap = (
-        share.loc[intervals].to_numpy()[:, None] * kwp.reindex(surplus.columns).to_numpy()[None, :]
-    )
+    kwp = kwp.reindex(surplus.columns)
+    if kwp.isna().any():
+        raise ValueError(f"kwp is missing for houses {list(kwp.index[kwp.isna()])}")
+    cap = share.loc[intervals].to_numpy()[:, None] * kwp.to_numpy()[None, :]
     exported = np.minimum(surplus.loc[intervals].to_numpy(), cap)
     return float(np.nansum(exported)) * STEP_HOURS
 

@@ -18,15 +18,13 @@ import argparse
 
 import pandas as pd
 
-from src.eval.metrics import FIXED_SHARE, evaluate, surplus_kw
+from src.eval.metrics import FIXED_SHARE, evaluate, load_profiles, surplus_kw
 from src.ml import labels as labels_io
-from src.ml.config import profiles_path
+from src.ml.features import DAY, HORIZON_MIN, STEP
 from src.ml.split import split
 
 NAMES = ("fixed", "last_known", "same_hour_yesterday", "oracle")
-HORIZON = pd.Timedelta(minutes=60)
-LAST_INTERVAL = HORIZON + pd.Timedelta(minutes=30)  # start of the interval ending at t
-DAY = pd.Timedelta(hours=24)
+LAST_INTERVAL = pd.Timedelta(minutes=HORIZON_MIN) + STEP  # start of the interval ending at t
 
 
 def apply(name: str, labels: pd.DataFrame) -> pd.Series:
@@ -65,7 +63,7 @@ def main(argv: list[str] | None = None) -> None:
 
     labels = labels_io.load(args.scenario)
     houses = labels_io.load_station_houses(args.scenario)
-    surplus = surplus_kw(pd.read_parquet(profiles_path()), houses)
+    surplus = surplus_kw(load_profiles(houses), houses)
     kwp = houses.set_index("house_id")["kwp"]
     part = split(labels)[args.split]
     note = "MOCK labels, not a result" if labels_io.is_mock(labels) else "real labels"

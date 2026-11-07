@@ -17,7 +17,9 @@ DECISION = NOON - timedelta(minutes=60)
 
 def good_forecast(**changes):
     base = load_mock("forecast", Forecast)
-    return base.model_copy(update={"interval_start": NOON, "available_at": DECISION, **changes})
+    return base.model_copy(
+        update={"interval_start": NOON, "available_at": DECISION, **changes}
+    )
 
 
 def source(predict=lambda features: good_forecast(), grid=None, seen=None):

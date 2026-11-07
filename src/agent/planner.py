@@ -41,7 +41,9 @@ def make_plan(
             reasons.append("forecast was not available before the interval started")
             reason_for_text = "The forecast was not available in time"
         if spread > station.spread_threshold:
-            reasons.append(f"spread {spread:.2f} above threshold {station.spread_threshold:.2f}")
+            reasons.append(
+                f"spread {spread:.2f} above threshold {station.spread_threshold:.2f}"
+            )
     if grid_state is not None and not grid_state.converged:
         reasons.append("grid state did not converge")
         reason_for_text = reason_for_text or "The grid state could not be computed"
