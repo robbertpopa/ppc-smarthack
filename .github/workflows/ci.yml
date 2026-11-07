@@ -1,0 +1,146 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - run: ruff check src tests
+      - run: pytest -q
+      - run: python -m src.smoke
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tests and lint inside the container
+        run: |
+          docker compose -f infra/docker-compose.yml --profile test run --rm test
+          docker compose -f infra/docker-compose.yml --profile test run --rm lint
+      - name: Build the runtime image and run the smoke check in it
+        run: |
+          docker build -f infra/Dockerfile --target app -t ppc-smarthack:ci .
+          docker run --rm ppc-smarthack:ci python -m src.smoke
+
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/terraform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform fmt -check -recursive
+      - run: terraform init -backend=false -input=false
+      - run: terraform validate
+
+  plan:
+    if: github.event_name == 'pull_request' && github.base_ref == 'main' && github.event.pull_request.head.repo.full_name == github.repository
+    needs: [terraform]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    defaults:
+      run:
+        working-directory: infra/terraform
+    env:
+      ARM_USE_OIDC: "true"
+      ARM_CLIENT_ID: ${{ secrets.AZURE_PLAN_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      ARM_RESOURCE_PROVIDER_REGISTRATIONS: none
+      TF_IN_AUTOMATION: "true"
+      TF_VAR_image_tag: ${{ github.event.pull_request.head.sha }}
+      TF_VAR_demo_token: plan-placeholder
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      - name: Terraform init
+        run: |
+          terraform init -input=false \
+            -backend-config="resource_group_name=${{ vars.TFSTATE_RG }}" \
+            -backend-config="storage_account_name=${{ vars.TFSTATE_SA }}" \
+            -backend-config="container_name=${{ vars.TFSTATE_CONTAINER }}" \
+            -backend-config="key=ppc-smarthack.tfstate" \
+            -backend-config="use_azuread_auth=true"
+      - name: Terraform plan
+        shell: bash
+        run: terraform plan -input=false -lock=false -refresh=false -no-color | tee plan.txt
+      - name: Plan summary
+        run: |
+          { echo '```'; grep -E '^(Plan:|No changes|  # )' plan.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
+    needs: [test, docker, terraform]
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy
+      cancel-in-progress: false
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      ARM_USE_OIDC: "true"
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      AZURE_RG: rg-ppcsmart-demo
+      TF_IN_AUTOMATION: "true"
+      TF_VAR_image_tag: ${{ github.sha }}
+      TF_VAR_demo_token: ${{ secrets.DEMO_TOKEN }}
+    steps:
+      - name: Require a demo token
+        run: test -n "$TF_VAR_demo_token" || { echo "the DEMO_TOKEN secret is not set"; exit 1; }
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      - name: Terraform init
+        working-directory: infra/terraform
+        run: |
+          terraform init -input=false \
+            -backend-config="resource_group_name=${{ vars.TFSTATE_RG }}" \
+            -backend-config="storage_account_name=${{ vars.TFSTATE_SA }}" \
+            -backend-config="container_name=${{ vars.TFSTATE_CONTAINER }}" \
+            -backend-config="key=ppc-smarthack.tfstate" \
+            -backend-config="use_azuread_auth=true"
+      - name: Create the registry first
+        working-directory: infra/terraform
+        run: terraform apply -input=false -auto-approve -target=azurerm_container_registry.acr
+      - name: Build and push the image
+        working-directory: infra/terraform
+        run: |
+          ACR_NAME="$(az acr list --resource-group "$AZURE_RG" --query '[0].name' -o tsv)"
+          ACR_SERVER="$(az acr list --resource-group "$AZURE_RG" --query '[0].loginServer' -o tsv)"
+          az acr login --name "$ACR_NAME"
+          docker build -f ../Dockerfile --target app -t "$ACR_SERVER/ppc-smarthack:${{ github.sha }}" ../..
+          docker push "$ACR_SERVER/ppc-smarthack:${{ github.sha }}"
+      - name: Apply the rest
+        working-directory: infra/terraform
+        run: terraform apply -input=false -auto-approve
+      - name: Health check
+        working-directory: infra/terraform
+        run: curl --fail --retry 12 --retry-delay 10 --retry-all-errors "$(terraform output -raw app_url)/health"

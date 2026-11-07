@@ -1,0 +1,14 @@
+{
+  "pt_id": "PT-A",
+  "interval_start": "2025-06-21T10:00:00Z",
+  "converged": true,
+  "v_max_pu": 1.043,
+  "v_max_node": "bus-17",
+  "line_loading_max_pct": 63.0,
+  "trafo_loading_pct": 88.0,
+  "trafo_hotspot_c": null,
+  "batteries": [{"house_id": "H03", "soc_kwh": 6.4, "power_kw": 2.5}],
+  "exported_kwh": 12.4,
+  "curtailed_kwh": 1.1,
+  "provenance": "assumed"
+}

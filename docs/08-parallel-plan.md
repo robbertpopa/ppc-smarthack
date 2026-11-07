@@ -39,7 +39,7 @@ Everyone works in their own folder. A change to `src/common/` (the contract) is 
 ## Timeline and gates
 | Phase | Clock | P1: platform, cloud, agent | P2: ML | P3: grid → UI | Gate at the end |
 |---|---|---|---|---|---|
-| **0** T+0–1 | 18:00–19:00 | Scaffold, `.gitignore`, contract, mocks, budget alarm, bucket, registry | Download data, check formats, list features | Install pandapower/SimBench, pick the grid | **G0:** contract and mocks merged, everyone can run `make smoke` |
+| **0** T+0–1 | 18:00–19:00 | Scaffold, `.gitignore`, contract, mocks, Docker, Terraform for Azure, CI | Download data, check formats, list features | Install pandapower/SimBench, pick the grid | **G0:** contract and mocks merged, everyone can run `make smoke` |
 | **1** T+1–5 | 19:00–23:00 | Docker, CI, mock-based app deployed, API and planner on mocks, review of P3 | Baselines, first quantile model (on mocks until labels arrive) | `power_flow`, `safe_share`, first labels by T+3 | **G1:** end-to-end demo on real labels, however ugly |
 | **2** T+5–9 | 23:00–03:00 | Label job in the cloud, auto-deploy, guard integration, abstain queue, approvals, action log | Abstention rule, PV and load forecasts | `guard`, batteries (SoC), tests | **G2:** agent acts, guard blocks bad plans |
 | **3** T+9–13 | 03:00–07:00 | Training and evaluation in the cloud, kill switch, transformer thermal model | `eval/run.py`, robustness (missing, noise, censored), explanations | Operator screen, comparison panel | **G3:** evaluation table reproducible with one command |
@@ -53,8 +53,8 @@ Sleep in shifts of about 2 hours, always at least two people awake.
 ## Cloud track (P1), checked at the same gates
 | Gate | Cloud milestone |
 |---|---|
-| G0 | Budget alarm, bucket, registry, `Dockerfile` and `docker-compose.yml` |
-| G1 | CI (lint, tests, smoke); the mock-based app deployed at a URL; datasets in the bucket |
+| G0 | Dockerfile, compose, Terraform for Azure and CI in the repo; budget alert |
+| G1 | CI (lint, tests, smoke); the mock-based app deployed at a URL; datasets on the file share |
 | G2 | Batch job runs label generation in the cloud; auto-deploy on merge to `main` |
 | G3 | Training and the evaluation table run in the cloud and match the local run |
 | G4 | Frozen deployed version, health check, backup video recorded on the cloud URL and locally |
@@ -75,6 +75,9 @@ Sleep in shifts of about 2 hours, always at least two people awake.
 T+1 (contract), T+3 (labels file ready, baseline numbers), T+5 (G1), T+9 (G2), T+13 (freeze), T+17 (code freeze). Between syncs, post in the group chat if blocked for more than 20 minutes.
 
 ## Git rules
+
+The full order of branches and commits per person, the commit rules for people and coding assistants, and file ownership are in [11-commit-plan.md](11-commit-plan.md).
+
 - `main` always runs (`make smoke` passes).
 - One branch per task, named `<area>/<thing>` (for example `ml/quantile-model`). Merge to `main` about every 90 minutes.
 - Conventional commits (`feat:`, `fix:`, `docs:`, `chore:`), no co-author trailers, English only.

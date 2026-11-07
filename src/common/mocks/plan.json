@@ -1,0 +1,90 @@
+{
+  "plan_id": "PLAN-2025-06-21-1000-PT-A",
+  "pt_id": "PT-A",
+  "interval_start": "2025-06-21T10:00:00Z",
+  "limits": [
+    {
+      "house_id": "H01",
+      "export_limit_kw": 2.6,
+      "battery_kw": 0.0
+    },
+    {
+      "house_id": "H02",
+      "export_limit_kw": 4.16,
+      "battery_kw": 0.0
+    },
+    {
+      "house_id": "H03",
+      "export_limit_kw": 5.2,
+      "battery_kw": 0.0
+    },
+    {
+      "house_id": "H04",
+      "export_limit_kw": 5.2,
+      "battery_kw": 0.0
+    },
+    {
+      "house_id": "H05",
+      "export_limit_kw": 7.8,
+      "battery_kw": 0.0
+    },
+    {
+      "house_id": "H06",
+      "export_limit_kw": 9.0,
+      "battery_kw": 0.0
+    },
+    {
+      "house_id": "H07",
+      "export_limit_kw": 5.2,
+      "battery_kw": 0.0
+    },
+    {
+      "house_id": "H08",
+      "export_limit_kw": 4.16,
+      "battery_kw": 0.0
+    }
+  ],
+  "safe_cap_share_used": 0.52,
+  "source": "model",
+  "abstain": false,
+  "confidence": 0.683,
+  "reasons": [
+    "spread 0.19 below threshold 0.30"
+  ],
+  "guard": {
+    "passed": true,
+    "v_max_pu": 1.041,
+    "trafo_loading_pct": 86.0,
+    "violations": []
+  },
+  "explanation": {
+    "text": "Each house may export up to 52% of its installed power. The model's uncertainty is 19%, below the 30% threshold, so its cautious estimate replaces the fixed 36% limit.",
+    "figures": [
+      {
+        "name": "static_limit_pct",
+        "value": 36.0
+      },
+      {
+        "name": "export_limit_pct",
+        "value": 52.0
+      },
+      {
+        "name": "uncertainty_pct",
+        "value": 19.0
+      },
+      {
+        "name": "threshold_pct",
+        "value": 30.0
+      },
+      {
+        "name": "v_max_pu",
+        "value": 1.043
+      },
+      {
+        "name": "trafo_loading_pct",
+        "value": 88.0
+      }
+    ]
+  },
+  "status": "proposed"
+}

@@ -1,6 +1,6 @@
 # P2: ML and evaluation
 
-**Owns:** `src/ml/`, `src/eval/`. Read first: [../08-parallel-plan.md](../08-parallel-plan.md), [../09-contract.md](../09-contract.md), [../04-chosen-idea.md](../04-chosen-idea.md), [../05-data-and-sources.md](../05-data-and-sources.md).
+**Owns:** `src/ml/`, `src/eval/`. Read first: [../08-parallel-plan.md](../08-parallel-plan.md), [../09-contract.md](../09-contract.md), [../04-chosen-idea.md](../04-chosen-idea.md), [../05-data-and-sources.md](../05-data-and-sources.md), [../11-commit-plan.md](../11-commit-plan.md) (commit and merge order).
 
 **Branch-sized briefs:** this role is split into one task file per branch in [p2/](p2/README.md) (order, dependencies, parallel lanes, acceptance tests).
 
@@ -46,7 +46,7 @@ Train models that predict **the highest safe export limit one hour ahead**, with
 - Final numbers for the slides. Every number on a slide must come from the script.
 
 ## Cloud (your part is small, see [../10-cloud.md](../10-cloud.md))
-- Read and write only through `DATA_DIR` and `ARTIFACT_URI` (a path or an `s3://` URI); no absolute paths.
+- Read and write only through `DATA_DIR` and `ARTIFACT_URI` (plain paths; in the cloud they point to the mounted Azure Files share); no absolute paths.
 - Write a `metadata.json` next to every model: git sha, data hash, training period, metrics.
 - Keep training and `src/eval/run.py` deterministic (fixed seeds), so the cloud run matches the local one.
 - The prediction must run inside our API container; no external model API.

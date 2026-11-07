@@ -2,7 +2,7 @@
 
 These briefs split [../p2-ml.md](../p2-ml.md) (ML and evaluation) into branch-sized tasks. Each brief is written so a coding-assistant session can start it cold: it names the branch, the files it may touch, the interfaces, the steps, the tests that must pass and what to post when done.
 
-Read once before any task: [../../08-parallel-plan.md](../../08-parallel-plan.md) (gates, git rules), [../../09-contract.md](../../09-contract.md) (shared objects), [../p2-ml.md](../p2-ml.md) (the role), [../../05-data-and-sources.md](../../05-data-and-sources.md) (data and pitfalls), [../../10-cloud.md](../../10-cloud.md) (configuration variables).
+Read once before any task: [../../08-parallel-plan.md](../../08-parallel-plan.md) (gates, git rules), [../../09-contract.md](../../09-contract.md) (shared objects), [../p2-ml.md](../p2-ml.md) (the role), [../../05-data-and-sources.md](../../05-data-and-sources.md) (data and pitfalls), [../../10-cloud.md](../../10-cloud.md) (configuration variables), [../../11-commit-plan.md](../../11-commit-plan.md) (commit rules and the team merge order).
 
 ## Rules every task follows
 These come from the PPC brief ([../../01-theme-and-criteria.md](../../01-theme-and-criteria.md)) and from our git rules. A task that breaks one is not done.

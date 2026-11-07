@@ -1,0 +1,8 @@
+{
+  "ts": "2025-06-21T10:00:03Z",
+  "plan_id": "PLAN-2025-06-21-1000-PT-A",
+  "event": "plan_approved",
+  "actor": "operator-demo",
+  "detail": {"abstain": false},
+  "plan_sha": "9f2c4a7e1b0d3c58"
+}
