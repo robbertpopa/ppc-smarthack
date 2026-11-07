@@ -1,4 +1,6 @@
 import hashlib
+import logging
+import math
 from collections.abc import Callable
 from datetime import datetime, timezone
 from threading import RLock
@@ -8,6 +10,10 @@ from src.agent.log import ActionLog
 from src.agent.planner import make_plan
 from src.agent.sources import Source, floor_to_half_hour
 from src.common.contract import ActionEvent, AwareDatetime, EventType, Plan, StationConfig
+
+logger = logging.getLogger(__name__)
+
+ALWAYS_ABSTAIN = 1e-9
 
 DECISION_STATUS = {
     "plan_approved": "approved",
@@ -35,12 +41,14 @@ class AgentService:
         guard: Guard,
         source: Source,
         clock: Callable[[], datetime] = _utcnow,
+        thresholds: Callable[[str], float | None] | None = None,
     ):
         self.station = station
         self.log = log
         self.guard = guard
         self.source = source
         self.clock = clock
+        self.thresholds = thresholds
         self._plans: dict[str, Plan] = {}
         self._retryable: set[str] = set()
         self._reviews: list[datetime] = []
@@ -69,6 +77,15 @@ class AgentService:
                     self._reviews.append(event.ts)
             elif event.event == "kill_switch":
                 self._kill = bool(detail.get("on"))
+
+    def _station_for_plan(self) -> StationConfig:
+        threshold = self.thresholds(self.station.pt_id) if self.thresholds else None
+        if threshold is None:
+            return self.station
+        if not math.isfinite(threshold) or threshold <= 0:
+            logger.warning("unusable threshold for %s: always abstaining", self.station.pt_id)
+            threshold = ALWAYS_ABSTAIN
+        return self.station.model_copy(update={"spread_threshold": threshold})
 
     def _emit(self, plan: Plan | None, event: EventType, actor: str, detail: dict) -> None:
         sha = hashlib.sha256(plan.model_dump_json().encode()).hexdigest()[:16] if plan else None
@@ -103,7 +120,7 @@ class AgentService:
             pt_id = self.station.pt_id
             forecast = self.source.forecast(pt_id, interval_start)
             grid_state = self.source.grid_state(pt_id, interval_start)
-            plan = make_plan(forecast, grid_state, self.station, interval_start)
+            plan = make_plan(forecast, grid_state, self._station_for_plan(), interval_start)
             existing = self._plans.get(plan.plan_id)
             if existing is not None and not (
                 existing.status == "rejected" and plan.plan_id in self._retryable

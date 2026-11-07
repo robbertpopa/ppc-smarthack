@@ -141,5 +141,7 @@ These are the Python entry points other people call. Signatures can be refined, 
 | P1 | `agent.plan(forecast, grid_state, config) -> plan` | Decision, with abstention and fallback |
 | P1 | `agent.execute(plan, user) -> action_event[]` | Applies an approved plan and logs it |
 
+**Abstention threshold from the model.** `AgentService` takes an optional `thresholds` callable, `pt_id -> float | None`. It is meant for P2's `threshold(pt_id)` (read from the model metadata). `None` keeps the station value (`spread_threshold`); a number replaces it for that plan; a value that cannot be used (zero, negative, NaN, minus infinity, the "no threshold met the target" answer) means always abstain, and is logged as a warning.
+
 ## Mocks
 `src/common/mocks/` contains one valid example of each object (the ones above). The first commit of the repository (gate G0) includes them. Anything that is not covered by the contract waits.
