@@ -17,6 +17,7 @@ STYLE = {
     "font.size": 9,
 }
 BLUE, ORANGE, GREY, RED = "#1f77b4", "#ff7f0e", "#8c8c8c", "#d62728"
+warnings.filterwarnings("ignore", message="The 'generic' unit", category=DeprecationWarning)
 NO_METADATA = {"Software": None}  # keep the PNG free of version stamps
 
 

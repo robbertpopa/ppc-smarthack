@@ -18,7 +18,7 @@ median clear day and the median cloudy day of the test period.
 import numpy as np
 import pandas as pd
 
-from src.eval import plots
+from src.eval import plots, robustness
 from src.eval.metrics import EPS, FIXED_SHARE, evaluate, export_by_interval
 from src.ml import features, train
 from src.ml.config import SYDNEY, violation_target
@@ -72,7 +72,7 @@ def day_types(labels: pd.DataFrame) -> tuple[pd.Series, pd.Series, float]:
     return kind, daily["ratio"], float(scale)
 
 
-def interval_frame(ctx: dict, result: dict) -> pd.DataFrame:
+def interval_frame(ctx: dict, result: dict, kind: pd.Series) -> pd.DataFrame:
     """One row per scored test interval with everything the breakdowns need."""
     scored = result["scored"]
     rows, index = scored["rows"], scored["index"]
@@ -96,7 +96,6 @@ def interval_frame(ctx: dict, result: dict) -> pd.DataFrame:
     df["season"] = [SEASONS[m] for m in local.month]
     binding = ctx["test_labels"].set_index("interval_start")["binding"].reindex(index)
     df["binding"] = binding.fillna("unknown").to_numpy()
-    kind, _, _ = day_types(ctx["labels"])
     df["day_type"] = kind.reindex(local.tz_localize(None).normalize()).fillna("unknown").to_numpy()
     surplus, kwp = ctx["surplus"], ctx["kwp"]
     if surplus is None:
@@ -268,8 +267,7 @@ TITLES = {
 }
 
 
-def _day_plots(df, ctx, out_dir, pt_id):
-    _, ratio, _ = day_types(ctx["labels"])
+def _day_plots(df, ratio, out_dir, pt_id):
     local_days = df.index.tz_convert(SYDNEY).tz_localize(None).normalize()
     shown = []
     for kind in ("clear", "cloudy"):
@@ -285,7 +283,8 @@ def _day_plots(df, ctx, out_dir, pt_id):
 
 def analyse(ctx: dict, result: dict, rows: dict, out_dir, pt_id: str) -> dict:
     """Write tables and plots for one station; return its report text and slide numbers."""
-    df = interval_frame(ctx, result)
+    kind, ratio, scale = day_types(ctx["labels"])  # once: it scans the whole label table
+    df = interval_frame(ctx, result, kind)
     tables = breakdowns(df)
     total = len(df)
     for name, table in tables.items():
@@ -297,8 +296,7 @@ def analyse(ctx: dict, result: dict, rows: dict, out_dir, pt_id: str) -> dict:
 
     plots.violation_by_hour(tables["hour"], out_dir / f"violation_by_hour_{pt_id}.png")
     plots.risk_coverage(result["risk_coverage"], out_dir / f"risk_coverage_{pt_id}.png")
-    shown = _day_plots(df, ctx, out_dir, pt_id)
-    scale = day_types(ctx["labels"])[2]
+    shown = _day_plots(df, ratio, out_dir, pt_id)
 
     md = [f"## {pt_id}", "", f"{total} daylight test intervals.", ""]
     md += [
@@ -320,6 +318,7 @@ def analyse(ctx: dict, result: dict, rows: dict, out_dir, pt_id: str) -> dict:
         "slides": slide_numbers(tables, rows, pt_id),
         "drift": result["drift"],
         "rows": rows,
+        "station": pt_id,
     }
 
 
@@ -364,30 +363,53 @@ def slide_numbers(tables: dict, rows: dict, pt_id: str) -> list[tuple]:
     if censored is not None:
         items.append(
             ("Violation rate with censored production", censored["violation_rate"], "table.csv",
-             "Model + fallback, censored production")
+             censored["label"])
         )  # fmt: skip
     return [
         (w, pt_id, fmt(float(v)), f, r) for w, v, f, r in items if v is not None and not np.isnan(v)
     ]
 
 
+NOTICEABLE = 0.0005  # 0.05 percentage points
+
+
+def robustness_sentence(rows: dict) -> str | None:
+    """Which input problem moves the violation rate most, from the robustness rows."""
+    found = {v: rows.get(f"robust_{v}") for v in robustness.VARIANTS}
+    found = {v: r for v, r in found.items() if r is not None}
+    if not found:
+        return None
+    worst = max(found, key=lambda v: abs(found[v]["delta_violation_rate"]))
+    row = found[worst]
+    delta = row["delta_violation_rate"]
+    if abs(delta) < NOTICEABLE:
+        return (
+            "No input problem tested (missing, noisy or censored readings) changes the "
+            "violation rate noticeably."
+        )
+    return (
+        f"The input problem that moves the violation rate most is {robustness.LABELS[worst]}: "
+        f"{delta * 100:+.2f} points against a run without corruption, with abstentions "
+        f"changing by {row['delta_abstain_rate'] * 100:+.1f} points."
+    )
+
+
 def limits(sections: list[dict]) -> list[str]:
-    drift = sections[0]["drift"]
     lines = [
         "The labels come from a simulated low-voltage grid, not from measured network states.",
         "The grid is a German SimBench network driven by Australian household profiles.",
-        f"Calibration drifts: the violation rate was {fmt(drift['validation'])} on validation and "
-        f"{fmt(drift['test'])} on test.",
         f"The violation target ({violation_target()}) and the crew budget are proposals that "
         "the team has not confirmed.",
     ]
-    censored = sections[0]["rows"].get("robust_censored")
-    if censored is not None:
+    for section in sections:
+        drift, station = section["drift"], section["station"]
         lines.append(
-            "Censored production is the weak spot: when the meter only shows what the fixed "
-            f"limit let through, violations change by "
-            f"{censored['delta_violation_rate'] * 100:+.2f} points."
+            f"{station}: calibration drifts, the violation rate was {fmt(drift['validation'])} "
+            f"on validation and {fmt(drift['test'])} on test."
         )
+        sentence = robustness_sentence(section["rows"])
+        if sentence:
+            lines.append(f"{station}: {sentence}")
     return lines
 
 

@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 
 from src.eval.metrics import FIXED_SHARE, evaluate
-from src.ml import abstention, features
+from src.ml import features
 
 VARIANTS = ("missing_20", "noise_30", "censored")
 LABELS = {
@@ -121,12 +121,8 @@ def corrupted_labels(
     return out
 
 
-def _flag_share(X: pd.DataFrame) -> float:
-    return float(np.mean([bool(abstention.quality_flags(r)) for r in X.to_dict("records")]))
-
-
 def run_variants(ctx: dict, clean: dict, seed: int = 0) -> dict:
-    """Rows for every variant, with the change against the clean model in the label.
+    """Rows for every variant, with the change against a no-corruption control in the label.
 
     Returns ``{"rows": {key: metrics}, "notes": {...}}`` or no rows when the per-house
     profiles are not available.
@@ -139,24 +135,45 @@ def run_variants(ctx: dict, clean: dict, seed: int = 0) -> dict:
             "rows": {},
             "notes": {"skipped": "no profiles.parquet, robustness needs per-house readings"},
         }
-    base = clean["rows"]["model_fallback"]
+    clean_row = clean["rows"]["model_fallback"]
     data = readings(ctx["profiles"], ctx["houses"])
     rows, notes = {}, {"net_only": True}
     test, surplus, kwp = ctx["test_labels"], ctx["surplus"], ctx["kwp"]
     clean_flagged = float(clean["scored"]["flagged"].mean())
-    for variant in VARIANTS:
-        labels = corrupted_labels(ctx["labels"], corrupt(data, variant, seed), ctx["houses"])
-        scored = score_model(ctx, labels)
+
+    def score(table):
+        scored = score_model(ctx, corrupted_labels(ctx["labels"], table, ctx["houses"]))
         metrics = evaluate(scored["fallback"], test, surplus, kwp, abstain=scored["abstain"])
-        delta = {
+        return metrics, float(scored["flagged"].mean())
+
+    def deltas(metrics, base):
+        return {
             "delta_violation_rate": metrics["violation_rate"] - base["violation_rate"],
             "delta_export_index": metrics["export_index"] - base["export_index"],
             "delta_abstain_rate": metrics["abstain_rate"] - base["abstain_rate"],
         }
+
+    # Control: rebuild the totals from the readings without corrupting them. It should equal
+    # the clean row; if it does not, the rebuild differs from the label file's own totals and
+    # every variant below would contain that difference too, so deltas are taken against it.
+    control, _ = score(data)
+    gap = deltas(control, clean_row)
+    rows["robust_control"] = {
+        **control,
+        **gap,
+        "label": "Model + fallback, totals rebuilt from readings, not corrupted (control)",
+    }
+    notes["control_vs_clean"] = gap
+    for variant in VARIANTS:
+        metrics, flagged_share = score(corrupt(data, variant, seed))
+        delta = deltas(metrics, control)
         d_viol, d_abst = delta["delta_violation_rate"] * 100, delta["delta_abstain_rate"] * 100
-        note = f"violations {d_viol:+.2f} pt, abstentions {d_abst:+.1f} pt"
-        key = f"robust_{variant}"
-        rows[key] = {**metrics, **delta, "label": f"Model + fallback, {LABELS[variant]} ({note})"}
-        extra_flagged = _flag_share(scored["X"]) - clean_flagged
-        notes[variant] = {"extra_flagged_by_input_checks": float(extra_flagged), **delta}
+        note = f"violations {d_viol:+.2f} pt, abstentions {d_abst:+.1f} pt vs control"
+        rows[f"robust_{variant}"] = {
+            **metrics,
+            **delta,
+            "label": f"Model + fallback, {LABELS[variant]} ({note})",
+        }
+        extra = flagged_share - clean_flagged
+        notes[variant] = {"extra_flagged_by_input_checks": float(extra), **delta}
     return {"rows": rows, "notes": notes}

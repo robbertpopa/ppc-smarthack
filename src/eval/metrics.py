@@ -46,29 +46,25 @@ def surplus_kw(profiles: pd.DataFrame, station_houses: pd.DataFrame) -> pd.DataF
     return wide.sort_index()
 
 
-def exported_kwh(share: pd.Series, surplus: pd.DataFrame, kwp: pd.Series) -> float:
-    """``sum over T and houses of min(surplus, share_T * kwp_h) * 0.5 h``.
+def export_by_interval(share: pd.Series, surplus: pd.DataFrame, kwp: pd.Series) -> pd.Series:
+    """Exported energy (kWh) of a policy in each interval.
 
-    ``share`` is indexed by interval start. Intervals with a missing surplus or share add
-    nothing; every policy is scored on the same intervals, so the comparison stays fair.
+    ``sum over houses of min(surplus, share_T * kwp_h) * 0.5 h``. ``share`` is indexed by
+    interval start. Intervals with a missing surplus or share add nothing; every policy is
+    scored on the same intervals, so the comparison stays fair.
     """
     intervals = share.index.intersection(surplus.index)
     kwp = kwp.reindex(surplus.columns)
     if kwp.isna().any():
         raise ValueError(f"kwp is missing for houses {list(kwp.index[kwp.isna()])}")
     cap = share.loc[intervals].to_numpy()[:, None] * kwp.to_numpy()[None, :]
-    exported = np.minimum(surplus.loc[intervals].to_numpy(), cap)
-    return float(np.nansum(exported)) * STEP_HOURS
+    exported = np.nansum(np.minimum(surplus.loc[intervals].to_numpy(), cap), axis=1)
+    return pd.Series(exported * STEP_HOURS, index=intervals)
 
 
-def export_by_interval(share: pd.Series, surplus: pd.DataFrame, kwp: pd.Series) -> pd.Series:
-    """Exported energy (kWh) of a policy in each interval; same rule as ``exported_kwh``."""
-    intervals = share.index.intersection(surplus.index)
-    cap = (
-        share.loc[intervals].to_numpy()[:, None] * kwp.reindex(surplus.columns).to_numpy()[None, :]
-    )
-    exported = np.nansum(np.minimum(surplus.loc[intervals].to_numpy(), cap), axis=1) * STEP_HOURS
-    return pd.Series(exported, index=intervals)
+def exported_kwh(share: pd.Series, surplus: pd.DataFrame, kwp: pd.Series) -> float:
+    """Total of ``export_by_interval`` (one body, one place for the checks)."""
+    return float(export_by_interval(share, surplus, kwp).sum())
 
 
 def evaluate(
@@ -77,6 +73,7 @@ def evaluate(
     surplus: pd.DataFrame | None,
     kwp: pd.Series | None,
     abstain: pd.Series | None = None,
+    reference_kwh: float | None = None,
 ) -> dict:
     """Score a policy of one station on its daylight intervals with a known safe share.
 
@@ -84,7 +81,9 @@ def evaluate(
     abstained), indexed by ``interval_start``. ``abstain`` is a boolean series with the same
     index, used only for the abstention numbers. Intervals with a null ``safe_share`` are
     left out and counted in ``n_null_label``. Without ``surplus`` the export numbers are NaN
-    and only the violation and abstention numbers are filled.
+    and only the violation and abstention numbers are filled. ``reference_kwh`` is the
+    export of the fixed limit on the same intervals; pass it back from an earlier call on the
+    same rows to avoid recomputing it.
     """
     lab = labels.set_index("interval_start")
     if not lab.index.is_unique:
@@ -103,12 +102,15 @@ def evaluate(
         exported = reference = float("nan")
     else:
         exported = exported_kwh(applied, surplus, kwp)
-        reference = exported_kwh(pd.Series(FIXED_SHARE, index=scored), surplus, kwp)
+        reference = reference_kwh
+        if reference is None:
+            reference = exported_kwh(pd.Series(FIXED_SHARE, index=scored), surplus, kwp)
     violations = int((applied > safe + EPS).sum())
     result = {
         "n_intervals": len(scored),
         "n_null_label": int((day & ~known).sum()),
         "exported_kwh": exported,
+        "reference_kwh": reference,
         "export_index": 100 * exported / reference if reference > 0 else float("nan"),
         "violation_rate": violations / len(scored) if len(scored) else float("nan"),
         "n_violations": violations,

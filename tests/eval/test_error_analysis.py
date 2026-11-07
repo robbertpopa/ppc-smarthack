@@ -159,3 +159,35 @@ def test_plots_are_written_without_version_metadata(tmp_path):
     assert (tmp_path / "a.png").read_bytes() == (tmp_path / "b.png").read_bytes()
     assert b"matplotlib" not in (tmp_path / "a.png").read_bytes()
     assert np.isfinite(0)
+
+
+def test_a_missing_report_extra_is_explained(monkeypatch):
+    monkeypatch.setitem(__import__("sys").modules, "matplotlib", None)  # as if not installed
+    with pytest.raises(SystemExit, match="pip install"):
+        eval_run._require_report_extra()
+
+
+def test_the_findings_come_from_the_robustness_rows():
+    base = {"delta_abstain_rate": 0.02}
+    rows = {
+        "robust_missing_20": {**base, "delta_violation_rate": 0.0001},
+        "robust_noise_30": {**base, "delta_violation_rate": -0.004},
+        "robust_censored": {**base, "delta_violation_rate": 0.002},
+    }
+    text = error_analysis.robustness_sentence(rows)
+    assert "noisy" in text or "noise" in text  # the largest change, even though it is negative
+    assert "-0.40 points" in text
+    quiet = {k: {**v, "delta_violation_rate": 0.0} for k, v in rows.items()}
+    assert "noticeably" in error_analysis.robustness_sentence(quiet)
+    assert error_analysis.robustness_sentence({}) is None
+
+
+def test_limits_cover_every_station():
+    section = {
+        "drift": {"validation": 0.02, "test": 0.03},
+        "rows": {},
+        "station": "PT-A",
+    }
+    other = {**section, "station": "PT-B", "drift": {"validation": 0.01, "test": 0.05}}
+    lines = "\n".join(error_analysis.limits([section, other]))
+    assert "PT-A" in lines and "PT-B" in lines and "0.0500" in lines
