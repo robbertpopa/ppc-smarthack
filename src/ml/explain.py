@@ -119,11 +119,17 @@ def load_artifacts(out) -> dict:
             f"no explanation data in {out}: retrain with `python -m src.ml.train`"
         )
     ref = json.loads((out / "explain_reference.json").read_text())
+    index = pd.read_parquet(out / "explain_index.parquet")
+    if "in_sample" not in index.columns:  # written by an older version of the code
+        raise ValueError(
+            f"the explanation data in {out} is from an older version: retrain with "
+            "`python -m src.ml.train`"
+        )
     return {
         "importance": pd.read_csv(out / "importance.csv"),
         "reference": {int(k): v for k, v in ref["reference"].items()},
         "overall": ref["overall"],
-        "index": pd.read_parquet(out / "explain_index.parquet"),
+        "index": index,
     }
 
 

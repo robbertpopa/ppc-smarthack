@@ -103,12 +103,20 @@ def stamp(folder) -> int | None:
         return None
 
 
+# Failures that stay the same until the model is retrained: no model, or a model that does
+# not fit the code. Anything else (a read error, memory) may be temporary and is not kept.
+_DETERMINISTIC = (FileNotFoundError, ValueError)
+
+
 def cached(name: str, folder, loader: Callable[[Path], object]):
     """``loader(folder)`` once per folder and training, including "there is no model".
 
     The cache entry is tied to the modification time of ``metadata.json``, so a model
     retrained into the same folder is picked up by a long-running process, and a missing
-    model costs one ``stat`` per call instead of repeated file checks.
+    model costs one ``stat`` per call instead of repeated file checks. Only deterministic
+    failures are remembered, and as a type and arguments: a fresh exception is raised on
+    every call, so no traceback is kept alive or grows. Temporary errors are raised and
+    tried again on the next call.
     """
     folder = Path(folder)
     key, current = (name, str(folder)), stamp(folder)
@@ -116,12 +124,13 @@ def cached(name: str, folder, loader: Callable[[Path], object]):
     if hit is None or hit[0] != current:
         try:
             hit = (current, (True, loader(folder)))
-        except Exception as error:  # remembered too: a broken folder fails fast until retrained
-            hit = (current, (False, error))
+        except _DETERMINISTIC as error:
+            hit = (current, (False, (type(error), error.args)))
         _caches[key] = hit
     ok, value = hit[1]
     if not ok:
-        raise value
+        error_type, args = value
+        raise error_type(*args) from None
     return value
 
 

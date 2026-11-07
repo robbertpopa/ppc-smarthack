@@ -24,9 +24,13 @@ def model_version() -> str:
     return os.environ.get("MODEL_VERSION", DEFAULT_MODEL_VERSION)
 
 
+_warned: set[tuple[str, int | None]] = set()
+
+
 def clear_cache() -> None:
     """Forget every loaded model (this module's, the PV and load models, the explanations)."""
     model_io.clear_caches()
+    _warned.clear()
 
 
 def _load(version: str, pt_id: str):
@@ -55,7 +59,9 @@ def _pv_load(features: dict) -> dict:
     """PV and load bands from the second model if it exists; the safe cap never needs it.
 
     No second model yet is normal and silent. Any other problem with it (an older folder,
-    a missing file) is logged and must not stop the safe-cap forecast.
+    a missing file, even a bug) must not stop the safe-cap forecast, so it is logged and the
+    bands are left out. It is logged once per training of that folder, not on every call,
+    and with its traceback when it is not one of the expected kinds.
     """
     from src.ml import forecast_pv_load
 
@@ -64,7 +70,12 @@ def _pv_load(features: dict) -> dict:
     except FileNotFoundError:
         return {}
     except Exception as exc:
-        logger.warning("no PV and load forecast: %r", exc)
+        folder = model_io.model_dir(forecast_pv_load.MODEL_VERSION, str(features.get("pt_id")))
+        key = (str(folder), model_io.stamp(folder))
+        if key not in _warned:
+            _warned.add(key)
+            expected = isinstance(exc, (ValueError, OSError))
+            logger.warning("no PV and load forecast: %r", exc, exc_info=not expected)
         return {}
 
 

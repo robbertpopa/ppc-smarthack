@@ -99,3 +99,42 @@ def test_an_incomplete_model_folder_does_not_break_the_safe_cap(env, report, mon
     finally:
         (folder / "gone.joblib").rename(folder / "pv_h60_q10.joblib")
         predict_module.clear_cache()
+
+
+def test_a_broken_pv_load_folder_is_logged_once_not_on_every_call(env, report, caplog):
+    import logging
+
+    from src.ml import model_io
+
+    train.train("A", grid=[SMALL])
+    predict_module.clear_cache()
+    folder = model_io.model_dir(forecast_pv_load.MODEL_VERSION, "PT-A")
+    (folder / "pv_h60_q10.joblib").rename(folder / "gone.joblib")
+    try:
+        with caplog.at_level(logging.WARNING, logger="src.ml.predict"):
+            for _ in range(5):
+                assert predict_function(at(env, 1, 60)).pv_kw is None
+        warnings_logged = [r for r in caplog.records if "PV and load" in r.getMessage()]
+        assert len(warnings_logged) == 1
+    finally:
+        (folder / "gone.joblib").rename(folder / "pv_h60_q10.joblib")
+        predict_module.clear_cache()
+
+
+def test_an_unexpected_bug_there_is_logged_with_its_traceback_and_still_answers(
+    env, report, caplog, monkeypatch
+):
+    import logging
+
+    train.train("A", grid=[SMALL])
+    predict_module.clear_cache()
+
+    def boom(feats, horizon):
+        raise KeyError("kwp_total")  # e.g. an older folder without a field
+
+    monkeypatch.setattr(forecast_pv_load, "predict_pv_load", boom)
+    with caplog.at_level(logging.WARNING, logger="src.ml.predict"):
+        forecast = predict_function(at(env, 1, 60))
+    assert isinstance(forecast, Forecast) and forecast.pv_kw is None
+    record = next(r for r in caplog.records if "PV and load" in r.getMessage())
+    assert record.exc_info is not None  # a bug is not reduced to a one-line warning

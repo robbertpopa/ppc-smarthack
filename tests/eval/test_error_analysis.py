@@ -191,3 +191,13 @@ def test_limits_cover_every_station():
     other = {**section, "station": "PT-B", "drift": {"validation": 0.01, "test": 0.05}}
     lines = "\n".join(error_analysis.limits([section, other]))
     assert "PT-A" in lines and "PT-B" in lines and "0.0500" in lines
+
+
+def test_the_plot_warning_filter_is_not_process_wide(tmp_path):
+    import warnings
+
+    marker = "The 'generic' unit"
+    assert not any(marker in (f[1].pattern if f[1] is not None else "") for f in warnings.filters)
+    curve = pd.DataFrame({"coverage": [0.1, 1.0], "risk": [0.0, 0.05]})
+    plots.risk_coverage(curve, tmp_path / "x.png")
+    assert not any(marker in (f[1].pattern if f[1] is not None else "") for f in warnings.filters)

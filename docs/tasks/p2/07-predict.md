@@ -52,4 +52,4 @@ def predict(features: dict, horizon_min: int = 60) -> Forecast: ...
 - Feature order: always from `FEATURES`, never from dict order.
 
 ## Hand-off
-"P2-07 merged: `from src.ml import predict`; returns contract `forecast`. P1 can switch the planner off the mock. Model path: `ARTIFACT_URI/models/<MODEL_VERSION>/<pt_id>/`."
+"P2-07 merged: `from src.ml.predict import predict`; returns contract `forecast`. P1 can switch the planner off the mock. Model path: `ARTIFACT_URI/models/<MODEL_VERSION>/<pt_id>/`."

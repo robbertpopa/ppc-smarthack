@@ -143,3 +143,13 @@ def test_explain_requires_identity(trained):
 
 def test_labels_cover_every_feature():
     assert set(explain_module.LABELS) == set(features.FEATURES)
+
+
+def test_explanation_data_from_an_older_version_asks_for_a_retrain(tmp_path, toy):
+    art = dict(toy[1])
+    art["index"] = art["index"].drop(columns="in_sample")  # as written before in_sample existed
+    explain_module.save_artifacts(art, tmp_path)
+    with pytest.raises(ValueError, match="older version: retrain"):
+        explain_module.load_artifacts(tmp_path)
+    explain_module.save_artifacts(toy[1], tmp_path)  # current data loads fine
+    assert "in_sample" in explain_module.load_artifacts(tmp_path)["index"].columns

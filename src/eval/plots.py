@@ -1,5 +1,6 @@
 """PNG plots for the error analysis, in one fixed style."""
 
+import functools
 import warnings
 
 import matplotlib
@@ -17,18 +18,34 @@ STYLE = {
     "font.size": 9,
 }
 BLUE, ORANGE, GREY, RED = "#1f77b4", "#ff7f0e", "#8c8c8c", "#d62728"
-warnings.filterwarnings("ignore", message="The 'generic' unit", category=DeprecationWarning)
 NO_METADATA = {"Software": None}  # keep the PNG free of version stamps
 
 
+def _quiet(function):
+    """Silence one known NumPy deprecation raised inside matplotlib's date axis.
+
+    The filter is narrow (that message only) and lives only while a plot is drawn, so it
+    cannot hide the same warning in other code or after a dependency is upgraded.
+    """
+
+    @functools.wraps(function)
+    def wrapper(*args, **kwargs):
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore", message="The 'generic' unit", category=DeprecationWarning
+            )
+            return function(*args, **kwargs)
+
+    return wrapper
+
+
 def _save(fig, path) -> None:
-    with warnings.catch_warnings():  # matplotlib's date axis trips a NumPy deprecation
-        warnings.simplefilter("ignore", DeprecationWarning)
-        fig.tight_layout()
-        fig.savefig(path, metadata=NO_METADATA)
+    fig.tight_layout()
+    fig.savefig(path, metadata=NO_METADATA)
     plt.close(fig)
 
 
+@_quiet
 def violation_by_hour(table, path) -> None:
     """Bars of the violation rate per local hour; hours that touch sunrise or sunset in grey."""
     with plt.rc_context(STYLE):
@@ -41,6 +58,7 @@ def violation_by_hour(table, path) -> None:
         _save(fig, path)
 
 
+@_quiet
 def band_vs_realised(day, title, path) -> None:
     """Predicted q05-q90 band against the realised safe share over one day."""
     with plt.rc_context(STYLE):
@@ -60,6 +78,7 @@ def band_vs_realised(day, title, path) -> None:
         _save(fig, path)
 
 
+@_quiet
 def risk_coverage(curve, path) -> None:
     """Risk (violations among confident cases) against coverage (share not sent to a person)."""
     with plt.rc_context(STYLE):

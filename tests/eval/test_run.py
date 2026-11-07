@@ -243,3 +243,27 @@ def test_scoring_with_the_short_look_back_gives_the_same_rows(env, first):
     for name in features.FEATURES:
         a, b = merged[f"{name}_short"], merged[f"{name}_full"]
         assert ((a == b) | (a.isna() & b.isna())).all(), name
+
+
+def test_the_control_is_not_scored_again_when_the_rebuilt_totals_are_the_label_totals(
+    env, monkeypatch
+):
+    from src.eval import robustness
+
+    ctx = eval_run._prepare("A", "ctx", True, False, FAST)
+    clean = eval_run.policies(ctx)
+    calls = []
+    real = eval_run.score_model
+    monkeypatch.setattr(eval_run, "score_model", lambda c, lab: calls.append(1) or real(c, lab))
+    out = robustness.run_variants(ctx, clean)
+    assert len(calls) == 3 and out["notes"]["control_rescored"] is False  # the variants only
+    assert (
+        out["rows"]["robust_control"]["violation_rate"]
+        == clean["rows"]["model_fallback"]["violation_rate"]
+    )
+
+    # if the rebuild really differs, the control is scored and the deltas are taken against it
+    ctx["profiles"] = ctx["profiles"].assign(gg_kw=ctx["profiles"]["gg_kw"] * 1.2)
+    calls.clear()
+    out = robustness.run_variants(ctx, clean)
+    assert len(calls) == 4 and out["notes"]["control_rescored"] is True

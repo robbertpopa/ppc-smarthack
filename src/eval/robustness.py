@@ -153,10 +153,20 @@ def run_variants(ctx: dict, clean: dict, seed: int = 0) -> dict:
             "delta_abstain_rate": metrics["abstain_rate"] - base["abstain_rate"],
         }
 
-    # Control: rebuild the totals from the readings without corrupting them. It should equal
-    # the clean row; if it does not, the rebuild differs from the label file's own totals and
-    # every variant below would contain that difference too, so deltas are taken against it.
-    control, _ = score(data)
+    # Control: rebuild the totals from the readings without corrupting them. When they equal
+    # the label file's own totals (the normal case) the control IS the clean row, so nothing
+    # is scored again. Only if the rebuild differs (other scaling, daylight-saving hours) is
+    # the control scored, and the deltas below are then taken against it, so they do not
+    # contain the rebuild difference.
+    rebuilt = corrupted_labels(ctx["labels"], data, ctx["houses"])
+    same_totals = all(
+        np.allclose(rebuilt[c], ctx["labels"][c], atol=1e-9, equal_nan=True)
+        for c in ("load_kw", "pv_kw", "net_kw")
+    )
+    if same_totals:
+        control, notes["control_rescored"] = clean_row, False
+    else:
+        control, notes["control_rescored"] = score(data)[0], True
     gap = deltas(control, clean_row)
     rows["robust_control"] = {
         **control,

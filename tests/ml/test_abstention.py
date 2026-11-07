@@ -225,3 +225,47 @@ def test_extra_files_are_swapped_in_together_with_the_models(tmp_path):
         "quantiles": [0.05]
     }  # old set intact
     assert (out / "x.csv").read_text() == "1"
+
+
+def test_a_remembered_failure_raises_a_fresh_exception_and_does_not_leak(tmp_path):
+    model_io.clear_caches()
+    folder = tmp_path / "none"
+
+    def loader(path):
+        raise FileNotFoundError(f"no model at {path}")
+
+    errors = []
+    for _ in range(300):
+        try:
+            model_io.cached("t", folder, loader)
+        except FileNotFoundError as error:
+            errors.append(error)
+    assert len({id(e) for e in errors}) == len(errors)  # a new object every time
+    depth = [len(__import__("traceback").extract_tb(e.__traceback__)) for e in errors]
+    assert max(depth) == min(depth) <= 3  # the traceback does not grow with the number of calls
+    assert str(errors[0]) == str(errors[-1])
+
+
+def test_only_deterministic_failures_are_remembered(tmp_path):
+    model_io.clear_caches()
+    calls = []
+
+    def temporary(path):
+        calls.append(1)
+        raise OSError("disk hiccup")
+
+    for _ in range(3):
+        with pytest.raises(OSError):
+            model_io.cached("temp", tmp_path, temporary)
+    assert len(calls) == 3  # tried again every time
+
+    broken = []
+
+    def stale(path):
+        broken.append(1)
+        raise ValueError("trained on other features")
+
+    for _ in range(3):
+        with pytest.raises(ValueError, match="other features"):
+            model_io.cached("stale", tmp_path, stale)
+    assert len(broken) == 1  # remembered until the model is retrained
