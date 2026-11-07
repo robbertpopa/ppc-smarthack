@@ -48,6 +48,18 @@ API_URL=http://127.0.0.1:8000 python -m uvicorn src.ui.app:app --port 8001
 ```
 Open http://127.0.0.1:8001 (operator screen). The API uses mock forecasts and the real grid guard; its documentation is at http://127.0.0.1:8000/docs.
 
+**With the neighbourhood map (three neighbourhoods, 45 houses).** Needs a customer table with coordinates (`Customer, Generator Capacity, Postcode, lat, lon, localities`; keep it in `data/`, which git ignores). Build the map data once, then start the API with that station:
+```bash
+python -m src.ui.geo_build --customers data/p4/customers.csv --out artifacts
+```
+```bash
+STATION_FILE=artifacts/station/demo_station.json python -m uvicorn src.grid.demo_api:app --port 8000
+```
+```bash
+API_URL=http://127.0.0.1:8000 ARTIFACT_URI=artifacts python -m uvicorn src.ui.app:app --port 8001
+```
+On Windows PowerShell set the variables first (`$env:STATION_FILE = "artifacts/station/demo_station.json"`). Open the **Houses** tab. The positions are postcode centroids with small offsets, not addresses, and the grid behind the map is synthetic; how the three neighbourhoods are chosen and what the map does is in [src/ui/static/map/README.md](src/ui/static/map/README.md). The map loads its tiles from openstreetmap.org, so it needs a network; without one the houses and neighbourhoods still show on an empty background.
+
 ### 5. Data
 ```bash
 python -m src.ml.data download

@@ -74,7 +74,17 @@ h2.h{font-size:.78rem;font-weight:600;letter-spacing:.05em;text-transform:upperc
 .hrow .bar{flex:1;height:4px;border-radius:99px;background:var(--line);min-width:40px}.hrow .bar i{display:block;height:100%;border-radius:99px;background:var(--ink)}
 .hrow .note{width:108px;text-align:right;font-size:.8rem;color:var(--muted)}
 .mapbox{min-height:360px;border:1px dashed var(--line2);border-radius:10px;position:relative;overflow:hidden}
-.mapbox.live{border-style:solid;height:440px}
+.mapbox.live{border-style:solid;height:520px}
+.hgrid{display:flex;flex-wrap:wrap;gap:28px 40px;align-items:flex-start}
+.hgrid .mapcol{flex:1.7 1 520px;min-width:0}
+.hgrid .hlist{flex:1 1 340px;min-width:0;max-height:600px;overflow:auto}
+details.grp{border-top:1px solid var(--line)}
+details.grp summary{cursor:pointer;list-style:none;display:flex;flex-wrap:wrap;gap:2px 14px;align-items:baseline;padding:12px 4px;min-height:48px}
+details.grp summary::-webkit-details-marker{display:none}
+details.grp summary::before{content:"▸";color:var(--muted);width:1ch}
+details.grp[open] summary::before{content:"▾"}
+details.grp summary b{font-weight:600}
+details.grp .gs{color:var(--muted);font-size:.85rem}
 .mapempty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;padding:24px}
 .mapnote{font-size:.8rem;color:var(--revtext);margin-top:8px}
 ol.tree{list-style:none;margin:0;padding:0}
@@ -184,16 +194,16 @@ a{color:var(--ink)}
   </nav>
 
   <section class="panel" id="p-houses" role="tabpanel" aria-labelledby="tab-houses">
-    <div class="two">
-      <div class="list" id="houses" aria-label="Limit per house"></div>
-      <div>
+    <div class="hgrid">
+      <div class="mapcol">
         <div class="mapbox" id="mapBox">
           <div class="mapempty" id="mapEmpty"><b style="font-weight:500">Neighbourhood map</b><span class="sub" style="max-width:290px">The slot is ready. The map appears here when the map module is added. The grid behind it is synthetic.</span></div>
           <div id="mapHost" style="position:absolute;inset:0"></div>
         </div>
-        <p class="mapnote" id="mapNote" hidden>Illustrative layout. The grid behind this map is synthetic, not PPC's network.</p>
+        <p class="mapnote" id="mapNote" hidden>Illustrative layout. Positions are postcode centroids with small offsets, not addresses, and the grid behind this map is synthetic, not PPC's network.</p>
         <p class="sub" id="houseDetail" style="margin-top:10px;color:var(--ink);font-weight:500"></p>
       </div>
+      <div class="hlist list" id="houses" aria-label="Limit per house"></div>
     </div>
   </section>
 
@@ -241,7 +251,7 @@ a{color:var(--ink)}
 "use strict";
 const $ = id => document.getElementById(id);
 const state = {station: null, plan: null, plans: [], fc: null, kill: false, busy: false, selected: null, geo: null, insight: null, insightFor: null,
-  allowed: {approve: false, reject: false, execute: false}};
+  groups: [], groupOf: {}, openGroups: new Set(), allowed: {approve: false, reject: false, execute: false}};
 let gen = 0; // generation of the latest refresh: results of older ones are dropped
 const pct = v => v == null ? "—" : (v * 100).toFixed(0) + "%";
 const num = (v, d = 1, unit = "") => v == null ? "—" : Number(v).toFixed(d) + unit;
@@ -369,31 +379,56 @@ function houseView(plan) {
   const blocked = plan && plan.guard && !plan.guard.passed;
   return state.station.houses.map(h => {
     const l = byId[h.house_id], cap = h.contract_cap_kw ?? null;
-    if (!l) return {id: h.house_id, kwp: h.kwp, contract_cap_kw: cap, limit_kw: null, share: null, status: "none", capped: false};
+    const group = state.groupOf[h.house_id] ? state.groupOf[h.house_id].id : null;
+    if (!l) return {id: h.house_id, kwp: h.kwp, contract_cap_kw: cap, limit_kw: null, share: null, status: "none", capped: false, group};
     const capped = cap != null && l.export_limit_kw >= cap - 1e-9;
     return {id: h.house_id, kwp: h.kwp, contract_cap_kw: cap, limit_kw: l.export_limit_kw, share: l.export_limit_kw / h.kwp,
-      status: blocked ? "blocked" : (plan.abstain || capped) ? "review" : "ok", capped};
+      status: blocked ? "blocked" : (plan.abstain || capped) ? "review" : "ok", capped, group};
   });
 }
 const HDOT = {ok: "ok", review: "rev", blocked: "bad", none: "off"};
 const HWORD = {ok: "model limit", review: "fixed limit", blocked: "blocked by the guard", none: "no limit yet"};
 
+function houseRow(h) {
+  const b = el("button", null, "hrow"); b.type = "button"; b.setAttribute("aria-pressed", String(state.selected === h.id));
+  b.setAttribute("aria-label", "House " + h.id + ", " + (h.limit_kw == null ? "no limit yet" : num(h.limit_kw, 2) + " kilowatts, " + (h.capped ? "contract cap" : HWORD[h.status])));
+  const d = el("i", null, "dot"); setDot(d, HDOT[h.status]);
+  const bar = el("span", null, "bar"); const i = el("i"); i.style.width = Math.min((h.share || 0) * 100, 100) + "%"; bar.append(i);
+  b.append(d, el("span", h.id, "id"), el("span", h.limit_kw == null ? "—" : num(h.limit_kw, 2) + " kW", "lim"), bar,
+    el("span", h.capped ? "contract cap" : h.share == null ? h.kwp + " kWp" : pct(h.share) + " of " + h.kwp + " kWp", "note"));
+  b.onclick = () => selectHouse(state.selected === h.id ? null : h.id);
+  return b;
+}
+
+// With neighbourhoods (from the map geometry) the houses are grouped, one collapsible block each.
+// Without them the list is flat, as for the small mock station.
 function renderHouses(view) {
   const box = $("houses"); box.replaceChildren();
-  view.forEach(h => {
-    const b = el("button", null, "hrow"); b.type = "button"; b.setAttribute("aria-pressed", String(state.selected === h.id));
-    b.setAttribute("aria-label", h.id + ", " + (h.limit_kw == null ? "no limit yet" : num(h.limit_kw, 2) + " kilowatts, " + (h.capped ? "contract cap" : HWORD[h.status])));
-    const d = el("i", null, "dot"); setDot(d, HDOT[h.status]);
-    const bar = el("span", null, "bar"); const i = el("i"); i.style.width = Math.min((h.share || 0) * 100, 100) + "%"; bar.append(i);
-    b.append(d, el("span", h.id, "id"), el("span", h.limit_kw == null ? "—" : num(h.limit_kw, 2) + " kW", "lim"), bar,
-      el("span", h.capped ? "contract cap" : h.share == null ? h.kwp + " kWp" : pct(h.share) + " of " + h.kwp + " kWp", "note"));
-    b.onclick = () => selectHouse(state.selected === h.id ? null : h.id);
-    box.append(b);
-  });
+  const known = state.groups.filter(g => view.some(h => h.group === g.id));
+  if (!known.length) view.forEach(h => box.append(houseRow(h)));
+  else {
+    const blocks = known.map(g => ({id: g.id, name: g.name, items: view.filter(h => h.group === g.id)}));
+    const rest = view.filter(h => !known.some(g => g.id === h.group));
+    if (rest.length) blocks.push({id: "_other", name: "Other houses", items: rest});
+    blocks.forEach(g => {
+      const d = el("details", null, "grp"); d.open = state.openGroups.has(g.id);
+      const sum = el("summary"); const count = s => g.items.filter(h => h.status === s).length;
+      const parts = [["ok", "✓", "model limit"], ["review", "!", "fixed limit"], ["blocked", "×", "blocked"]].filter(p => count(p[0])).map(p => count(p[0]) + " " + p[1]);
+      sum.append(el("b", g.name), el("span", g.items.length + " houses · " + g.items.reduce((a, h) => a + h.kwp, 0).toFixed(1) + " kWp" + (parts.length ? " · " + parts.join("  ") : ""), "gs"));
+      sum.addEventListener("click", () => {
+        if (d.open) state.openGroups.delete(g.id); else { state.openGroups.add(g.id); const m = mapApi(); if (m && m.focus && g.id !== "_other") { try { m.focus(g.id); } catch (_) { /* the map must not break the list */ } } }
+      });
+      d.append(sum); g.items.forEach(h => d.append(houseRow(h))); box.append(d);
+    });
+  }
   const sel = view.find(h => h.id === state.selected);
-  $("houseDetail").textContent = sel ? sel.id + " · " + sel.kwp + " kWp" + (sel.contract_cap_kw != null ? " · contract cap " + sel.contract_cap_kw + " kW" : "") : "";
+  $("houseDetail").textContent = sel ? "House " + sel.id + " · " + sel.kwp + " kWp" + (state.groupOf[sel.id] ? " · " + state.groupOf[sel.id].name : "") + (sel.contract_cap_kw != null ? " · contract cap " + sel.contract_cap_kw + " kW" : "") : "";
 }
-function selectHouse(id) { state.selected = id; renderHouses(houseView(state.plan)); syncMap(); }
+function selectHouse(id) {
+  state.selected = id;
+  if (id && state.groupOf[id]) state.openGroups.add(state.groupOf[id].id);
+  renderHouses(houseView(state.plan)); syncMap();
+}
 
 function renderVerdict() {
   const p = state.plan, st = state.station, kind = planKind(p), fixed = pct(st.static_share);
@@ -703,7 +738,7 @@ let mapMounted = false;
 
 function mapViewModel() {
   return {pt_id: state.station && state.station.pt_id, interval_start: intervalStart(), selected: state.selected, kill_switch: state.kill,
-    houses: state.station ? houseView(state.plan) : []};
+    groups: state.groups, houses: state.station ? houseView(state.plan) : []};
 }
 function syncMap(shown) {
   const m = mapApi();
@@ -717,8 +752,20 @@ function syncMap(shown) {
     $("mapHost").replaceChildren(el("p", "The map module failed: " + e.message, "empty"));
   }
 }
+// Neighbourhoods and the house to neighbourhood map, from the geometry. Only features of kind
+// "neighbourhood" and "house" count; with none the house list stays flat.
+function indexGeo(geo) {
+  const features = (geo && geo.features) || [], names = {}, of = {};
+  features.forEach(f => { const p = f.properties || {}; if (p.kind === "neighbourhood") names[p.id] = p.name; });
+  features.forEach(f => { const p = f.properties || {}; if (p.kind === "house" && p.neighbourhood in names) of[String(p.house_id)] = {id: p.neighbourhood, name: names[p.neighbourhood]}; });
+  state.groups = Object.entries(names).map(([id, name]) => ({id, name}));
+  state.groupOf = of;
+}
 async function loadMapModule() {
-  try { const r = await fetch("/geo/station"); if (r.ok) state.geo = (await r.json()).geojson || null; } catch (_) { /* no geometry yet */ }
+  try {
+    const r = await fetch("/geo/station");
+    if (r.ok) { state.geo = (await r.json()).geojson || null; indexGeo(state.geo); if (state.station) renderHouses(houseView(state.plan)); }
+  } catch (_) { /* no geometry yet */ }
   const s = document.createElement("script");
   s.src = "/static/map/map.js";
   s.onload = () => syncMap(true);
