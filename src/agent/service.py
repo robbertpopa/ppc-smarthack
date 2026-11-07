@@ -13,8 +13,6 @@ from src.common.contract import ActionEvent, AwareDatetime, EventType, Plan, Sta
 
 logger = logging.getLogger(__name__)
 
-ALWAYS_ABSTAIN = 1e-9
-
 DECISION_STATUS = {
     "plan_approved": "approved",
     "plan_rejected": "rejected",
@@ -78,14 +76,25 @@ class AgentService:
             elif event.event == "kill_switch":
                 self._kill = bool(detail.get("on"))
 
-    def _station_for_plan(self) -> StationConfig:
-        threshold = self.thresholds(self.station.pt_id) if self.thresholds else None
+    def _threshold_station(self) -> tuple[StationConfig, str | None]:
+        if self.thresholds is None:
+            return self.station, None
+        pt_id = self.station.pt_id
+        try:
+            threshold = self.thresholds(pt_id)
+        except Exception as exc:
+            logger.warning("threshold lookup failed for %s: %r", pt_id, exc)
+            return self.station, "abstention threshold lookup failed"
         if threshold is None:
-            return self.station
-        if not math.isfinite(threshold) or threshold <= 0:
-            logger.warning("unusable threshold for %s: always abstaining", self.station.pt_id)
-            threshold = ALWAYS_ABSTAIN
-        return self.station.model_copy(update={"spread_threshold": threshold})
+            return self.station, None
+        try:
+            value = float(threshold)
+        except (TypeError, ValueError):
+            value = math.nan
+        if not math.isfinite(value) or value <= 0:
+            logger.warning("unusable threshold for %s: always abstaining", pt_id)
+            return self.station, "no usable abstention threshold"
+        return self.station.model_copy(update={"spread_threshold": value}), None
 
     def _emit(self, plan: Plan | None, event: EventType, actor: str, detail: dict) -> None:
         sha = hashlib.sha256(plan.model_dump_json().encode()).hexdigest()[:16] if plan else None
@@ -120,7 +129,8 @@ class AgentService:
             pt_id = self.station.pt_id
             forecast = self.source.forecast(pt_id, interval_start)
             grid_state = self.source.grid_state(pt_id, interval_start)
-            plan = make_plan(forecast, grid_state, self._station_for_plan(), interval_start)
+            station, forced = self._threshold_station()
+            plan = make_plan(forecast, grid_state, station, interval_start, force_abstain=forced)
             existing = self._plans.get(plan.plan_id)
             if existing is not None and not (
                 existing.status == "rejected" and plan.plan_id in self._retryable
