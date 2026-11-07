@@ -68,22 +68,35 @@ resource "azurerm_role_assignment" "acr_pull" {
   principal_id         = azurerm_user_assigned_identity.app.principal_id
 }
 
-resource "azurerm_container_app_environment" "env" {
-  name                       = "cae-${local.name}-wp"
-  location                   = azurerm_resource_group.rg.location
-  resource_group_name        = azurerm_resource_group.rg.name
-  log_analytics_workspace_id = azurerm_log_analytics_workspace.logs.id
-  tags                       = local.tags
+resource "azapi_resource" "env" {
+  type                      = "Microsoft.App/managedEnvironments@2026-03-02-preview"
+  name                      = "cae-${local.name}-std"
+  parent_id                 = azurerm_resource_group.rg.id
+  location                  = azurerm_resource_group.rg.location
+  tags                      = local.tags
+  schema_validation_enabled = false
 
-  workload_profile {
-    name                  = "Consumption"
-    workload_profile_type = "Consumption"
+  body = {
+    properties = {
+      environmentMode = "WorkloadProfiles"
+      workloadProfiles = [
+        { name = "Consumption", workloadProfileType = "Consumption" }
+      ]
+      appLogsConfiguration = {
+        destination = "log-analytics"
+        logAnalyticsConfiguration = {
+          customerId = azurerm_log_analytics_workspace.logs.workspace_id
+          sharedKey  = azurerm_log_analytics_workspace.logs.primary_shared_key
+        }
+      }
+    }
   }
+
 }
 
 resource "azurerm_container_app_environment_storage" "artifacts" {
   name                         = "artifacts"
-  container_app_environment_id = azurerm_container_app_environment.env.id
+  container_app_environment_id = azapi_resource.env.id
   account_name                 = azurerm_storage_account.data.name
   share_name                   = azurerm_storage_share.artifacts.name
   access_key                   = azurerm_storage_account.data.primary_access_key
@@ -92,7 +105,7 @@ resource "azurerm_container_app_environment_storage" "artifacts" {
 
 resource "azurerm_container_app" "api" {
   name                         = "ca-${local.name}-api"
-  container_app_environment_id = azurerm_container_app_environment.env.id
+  container_app_environment_id = azapi_resource.env.id
   resource_group_name          = azurerm_resource_group.rg.name
   revision_mode                = "Single"
   workload_profile_name        = "Consumption"
