@@ -210,6 +210,7 @@ resource "azurerm_container_app_job" "batch" {
   resource_group_name          = azurerm_resource_group.rg.name
   container_app_environment_id = azapi_resource.env.id
   replica_timeout_in_seconds   = var.job_timeout_seconds
+  workload_profile_name        = "Consumption"
   replica_retry_limit          = 0
   tags                         = local.tags
 

@@ -73,7 +73,7 @@ The same image runs any command, locally and in the cloud, with `ARTIFACT_URI=/d
 ```
 make batch CMD="python -m src.eval.run"     # local: ./artifacts and ./data are mounted into the container
 ```
-In the cloud the Terraform job `caj-ppcsmart-demo-batch` (Container Apps job, manual trigger, 1 CPU / 2 GiB, one hour at most) mounts the Azure Files share. Start it from GitHub: Actions → `batch` → Run workflow on `main`, with the command in the input. The workflow starts one execution with that command, polls until it ends and fails if the job fails. A job costs money only while it runs.
+In the cloud the Terraform job `caj-ppcsmart-demo-batch` (Container Apps job, manual trigger, 1 CPU / 2 GiB, one hour at most) mounts the Azure Files share. Start it from GitHub: Actions → `batch` → Run workflow on `main`, with the command in the input. The workflow starts one execution of the job named in its `JOB_NAME` variable (it must match the Terraform job name) with that command, polls until it ends (up to 75 minutes, a little longer than the job's own one-hour limit) and fails if the job fails. If you cancel the workflow, a last step stops the execution so it does not keep running and billing. A job costs money only while it runs.
 Logs of a run: Log Analytics, table `ContainerAppConsoleLogs_CL`, filtered by the job name (logs appear after a minute or two).
 
 ## One-time setup (a person with Owner rights on the subscription)

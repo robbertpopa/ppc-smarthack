@@ -22,6 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       AZURE_RG: rg-ppcsmart-demo
+      JOB_NAME: caj-ppcsmart-demo-batch
       COMMAND: ${{ inputs.command }}
     steps:
       - uses: azure/login@v2
@@ -32,21 +33,19 @@ jobs:
       - name: Start the job
         id: start
         run: |
-          JOB="$(az containerapp job list --resource-group "$AZURE_RG" --query '[0].name' -o tsv)"
-          IMAGE="$(az containerapp job show --name "$JOB" --resource-group "$AZURE_RG" --query 'properties.template.containers[0].image' -o tsv)"
+          IMAGE="$(az containerapp job show --name "$JOB_NAME" --resource-group "$AZURE_RG" --query 'properties.template.containers[0].image' -o tsv)"
           read -r -a PARTS <<< "$COMMAND"
           ARGS=()
           if [ "${#PARTS[@]}" -gt 1 ]; then ARGS=(--args "${PARTS[@]:1}"); fi
-          EXECUTION="$(az containerapp job start --name "$JOB" --resource-group "$AZURE_RG" \
+          EXECUTION="$(az containerapp job start --name "$JOB_NAME" --resource-group "$AZURE_RG" \
             --image "$IMAGE" --container-name batch --command "${PARTS[0]}" "${ARGS[@]}" \
             --query name -o tsv)"
-          echo "job=$JOB" >> "$GITHUB_OUTPUT"
           echo "execution=$EXECUTION" >> "$GITHUB_OUTPUT"
-          echo "Started $EXECUTION of $JOB: $COMMAND"
+          echo "Started $EXECUTION of $JOB_NAME: $COMMAND"
       - name: Wait for the result
         run: |
-          for _ in $(seq 1 120); do
-            STATUS="$(az containerapp job execution show --name "${{ steps.start.outputs.job }}" \
+          for _ in $(seq 1 150); do
+            STATUS="$(az containerapp job execution show --name "$JOB_NAME" \
               --resource-group "$AZURE_RG" --job-execution-name "${{ steps.start.outputs.execution }}" \
               --query properties.status -o tsv)"
             echo "status: $STATUS"
@@ -58,3 +57,8 @@ jobs:
           done
           echo "timed out waiting for the job"
           exit 1
+      - name: Stop the job if the workflow was cancelled
+        if: cancelled() && steps.start.outputs.execution != ''
+        run: |
+          az containerapp job stop --name "$JOB_NAME" --resource-group "$AZURE_RG" \
+            --job-execution-name "${{ steps.start.outputs.execution }}"
