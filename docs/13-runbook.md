@@ -90,14 +90,15 @@ Record two takes of the three scenes: one against the cloud URL and one against 
 
 ## Shut down after the event
 Do this after the presentation, in this order. The repository and the evaluation outputs stay.
-1. Download the evaluation outputs you want to keep from the `artifacts` share of the storage account (portal, or `az storage file download-batch`).
-2. Destroy the stack: with `infra/terraform/backend.hcl` in place, run `make tf-init`, then `terraform -chdir=infra/terraform destroy`. If that fails, delete the resource group instead: `az group delete --name rg-ppcsmart-demo --yes`.
-3. Delete the state: `az group delete --name rg-ppcsmart-tfstate --yes`.
-4. Delete the identities the bootstrap script created:
+1. Stop deploys first: `gh variable set DEPLOY_ENABLED --body false`. Otherwise a late merge to `main` redeploys the stack while you are tearing it down (the `batch` workflow stops too).
+2. Download the evaluation outputs you want to keep from the `artifacts` share of the storage account (portal, or `az storage file download-batch`).
+3. Destroy the stack: with `infra/terraform/backend.hcl` in place, run `make tf-init`, then `terraform -chdir=infra/terraform destroy`. If that fails, delete the resource group instead: `az group delete --name rg-ppcsmart-demo --yes`.
+4. Delete the state: `az group delete --name rg-ppcsmart-tfstate --yes`.
+5. Delete the identities the bootstrap script created:
    ```
    for NAME in ppc-smarthack-github ppc-smarthack-github-plan; do
      az ad app list --display-name "$NAME" --query '[].appId' -o tsv | xargs -I{} az ad app delete --id {}
    done
    ```
-5. Remove the GitHub secrets and variables (Settings, Secrets and variables, Actions), or run `gh secret delete` and `gh variable delete` for each. Set `DEPLOY_ENABLED` to `false` first.
-6. Check in the portal that no resource group of ours is left and that the cost view is flat.
+6. Remove the GitHub secrets and variables (Settings, Secrets and variables, Actions), or run `gh secret delete` and `gh variable delete` for each.
+7. Check in the portal that no resource group of ours is left and that the cost view is flat.
