@@ -129,6 +129,7 @@ def build(station_state: pd.DataFrame, t: pd.Timestamp, horizon_min: int = HORIZ
     ``station_state`` holds the history of one station (the label columns). Rows whose
     ``available_at`` is after ``t`` are dropped first, so the future cannot leak in.
     """
+    t = pd.Timestamp(t)  # the agent passes a plain datetime
     if t.tzinfo is None:
         raise ValueError("decision time t must be timezone-aware")
     t = t.tz_convert("UTC")
