@@ -3,10 +3,16 @@ COMPOSE = docker compose -f infra/docker-compose.yml
 TF_DIR = infra/terraform
 TF ?= terraform
 
-.PHONY: setup smoke test lint run docker-build up down docker-test tf-fmt tf-validate tf-init tf-plan tf-apply
+.PHONY: setup data profiles smoke test lint run docker-build up down docker-test tf-fmt tf-validate tf-init tf-plan tf-apply
 
 setup:
 	$(PY) -m pip install -e ".[dev,ml,sim]"
+
+data:
+	$(PY) -m src.ml.data download
+
+profiles:
+	$(PY) -m src.ml.data profiles
 
 smoke:
 	$(PY) -m src.smoke
