@@ -282,6 +282,26 @@ def profiles() -> Path:
     return out
 
 
+def store_geo(source: Path, postcodes: Path | None) -> int:
+    """Validate and store the location files, and check them against the profiles if built."""
+    import pandas as pd
+
+    from src.ml import geo
+
+    summary = geo.ingest(source, postcodes)
+    print(
+        f"{summary['houses']} houses in {summary['postcodes']} postcodes stored in "
+        f"{summary['folder']}"
+    )
+    if not postcodes:
+        print("not checked against Ausgrid's postcode list (pass --postcodes)")
+    if profiles_path().exists():
+        seen = pd.read_parquet(profiles_path(), columns=["house_id", "kwp", "postcode"])
+        geo.check_against_profiles(geo.load(), seen)
+        print("matches profiles.parquet: same houses, capacities and postcodes")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m src.ml.data")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -296,11 +316,18 @@ def main(argv: list[str] | None = None) -> int:
         help=f"also take the held-out year ({', '.join(HELD_OUT_YEARS)}); final evaluation only",
     )
     sub.add_parser("profiles", help="clean the raw files into DATA_DIR/profiles.parquet")
+    geo = sub.add_parser("geo", help="store and check the postcode and coordinate files")
+    geo.add_argument("--from", dest="source", type=Path, required=True, help="the geo CSV")
+    geo.add_argument(
+        "--postcodes", type=Path, help="Ausgrid's own postcode CSV, to check the geo file against"
+    )
     args = parser.parse_args(argv)
 
     if args.command == "profiles":
         profiles()
         return 0
+    if args.command == "geo":
+        return store_geo(args.source, args.postcodes)
     if args.source:
         csvs = use_local_copy(args.source, args.include_held_out)
     else:

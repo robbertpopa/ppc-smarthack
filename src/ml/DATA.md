@@ -112,3 +112,28 @@ Gross generation, kWh, summed straight from the raw CSV versus the profiles; the
 Remarks:
 - **Over-limit generation comes from a few houses.** In 2010-11, 906 readings exceed 1.2 × kWp, and 6 houses account for them (customers 262, 215 and 299 for 858 of them). The peak is up to 1.48 × kWp. A recorded capacity that is too low is more likely than bad meter data. We apply the rule as planned; revisit if those houses matter.
 - Ausgrid's notes say the date is `DDMMMYYYY` and that `Row Quality` is column 54; the files differ (see the table above), so parsing detects the date format from the values and the layout from the header.
+
+## Where the houses are (postcode and coordinates)
+Two small files describe the location of the 300 houses. They live in `DATA_DIR/reference/` and are never committed. They are added once with:
+
+```
+python -m src.ml.data geo --from <ausgrid_postcodes_geo.csv> --postcodes <"Solar home 2010-2011 post codes.csv">
+```
+
+| File | Origin | Columns |
+|---|---|---|
+| `ausgrid_postcodes_geo.csv` | made by the team from the postcodes | `Customer, Generator Capacity, Postcode, lat, lon, localities` |
+| `Solar home 2010-2011 post codes.csv` | Ausgrid's own file (not in the zip we download; one title line, then the header) | `Customer, Generator Capacity, Postcode` |
+
+What was checked on 2026-11-07 (and is checked again by the command and by `geo.check_against_*`):
+- 300 customers, numbered 1 to 300, unique in both files. `Customer` is the number in the half-hourly files, so customer 1 is `AG-0001`.
+- The geo file is a superset of Ausgrid's list: same customers, same generator capacity and postcode for every house.
+- Both agree with `profiles.parquet` for all 300 houses (`kwp` and `postcode`).
+- The coordinates are **per postcode**: 100 postcodes, 100 distinct coordinates, none missing, all inside New South Wales (latitude -34.11 to -32.63, longitude 150.98 to 152.31). So the precision is a suburb centre, about a kilometre, **not the position of a house**. Do not present it as one.
+
+**Open item:** the source and licence of the coordinates (the postcode-to-coordinate table the geo file was built from) are not recorded yet. Write them here before the coordinates appear in the README or the slides.
+
+Where it fits (`src/ml/geo.py` loads and validates it; nothing uses it yet):
+1. **Station composition.** Today a station is 30 houses picked at random (mock) or in file order (P3's twin). Houses in one postcode area share the same weather, which is what a real low-voltage station sees. Choosing a station from one area makes the clouds hit all of its houses together, which is the case the model has to handle.
+2. **Map for the operator screen** (P3): a point per postcode, sized by installed power.
+3. **Regional feature or check**: whether the error depends on the coast, Sydney or Newcastle.
