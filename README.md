@@ -48,6 +48,18 @@ API_URL=http://127.0.0.1:8000 python -m uvicorn src.ui.app:app --port 8001
 ```
 Open http://127.0.0.1:8001 (operator screen). The API uses mock forecasts and the real grid guard; its documentation is at http://127.0.0.1:8000/docs. Each plan also carries the product's price per house (hourly price plus a monthly solar adder); `GET /prices` returns the day's wholesale curve and those prices. The demo uses an illustrative curve, marked `mock`.
 
+**With the neighbourhood map (three neighbourhoods, 45 houses).** Needs a customer table with coordinates (`Customer, Generator Capacity, Postcode, lat, lon, localities`; keep it in `data/`, which git ignores). Build the map data once, then start the API with that station:
+```bash
+python -m src.ui.geo_build --customers data/p4/customers.csv --out artifacts
+```
+```bash
+STATION_FILE=artifacts/station/demo_station.json python -m uvicorn src.grid.demo_api:app --port 8000
+```
+```bash
+API_URL=http://127.0.0.1:8000 ARTIFACT_URI=artifacts python -m uvicorn src.ui.app:app --port 8001
+```
+On Windows PowerShell set the variables first (`$env:STATION_FILE = "artifacts/station/demo_station.json"`). Open the **Houses** tab. The positions are postcode centroids with small offsets, not addresses, and the grid behind the map is synthetic; how the three neighbourhoods are chosen and what the map does is in [src/ui/static/map/README.md](src/ui/static/map/README.md). The map loads its tiles from openstreetmap.org, so it needs a network; without one the houses and neighbourhoods still show on an empty background.
+
 ### 5. Data
 ```bash
 python -m src.ml.data download
@@ -56,6 +68,15 @@ python -m src.ml.data download
 python -m src.ml.data profiles
 ```
 This writes `DATA_DIR/raw/ausgrid/` and `DATA_DIR/profiles.parquet` (about 40 s). `--from PATH` uses a local zip or folder instead of the network. The 2012–13 file is the sealed test year: it is skipped unless you pass `--include-held-out`, which is for the final evaluation only (section 9).
+
+Weather (NASA POWER, hourly, for the houses' postcodes; needs the geo table from `python -m src.ml.data geo`):
+```bash
+python -m src.ml.weather fetch
+```
+```bash
+python -m src.ml.weather build
+```
+This caches 400 answers under `DATA_DIR/raw/nasa_power/hourly/` (safe to rerun) and writes `DATA_DIR/weather_hourly.parquet` with its SHA-256. `src.ml.weather.load()` gives the station's hourly sunlight and temperature with `available_at = time + 1 h`; no model feature uses it yet.
 
 ### 6. Labels
 ```bash
@@ -91,13 +112,15 @@ python -m src.eval.run --scenario all --run-id final --error-analysis
 The output goes to `ARTIFACT_URI/eval/final/`. The screen's comparison panel reads its `summary.json` when started with `EVAL_RUN_ID=final`. Every number in the presentation comes from this output. `python -m src.common.pipeline --run-id final` runs training, the PV/load forecast and the evaluation in one command.
 
 ### 10. Prices and the prosumer price comparison (optional)
-The evaluation can compare what battery owners earn today (the regulated monthly average price) with an hourly price plus a monthly solar adder, and what that does to PPC's margin. It needs one year of Romanian day-ahead prices from [euenergy.live](https://euenergy.live) (CC-BY-4.0, free token). Put `EUENERGY_TOKEN=<your token>` in `.env` (the file is not committed), then:
+The evaluation can compare what battery owners earn today on an older compensation contract (the regulated monthly average price) and on PPC's MaxControl (the 15-minute spot price minus the injection tariff) with an hourly price plus a monthly solar adder, and what each does to PPC's margin. It needs one year of Romanian day-ahead prices from [euenergy.live](https://euenergy.live) (CC-BY-4.0, free token). Put `EUENERGY_TOKEN=<your token>` in `.env` (the file is not committed), then:
 ```bash
 set -a; . ./.env; set +a
 python -m src.pricing.prices fetch --year 2025
 python -m src.eval.run --pricing
 ```
 The first command saves `data/pzu/ro.parquet`. The second adds a `pricing` block to `summary.json`, a `pricing_<station>.md` table and a `pricing_day_<station>.png` chart. Prices are matched to the Ausgrid year by season (Sydney July with Bucharest January) and local hour, so the result shows the shape of the effect, not a forecast in euros. Fee, floor and bonus share are placeholders in `src/pricing/config.py`.
+
+If the PV/load forecast is trained (`python -m src.ml.forecast_pv_load --scenario A`), the table also shows the imbalance savings of that forecast against "same time yesterday" for three imbalance spreads (30, 60 and 120 EUR/MWh, scenario values, not market data) and the bonus prosumers would get. Without the trained model that part is skipped.
 
 ### Environment variables
 | Variable | Default | Used for |
@@ -120,6 +143,7 @@ Activate with `.venv\Scripts\Activate.ps1`, and set variables before the command
 | Source | Use | Licence |
 |---|---|---|
 | Ausgrid "Solar home electricity data" (300 homes, Sydney, 2010–2013), [copy by Pierre Haessig](https://pierreh.eu/ausgrid-solar-data/) | household consumption and solar generation | CC BY 3.0 AU (as stated in the copy) |
+| [NASA POWER](https://power.larc.nasa.gov/) hourly point API (2010–2013, per postcode) | sunlight and temperature, history only | CC BY 4.0 |
 | [SimBench](https://github.com/e2nIEE/simbench) and [pandapower](https://github.com/e2nIEE/pandapower) | grid benchmark and power flow | see the projects |
 | Labels | the highest safe export share, computed by our power flow (synthetic) | ours |
 | [euenergy.live](https://euenergy.live) hourly Romanian day-ahead prices | price comparison | CC BY 4.0, credit euenergy.live |

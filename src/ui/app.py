@@ -39,6 +39,15 @@ def is_allowed(method: str, path: str) -> bool:
     return pattern is not None and pattern.fullmatch(path) is not None
 
 
+class RevalidatedFiles(StaticFiles):
+    """Static files the browser must revalidate: the map module changes while it is built."""
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 def create_app(settings: Settings | None = None, run_id: str | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     run_id = run_id or os.environ.get("EVAL_RUN_ID", "local")
@@ -94,7 +103,7 @@ def create_app(settings: Settings | None = None, run_id: str | None = None) -> F
             raise HTTPException(status_code=502, detail="AI insight file is unreadable") from None
 
     # The map module (P4) lives in static/map/ and is optional: the screen works without it.
-    app.mount("/static/map", StaticFiles(directory=STATIC / "map"), name="map")
+    app.mount("/static/map", RevalidatedFiles(directory=STATIC / "map"), name="map")
 
     @app.api_route("/api/{path:path}", methods=["GET", "POST"])
     async def proxy(path: str, request: Request):

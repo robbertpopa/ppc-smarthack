@@ -41,10 +41,15 @@ def test_block_shape_and_signs(table):
     block = pricing_eval.compute(ctx, result, table)
     assert block["battery_houses"] == ["H1"]  # ceil(0.3 * 3) = 1, first in sorted order
     names = [r["name"] for r in block["rows"]]
-    assert names[0] == "Today: regulated monthly average" and "proposed" in names[-1]
-    today, hourly, adder, proposed = block["rows"]
+    assert names[0].startswith("Older contract today") and names[-1].startswith("Proposed")
+    today, maxcontrol, maxcontrol_battery, hourly, adder, proposed = block["rows"]
     assert today["prosumer_vs_today_pct"] == 0.0 and today["ppc_improvement_eur"] == 0.0
     assert today["ppc_margin_eur"] < 0  # PPC pays the monthly average for cheap midday energy
+    # MaxControl already pays the spot price: PPC's margin on the energy is about zero, and a
+    # battery lets the prosumer earn the evening price
+    assert abs(maxcontrol["ppc_margin_eur"]) < abs(today["ppc_margin_eur"]) / 10
+    assert maxcontrol["prosumer_eur"] < today["prosumer_eur"]
+    assert maxcontrol_battery["prosumer_eur"] > maxcontrol["prosumer_eur"]
     assert hourly["prosumer_eur"] < today["prosumer_eur"]  # no adder: the prosumer loses
     assert adder["prosumer_eur"] > hourly["prosumer_eur"]
     assert proposed["prosumer_eur"] > adder["prosumer_eur"]  # the battery adds revenue
@@ -71,7 +76,7 @@ def test_markdown_is_written(tmp_path, table):
     pricing_eval.write(tmp_path, "PT-A", block, "MOCK, NOT A RESULT")
     text = (tmp_path / "pricing_PT-A.md").read_text()
     assert text.startswith("# MOCK, NOT A RESULT") and "euenergy.live" in text
-    assert "battery response (proposed)" in text and "Fee sensitivity" in text
+    assert "MaxControl" in text and "battery response" in text and "Fee sensitivity" in text
 
 
 def test_summer_day_chart_is_written(tmp_path, table):
@@ -89,3 +94,49 @@ def test_chart_needs_a_summer_day(tmp_path, table):
     moved_ctx = {"surplus": surplus.set_axis(surplus.index + shift), "kwp": ctx["kwp"]}
     moved = {"scored": {k: v.set_axis(v.index + shift) for k, v in result["scored"].items()}}
     assert pricing_eval.day_chart(moved_ctx, moved, table, tmp_path, "PT-A") is None
+
+
+def fake_savings(saving_eur=100.0):
+    item = {
+        "spread_eur_mwh": 60.0,
+        "n_intervals": 10,
+        "baseline_mwh": 3.0,
+        "model_mwh": 1.0,
+        "baseline_cost_eur": 180.0,
+        "model_cost_eur": 60.0,
+        "saving_eur": saving_eur,
+    }
+    return {"horizon_min": 60, "baseline": "same time yesterday", "by_spread": [item]}
+
+
+def test_imbalance_savings_are_shared_by_the_bonus_share(table):
+    ctx, result = make()
+    without = pricing_eval.compute(ctx, result, table)
+    assert without["imbalance"] is None
+    block = pricing_eval.compute(ctx, result, table, imbalance=fake_savings(100.0))
+    item = block["imbalance"]["scenarios"][0]
+    assert 0 < item["group_share"] < 1  # one of three houses has a battery
+    assert item["group_saving_eur"] == pytest.approx(100.0 * item["group_share"], abs=1e-4)
+    assert item["prosumer_bonus_eur"] == pytest.approx(item["group_saving_eur"] / 2, abs=1e-4)
+    proposed = block["rows"][-1]
+    assert item["prosumer_total_eur"] == pytest.approx(
+        proposed["prosumer_eur"] + item["prosumer_bonus_eur"], abs=1e-4
+    )
+    assert item["ppc_improvement_total_eur"] == pytest.approx(
+        proposed["ppc_improvement_eur"] + item["ppc_keeps_eur"], abs=1e-4
+    )
+    json.dumps(block, allow_nan=False)
+
+
+def test_a_negative_saving_is_not_shared(table):
+    ctx, result = make()
+    block = pricing_eval.compute(ctx, result, table, imbalance=fake_savings(-50.0))
+    item = block["imbalance"]["scenarios"][0]
+    assert item["prosumer_bonus_eur"] == 0.0 and item["ppc_keeps_eur"] < 0
+
+
+def test_markdown_lists_the_imbalance_scenarios(tmp_path, table):
+    ctx, result = make()
+    block = pricing_eval.compute(ctx, result, table, imbalance=fake_savings())
+    pricing_eval.write(tmp_path, "PT-A", block)
+    assert "Imbalance savings" in (tmp_path / "pricing_PT-A.md").read_text()
