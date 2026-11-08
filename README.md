@@ -111,6 +111,15 @@ python -m src.eval.run --scenario all --run-id final --error-analysis
 ```
 The output goes to `ARTIFACT_URI/eval/final/`. The screen's comparison panel reads its `summary.json` when started with `EVAL_RUN_ID=final`. Every number in the presentation comes from this output. `python -m src.common.pipeline --run-id final` runs training, the PV/load forecast and the evaluation in one command.
 
+### 10. Prices and the prosumer price comparison (optional)
+The evaluation can compare what battery owners earn today on an older compensation contract (the regulated monthly average price) and on PPC's MaxControl (the 15-minute spot price minus the injection tariff) with an hourly price plus a monthly solar adder, and what each does to PPC's margin. It needs one year of Romanian day-ahead prices from [euenergy.live](https://euenergy.live) (CC-BY-4.0, free token). Put `EUENERGY_TOKEN=<your token>` in `.env` (the file is not committed), then:
+```bash
+set -a; . ./.env; set +a
+python -m src.pricing.prices fetch --year 2025
+python -m src.eval.run --pricing
+```
+The first command saves `data/pzu/ro.parquet`. The second adds a `pricing` block to `summary.json`, a `pricing_<station>.md` table and a `pricing_day_<station>.png` chart. Prices are matched to the Ausgrid year by season (Sydney July with Bucharest January) and local hour, so the result shows the shape of the effect, not a forecast in euros. Fee, floor and bonus share are placeholders in `src/pricing/config.py`.
+
 ### Environment variables
 | Variable | Default | Used for |
 |---|---|---|
@@ -123,6 +132,7 @@ The output goes to `ARTIFACT_URI/eval/final/`. The screen's comparison panel rea
 | `MODEL_VERSION` | `safe-cap-qgb-v1` | which saved model is loaded |
 | `EVAL_RUN_ID` | `local` | which evaluation the screen shows |
 | `DEMO_TOKEN` | unset | when set, required for write actions |
+| `EUENERGY_TOKEN` | unset | `python -m src.pricing.prices fetch` |
 
 ### Windows (PowerShell)
 Activate with `.venv\Scripts\Activate.ps1`, and set variables before the command, for example `$env:API_URL = "http://127.0.0.1:8000"`.
@@ -134,6 +144,7 @@ Activate with `.venv\Scripts\Activate.ps1`, and set variables before the command
 | [NASA POWER](https://power.larc.nasa.gov/) hourly point API (2010–2013, per postcode) | sunlight and temperature, history only | CC BY 4.0 |
 | [SimBench](https://github.com/e2nIEE/simbench) and [pandapower](https://github.com/e2nIEE/pandapower) | grid benchmark and power flow | see the projects |
 | Labels | the highest safe export share, computed by our power flow (synthetic) | ours |
+| [euenergy.live](https://euenergy.live) hourly Romanian day-ahead prices | price comparison | CC BY 4.0, credit euenergy.live |
 
 Details and pitfalls: [src/ml/DATA.md](src/ml/DATA.md) and [docs/05-data-and-sources.md](docs/05-data-and-sources.md). The rest of the documentation is in [docs/](docs/).
 
