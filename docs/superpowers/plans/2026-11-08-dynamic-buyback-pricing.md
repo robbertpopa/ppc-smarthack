@@ -10,6 +10,8 @@
 
 Spec: [docs/superpowers/specs/2026-11-08-dynamic-buyback-pricing-design.md](../specs/2026-11-08-dynamic-buyback-pricing-design.md). Background and the simulated year: [docs/14-prosumers-and-pricing.md](../../14-prosumers-and-pricing.md).
 
+**Update (after the PRs were opened):** PPC's MaxControl already pays the 15-minute spot price for injection, so the evaluation also compares against it. Task 6's `pricing_eval.py` and its test, `src/pricing/config.py` (`MAXCONTROL_TG_EUR_MWH`) and the README wording changed accordingly; the code on branches `pricing/core` and `pricing/imbalance` is the final version and the embedded blocks for those files are out of date. A CI fix to `tests/pricing/test_solar.py` (float noise) is also only on the branches.
+
 **Every code block below was run before it was written here:** the four phases were built in a scratch worktree, `make test lint smoke` passed (439 tests), and the screen was loaded in a browser with the demo API.
 
 ---

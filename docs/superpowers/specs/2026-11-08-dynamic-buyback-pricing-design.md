@@ -1,6 +1,6 @@
 # Prosumer aggregator price: design
 
-**Status:** design v3, 2026-11-08. Replaces v1 (a "share of spot" buy-back with a grid bonus) and v2 (a monthly "at least the regulated price" guarantee). v3 was built and tested in a scratch worktree (439 tests pass, screen checked in a browser) before the plan was written. Plan: [../plans/2026-11-08-dynamic-buyback-pricing.md](../plans/2026-11-08-dynamic-buyback-pricing.md). Background, numbers and the simulated year: [../../14-prosumers-and-pricing.md](../../14-prosumers-and-pricing.md).
+**Status:** design v3.1, 2026-11-08 (v3.1 adds PPC's MaxControl as a second "today", see "What PPC pays today"). Replaces v1 (a "share of spot" buy-back with a grid bonus) and v2 (a monthly "at least the regulated price" guarantee). v3 was built and tested in a scratch worktree (439 tests pass, screen checked in a browser) before the plan was written. Plan: [../plans/2026-11-08-dynamic-buyback-pricing.md](../plans/2026-11-08-dynamic-buyback-pricing.md). Background, numbers and the simulated year: [../../14-prosumers-and-pricing.md](../../14-prosumers-and-pricing.md).
 
 ## Goal
 
@@ -10,7 +10,9 @@ PPC offers an opt-in product to prosumers who have a battery and a smart meter. 
 
 | Fact | Source | Confidence |
 |---|---|---|
-| PPC's prosumer product (MaxControl) prices consumption at 0.097 lei/kWh plus the monthly consumption-weighted average of 15-minute PZU prices, with a price floor and cap. The injection price is "per the regulations". | PPC's own offer PDF | High |
+| PPC's prosumer product (MaxControl) prices consumption at 0.097 lei/kWh plus the monthly consumption-weighted average of 15-minute PZU prices, with a price floor and cap. The offer PDF says the injection price is "per the regulations". | PPC's own offer PDF | High |
+| **MaxControl pays injected energy monthly at the 15-minute day-ahead price minus the grid injection tariff (TG, 0.00363 lei/kWh), zero when the price is negative.** Residential prosumers up to 200 kW with a smart meter. Launched July 2026, the offer was then valid to the end of that month. | Economica, 7 July 2026 (press); PPC's PDF is silent | Medium: confirm current terms with PPC |
+| For older compensation contracts PPC's page says injected energy is offset kWh against kWh and any surplus unpaid after 24 months is paid at a tariff "lower than the consumption price"; its own statements conflict on which tariff applies | PPC's prosumer price page | Medium |
 | Law 160/2026: up to 200 kW the supplier offsets drawn against injected energy within the billing period at the contract's active-energy price, until 2030. 200–400 kW: the supplier buys at the monthly weighted-average PZU price on request. | Law-firm summary (BPV Grigorescu); ANRE's page could not be opened | Medium |
 | Whether the law applies since 26 July 2026 or from 2027 | Two sources disagree | Unresolved |
 | Prosumers up to 400 kW pay no imbalance, so suppliers do. AFEER estimates 200–372 lei/MWh per injected MWh (about 38–72 EUR/MWh at about 5.2 lei/EUR). | AFEER (supplier association: an interested party) | Low, cross-check only |
@@ -20,6 +22,30 @@ PPC offers an opt-in product to prosumers who have a battery and a smart meter. 
 | Distributors have no legal access to prosumer batteries; prosumers oppose control | Press (see docs/14) | Medium |
 | Romanian balancing prices are not in the euenergy.live API (prices and load only) | probed | High |
 | The API refuses Python's default client name (HTTP 403) but accepts `curl` | probed | High |
+
+## What PPC pays today (two kinds of customer), and where the saving is
+
+| | Older compensation contract | PPC MaxControl |
+|---|---|---|
+| Injection is paid at | the contract's active-energy price (a monthly average for an indexed contract; a fixed price for a fixed contract) | 15-minute day-ahead price minus TG |
+| PPC's margin on the energy | negative: it pays about the monthly average (or more) for midday energy that is worth less | about zero |
+| PPC still bears | imbalance | imbalance |
+| A battery helps the prosumer | not for price (paid the same at any hour) | yes: evening exports earn the evening price |
+
+For one battery household (10 kWp, 10 kWh battery, 7.6 MWh exported a year, prices November 2025–October 2026, simulated, EUR per year):
+
+| | Older contract | MaxControl | Proposed (fee 30, solar adder) |
+|---|---:|---:|---:|
+| Prosumer receives | 982 | 1,034 | 1,169 |
+| PPC margin before imbalance | −343 | −2 | −136 |
+| PPC against older contract | none | +341 | +207 |
+| Prosumer against older contract | none | +5% | +19% |
+
+Consequences:
+1. **The cheapest saving for PPC is moving battery households from the older contract to MaxControl** (about +341 EUR a year each, the prosumer gains about 5%). It exists today. Households without a battery lose about a third on MaxControl, so they will not move.
+2. **The solar adder is a way to share value to win older-contract customers, not a need of MaxControl customers.** On top of MaxControl it would cost PPC more, so it is never added to MaxControl.
+3. **The imbalance PPC bears is uncertain by more than a factor of 10** (a distribution operator's study implies a few EUR/MWh; AFEER's 38–72 EUR/MWh is an interested party). The bonus is therefore the least certain part.
+4. **What this project adds beyond MaxControl:** a forecast-based imbalance saving, the evening-price signal for batteries, and the evaluation of how to split the value.
 
 ## The scheme
 
@@ -47,12 +73,14 @@ For the houses with a battery (the first 30% of the station's houses in sorted o
 
 | Row | Prosumer is paid | PPC's margin is |
 |---|---|---|
-| Today | monthly average PZU on the exported kWh | value of that energy (its PZU price) minus what it pays |
-| Hourly price only | hourly price | same formula |
-| Hourly price + solar adder, no battery | hourly + adder | same formula |
+| Older contract today | monthly average PZU on the exported kWh | value of that energy (its PZU price) minus what it pays |
+| MaxControl today, no battery response | 15-minute spot minus TG (0.7 EUR/MWh) | same formula |
+| MaxControl today with battery response | the same, on the battery-shifted exports | same formula |
+| Proposed hourly price only | hourly price (fee, floor) | same formula |
+| Proposed hourly price + solar adder, no battery | hourly + adder | same formula |
 | **Proposed**: hourly + adder + battery response | hourly + adder on the battery-shifted exports | same formula |
 
-Each row reports the prosumer's revenue and its change against today in percent, PPC's margin in EUR and as a percent of the energy's value, and PPC's improvement against today. The fee sensitivity also reports the prosumer's share of the value created. **Nothing is asserted in advance.** Prosumers export at midday, when PZU is lowest, so PPC pays today about 49 EUR/MWh (about 70 in sunny months) above that energy's value, and the adder keeps most of that. Only regulation can remove it.
+Each row reports the prosumer's revenue and its change against today in percent, PPC's margin in EUR and as a percent of the energy's value, and PPC's improvement against the older contract (the first row). The fee sensitivity also reports the prosumer's share of the value created. **Nothing is asserted in advance.** Prosumers export at midday, when PZU is lowest, so PPC pays today about 49 EUR/MWh (about 70 in sunny months) above that energy's value, and the adder keeps most of that. Only regulation can remove it.
 
 ## Imbalance savings (the profit source beyond shifting)
 
@@ -105,6 +133,7 @@ Pure and fast, no network.
 - The imbalance spread is a scenario value; the saving assumes intraday correction an hour ahead at about PZU cost.
 - PZU is a proxy for PPC's purchase cost and for the value of the energy; the real mix is not public.
 - A prosumer whose real generation shape differs from the standard shape is not exactly neutral against today.
+- The price of the older contract is a modelled monthly average; fixed contracts may pay more (third-party guides report 0.72–0.86 lei/kWh). MaxControl's terms come from one press article.
 - Simulation on Australian household data and one station, not PPC's customers.
 - Battery wear is not counted, and shifted energy must be surplus (a home battery is often worth more covering the home's own evening load).
 - `fee`, `floor` and `bonus_share` are free parameters.

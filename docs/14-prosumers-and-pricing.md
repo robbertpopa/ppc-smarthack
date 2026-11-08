@@ -21,7 +21,7 @@ Background for the pricing work ([spec](superpowers/specs/2026-11-08-dynamic-buy
 - Law 160/2026 is in force since 26 Jul 2026 and amended Law 123/2012. Its application depends on an updated ANRE methodology (not yet seen). One source says application was postponed to 2027: **UNVERIFIED**.
 - **UNVERIFIED storage obligation:** ess-news and pv magazine describe Law 255/2024 as requiring new prosumers to install storage (at least 30% of PV capacity for 3–200 kW systems, 50% for 200–400 kW), and existing 3–400 kW prosumers to add storage by 31 Dec 2027 or be limited to 3 kW export. Adevărul reports the Senate committees removed it; Business24 and ProTV report it as something the government wants. Check the current law text before relying on it.
 - Subsidy: RON 400M, up to 75% of eligible costs, capped at RON 15,000 incl. VAT, for existing prosumers. Minimum battery size cut from 12 kWh to 10 kWh.
-- PPC's prosumer offer (MaxControl): consumption at 0.097 lei/kWh fixed (supply and estimated imbalance) plus the monthly consumption-weighted average of 15-minute PZU prices, with a billing cap of 0.999 lei/kWh and a floor of 0. The injection price is "per the regulations". Source: PPC's offer PDF.
+- PPC's prosumer offer (MaxControl): consumption at 0.097 lei/kWh fixed (supply and estimated imbalance) plus the monthly consumption-weighted average of 15-minute PZU prices, with a billing cap of 0.999 lei/kWh and a floor of 0. The offer PDF says the injection price is "per the regulations", but **Economica (7 July 2026) reports that MaxControl pays injected energy monthly at the 15-minute day-ahead price minus the injection tariff (TG, 0.00363 lei/kWh), zero when negative**, for residential prosumers up to 200 kW with a smart meter; that offer was then valid to the end of July. Confirm the current terms with PPC. Older compensation contracts offset kWh against kWh and pay unoffset surplus after 24 months at a tariff "lower than the consumption price" (PPC's prosumer page, whose statements on which tariff applies conflict).
 
 ## 3. What PPC pays externally (PZU proxy)
 
@@ -50,7 +50,9 @@ Month by month:
 | 2026-09 | 177 | 82 | 265 | 95 | 13 |
 | 2026-10 | 240 | 184 | 304 | 56 | 0 |
 
-## 4. Today versus a PPC aggregator, per MWh injected at midday
+## 4. Older contract versus a PPC aggregator, per MWh injected at midday
+
+**Correction (added later):** "Today (regulated)" in this section is the *older compensation contract*. PPC's MaxControl already pays the 15-minute spot price, see section 4b. The aggregator column here is therefore close to what MaxControl already does.
 
 12-month averages. "Today" is the regulated monthly-average price.
 
@@ -68,7 +70,29 @@ Reading it:
 - New value comes only from (a) imbalance savings, capped at about 38–72 EUR/MWh, and (b) a battery shifting energy from midday to evening, about 88 EUR/MWh stored.
 - A prosumer without a battery cannot be made whole by a bonus: matching today's 133 needs about 118 EUR/MWh of savings at a 50% share, more than the whole estimated imbalance cost.
 
+## 4b. Two kinds of customer today, in real money
+
+One battery household (10 kWp, 10 kWh battery, 7.6 MWh exported a year; prices November 2025–October 2026; simulated), EUR per year:
+
+| | Older contract | MaxControl | Proposed (fee 30, solar adder) |
+|---|---:|---:|---:|
+| Prosumer receives | 982 | 1,034 | 1,169 |
+| Energy is worth to PPC | 639 | 1,032 | 1,032 |
+| PPC margin before imbalance | **−343** | **−2** | **−136** |
+| Prosumer against older contract | none | +5% | +19% |
+| PPC against older contract | none | **+341** | **+207** |
+
+MaxControl without a battery pays 644 EUR (−34% against the older contract), PPC margin −5. Imbalance PPC bears, on top: about 25–30 EUR a year (a distribution operator's study, about 8 million EUR nationwide) up to 290–540 EUR (AFEER's 38–72 EUR/MWh × 7.6 MWh). If a forecast removes half of it, 14–270 EUR a year is shared; at a 50% bonus each side gets half.
+
+Reading it:
+- **PPC's cheapest saving is moving battery households from the older contract to MaxControl:** about +341 EUR a year each for PPC, about +5% for the prosumer. At 10,000 such households that is about 3.4 million EUR a year for PPC. We do not know how many of PPC's prosumers are in that group. ANRE counted 151,040 prosumers with storage nationally on 31 August 2026.
+- **Households without a battery will not move** (−34%).
+- **The solar adder shares value to win older-contract customers.** On top of MaxControl it would cost PPC about 145 EUR a year more per battery household, so it is not offered to MaxControl customers.
+- **The imbalance cost is uncertain by more than a factor of 10**, so the bonus is the least certain part.
+
 ## 5. What to charge, and how (proposal v2)
+
+**Reading note (added later):** the proposal below is a way to win *older-contract* battery customers by keeping their money (the solar adder) while paying the hourly price. For customers already on MaxControl, the only new element is the imbalance bonus. See section 4b.
 
 Principle: **nobody is worse off than today; the value created is shared.** The operator cannot dispatch prosumer batteries (section 6), so every part is opt-in and runs on consent and prices.
 
