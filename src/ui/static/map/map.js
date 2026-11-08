@@ -6,7 +6,7 @@
  * limit or a status.
  *
  * Houses are always drawn: small dots zoomed out, with a status symbol from HOUSE_ZOOM and sized
- * by kWp when zoomed in. Zoomed out each neighbourhood also gets a name tag at its centre.
+ * by kWp when zoomed in. The chips at the top zoom to a neighbourhood.
  */
 (function () {
   "use strict";
@@ -191,10 +191,7 @@
       S.svg.append(svgNode("polyline", {points: f.pts.map(p => { const q = at(p); return q.x.toFixed(1) + "," + q.y.toFixed(1); }).join(" "), style: "fill:none;stroke:var(--ink);stroke-opacity:.55;stroke-width:2;stroke-dasharray:2 5;stroke-linecap:round"}));
     });
     // Markers
-    S.hoods.forEach(hd => {
-      const b = S.hoodEls[hd.id]; b.hidden = houses;
-      if (!houses) { const q = at(hd.center); b.style.transform = "translate(" + q.x.toFixed(1) + "px," + (q.y - 8).toFixed(1) + "px) translate(-50%,-100%)"; }
-    });
+    S.hoods.forEach(hd => { S.hoodEls[hd.id].hidden = true; }); // the chips at the top name the neighbourhoods
     Object.keys(S.pos).forEach(id => {
       const b = S.houseEls[id], q = at(S.pos[id]), k = Math.min(1, (S.kwp[id] || 5) / 10);
       b.hidden = false; b.style.transform = "translate(" + q.x.toFixed(1) + "px," + q.y.toFixed(1) + "px)";
