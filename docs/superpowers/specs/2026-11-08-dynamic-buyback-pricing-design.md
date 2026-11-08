@@ -1,6 +1,6 @@
 # Dynamic buy-back price for prosumers: design
 
-**Status:** design, written 2026-11-08, awaiting team review. Not implemented.
+**Status:** design, written 2026-11-08, revised the same day while writing the plan (season alignment, fetch location, battery scope). Not implemented. Plan: [../plans/2026-11-08-dynamic-buyback-pricing.md](../plans/2026-11-08-dynamic-buyback-pricing.md).
 
 ## Goal
 
@@ -29,9 +29,10 @@ Inputs per house and hour: wholesale price `w` (EUR/MWh), the agent's decision f
 ## Data
 
 - **Source:** euenergy.live API, `GET /api/v1/prices?zone=RO&from=YYYY-MM-DD&to=YYYY-MM-DD`, hourly, EUR/MWh, UTC timestamps, token in the environment variable `EUENERGY_TOKEN` (kept in the gitignored `.env`, never committed). Data is CC-BY-4.0: credit euenergy.live in the README and slides.
-- **Fetch script** saves one year to `data/pzu/` (gitignored), requesting month by month. A saved sample response is used by tests, so CI never needs the token.
+- **Fetch** is `python -m src.pricing.prices fetch --year 2025` (a module, because the repository's `.gitignore` allows only listed folders and `scripts/` is not one). It saves one year to `data/pzu/ro.parquet` (gitignored), requesting month by month. A saved sample response is used by tests, so CI never needs the token.
 - **Gaps:** hours can be missing. The loader fills short gaps by carrying the last value and flags longer ones. It never assumes 24 rows per day.
-- **Alignment:** the price year differs from the Ausgrid test year (1 Jul 2012 – 30 Jun 2013). Prices are converted from UTC to Europe/Bucharest and matched by **month and hour of day**. This shows the shape of the gain, not a forecast in euros, and the pitch states it.
+- **Alignment:** the price year differs from the Ausgrid test year (1 Jul 2012 – 30 Jun 2013), and Ausgrid is Sydney, where July is winter. Prices are averaged per (month, hour) in Bucharest time, and each Sydney interval is matched to the **opposite-season month (Sydney month + 6) and the same local clock hour**, so a Sydney winter sun meets a Bucharest winter price shape. This shows the shape of the gain, not a forecast in euros, and the pitch states it.
+- **Expected finding, to report as it comes out:** prosumers export at midday, when wholesale prices are lowest. A share of the spot price can therefore pay **less** than a flat yearly-average tariff, and the 10% bonus may not close the gap. The evaluation reports the numbers and a sensitivity grid (share of wholesale 0.85 / 0.95 / 1.0, bonus 0 / 10% / 20%) and makes no claim in advance. Battery response (phase 3) is the part that earns the evening price.
 
 ## Phase 1: pricing core
 
@@ -48,22 +49,26 @@ Data flow: `agent decision` + `PZU price` → `tariff` → `revenue` → `eval t
 
 - New contract object `HousePrice` in `src/common/contract.py`: `house_id`, `interval_start`, `buyback_eur_kwh`, `bonus_applied`, `reason`. Strict, like the other contract objects.
 - A plan carries its `HousePrice` list next to its `HouseLimit` list. The price is computed from the same decision as the limit, so the two cannot disagree.
-- New endpoint `GET /prices` in `src/agent/api.py` (read-only, same auth rules as the other GETs).
+- New endpoint `GET /prices?interval_start=` in `src/agent/api.py` (read-only, same auth rules as the other GETs). It returns `interval_start`, `mock` (true for the illustrative curve), `curve` (24 UTC hours of wholesale price) and `houses` (the plan's `HousePrice` list, empty when no plan exists for that interval). The screen's allowlist gets `prices`.
+- The price source is a `PriceSource` (real series and a month/hour profile, or an illustrative mock curve when `SOURCE=mock` or no data file exists). Every place that builds an `AgentService` passes it in.
 - Mocks in `src/common/mocks` updated in the same commit as the contract change.
 - **Owner:** `src/common/` and `src/agent/` belong to P1. P1 approves and announces the contract change ([docs/09-contract.md](../../09-contract.md) is updated in the same PR).
 
 ## Phase 3: battery response
 
 - Uses the existing twin (`src/grid/battery.py`, `GridState.batteries`, `HouseLimit.battery_kw`). No new battery model.
-- Rule: for houses with a battery, charge at hours where the price is below the daily median, discharge into the hours above it. Never exceed the safe export limit, the battery's power, or its SoC bounds. When the agent falls back or flags a human, the battery follows the plain fixed-limit behaviour.
+- Rule: for houses with a battery, a price at or above the day's median is "high". At a low price the battery stores the surplus. At a high price it sells stored energy into the room under the export cap, and stores only what the cap would have wasted. Never exceed the safe export limit, the battery's power, or its SoC bounds. When the agent falls back or flags a human, the battery stays idle.
+- The battery can therefore raise exported energy as well as shift it, because it sells what the cap would have curtailed.
+- Batteries are assumed on the first 30% of houses in sorted order (101,243 of 332,684 Romanian prosumers have one, [docs/06](../../06-motivation-and-problems.md)).
+- The live agent has no per-house surplus, so live plans keep `battery_kw = 0`. Battery response is measured in the evaluation, and the screen shows that number.
 - Revenue is reported with and without battery response, so the prosumer gain is no longer a minimum.
 - Dispatch is a pure function over `(prices, soc, limits)` so it is testable without the grid.
 
 ## Phase 4: live price in the UI
 
-- A price panel in `src/ui/`: current and next-day price curve, each house's buy-back price and bonus (from `GET /prices`), and, after phase 3, the battery schedule.
-- Uses the existing mocks pattern in `src/ui/mocks`, so the UI works without the live agent.
-- Tomorrow's prices are published around 13:00 CET. Before then, the panel shows today's curve and says so.
+- A "Prices" tab in `src/ui/static/index.html`: the day's wholesale curve with the selected hour marked, each house's buy-back price and reason (from `GET /prices`), and a table of what prosumers earn under each price, read from the evaluation summary (`pricing.rows`, including the battery row after phase 3).
+- Without price data the panel shows the illustrative curve and a "Mock" tag. Without an evaluation run the earnings table shows how to produce one.
+- Tomorrow's prices are published around 13:00 CET; the panel shows whatever the source has for the selected day and falls back to the profile.
 
 ## Tests
 
@@ -72,7 +77,7 @@ Pure and fast, no network.
 - `prices`: UTC to Bucharest conversion, month/hour alignment, gap fill and flag.
 - `revenue`: a small hand-computed example.
 - Fetch script: tested against a saved sample response.
-- Contract: `HousePrice` rejects invalid values, as the other contract tests do. API test for `/prices`.
+- Contract: `HousePrice` rejects invalid values, as the other contract tests do. API test for `/prices`. The mock noon plan has a safe share of 0.35, below the fixed 0.36, so bonus tests lower the station's fixed share.
 - Battery dispatch: SoC and power bounds, no export above the safe limit, fallback behaviour.
 - UI: renders from mocks.
 
