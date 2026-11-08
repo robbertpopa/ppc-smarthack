@@ -28,6 +28,7 @@ from sklearn.metrics import mean_pinball_loss
 from src.eval.metrics import evaluate, load_profiles, surplus_kw
 from src.ml import abstention, baselines, calibration, features, model_io, online_calibration
 from src.ml import labels as labels_io
+from src.ml import weather as weather_io
 from src.ml.config import crew_cases_per_day, violation_target
 from src.ml.explain import build_artifacts, save_artifacts
 from src.ml.split import FOLD_NAMES, daylight, fit_rows, folds, oos, split
@@ -97,6 +98,16 @@ def _optional_surplus(scenario: str):
         return None, None
     surplus = surplus_kw(profiles, houses)
     return (surplus, houses.set_index("house_id")["kwp"]) if len(surplus) else (None, None)
+
+
+def _optional_weather(scenario: str):
+    """The station's hourly weather, or None (the weather features are then NaN and unused)."""
+    try:
+        houses = labels_io.load_station_houses(scenario)
+        return weather_io.load(sorted(houses["source_house_id"].astype(str).unique()))
+    except (FileNotFoundError, OSError, ValueError, KeyError) as error:
+        print(f"warning: {scenario}: training without weather ({error})", file=sys.stderr)
+        return None
 
 
 def _pinball(y, pred) -> dict[str, float]:
@@ -271,7 +282,9 @@ def train(
         raise ValueError(f"scenario {scenario} must hold one station, found {list(stations)}")
     pt_id = stations[0]
 
-    rows = training_rows(labels)
+    # v1 stays as it was trained: no weather. v2 uses the weather when it has been downloaded.
+    weather = _optional_weather(scenario) if folded else None
+    rows = training_rows(labels, weather)
     if folded:
         pairs = folds(rows)
         label_pairs = folds(labels)
@@ -350,6 +363,14 @@ def train(
         if folded:
             meta["folds"] = report["folds"]
             meta["offset"] = offset
+            meta["weather"] = {
+                "used": weather is not None,
+                "sha256": (
+                    model_io.file_sha256(weather_io.weather_path())
+                    if weather is not None and weather_io.weather_path().exists()
+                    else None
+                ),
+            }
             meta["fold_note"] = (
                 "val_period is the four out-of-sample quarters; the final models are refitted "
                 "on train_period"

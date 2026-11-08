@@ -188,3 +188,30 @@ def test_v2_threshold_is_chosen_on_the_offset_limit(env, report_v2):
         <= (report_v2["abstention"]["violation_target"] + 1e-9)
         or not report_v2["abstention"]["reachable"]
     )
+
+
+def _hourly_weather():
+    time = pd.date_range("2010-06-30", "2013-07-01", freq="1h", tz="UTC")
+    rng = np.random.default_rng(0)
+    return pd.DataFrame(
+        {
+            "time": time,
+            "ghi_wm2": rng.uniform(0, 900, len(time)),
+            "t2m_c": rng.uniform(5, 35, len(time)),
+            "available_at": time + pd.Timedelta("1h"),
+        }
+    )
+
+
+def test_v2_uses_the_weather_when_there_is_some_and_v1_never_does(env, monkeypatch, report_v2):
+    _, plain = model_io.load(V2, "PT-A")
+    assert plain["weather"]["used"] is False
+    assert not {"kt_now", "t2m_now"} & set(plain["features"])  # nothing to bin: left out
+    monkeypatch.setattr("src.ml.weather.load", lambda ids=None: _hourly_weather())
+    train.train("A", grid=FAST, version=V2, out_root=env / "w")
+    meta = model_io.load_dir(env / "w" / "PT-A")[1]
+    assert meta["weather"]["used"] is True
+    assert {"kt_now", "kt_lag_1", "t2m_now"} <= set(meta["features"])
+    train.train("A", grid=FAST, out_root=env / "w1")  # v1: same call, no weather at all
+    v1 = model_io.load_dir(env / "w1" / "PT-A")[1]
+    assert "weather" not in v1 and "kt_now" not in v1["features"]
