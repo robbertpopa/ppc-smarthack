@@ -71,8 +71,14 @@ def train(scenario: str, seed: int = 0, horizons=HORIZONS, params=None, save: bo
         raise ValueError(f"scenario {scenario} must hold one station, found {list(stations)}")
     pt_id = stations[0]
     models, report = {}, {}
+    parts_by_horizon = {h: split(_rows(labels, h)) for h in horizons}
+    columns = [
+        f
+        for f in features.usable(parts_by_horizon[horizons[0]]["train"])
+        if all(parts_by_horizon[h]["train"][f].notna().any() for h in horizons)
+    ]
     for horizon in horizons:
-        parts = split(_rows(labels, horizon))
+        parts = parts_by_horizon[horizon]
         for target in TARGETS:
             fit = parts["train"].dropna(subset=[target])
             val = parts["val"].dropna(subset=[target, f"{target}_yesterday"])
@@ -80,9 +86,9 @@ def train(scenario: str, seed: int = 0, horizons=HORIZONS, params=None, save: bo
                 raise ValueError(f"{target} h{horizon}: no training or validation rows")
             pred = {}
             for q in QUANTILES:
-                model = fit_quantile(fit[features.FEATURES], fit[target], q, params, seed)
+                model = fit_quantile(fit[columns], fit[target], q, params, seed)
                 models[_name(target, horizon, q)] = model
-                pred[q] = model.predict(val[features.FEATURES])
+                pred[q] = model.predict(val[columns])
             y = val[target].to_numpy()
             # the bands that are served are sorted, so the loss is scored on the sorted bands
             ordered = np.clip(
@@ -113,7 +119,7 @@ def train(scenario: str, seed: int = 0, horizons=HORIZONS, params=None, save: bo
             "horizons": list(horizons),
             "quantiles": list(QUANTILES),
             "targets": list(TARGETS),
-            "features": features.FEATURES,
+            "features": columns,
             "kwp_total": float(labels["kwp_total"].iloc[-1]),
             "seed": seed,
             "hyperparameters": params,
@@ -129,8 +135,7 @@ def _load(pt_id: str):
         import joblib
 
         meta = model_io.load_metadata(MODEL_VERSION, pt_id)
-        if meta["features"] != features.FEATURES:
-            raise ValueError(f"{MODEL_VERSION}/{pt_id} was trained on other features; retrain it")
+        features.check_known(meta["features"], f"{MODEL_VERSION}/{pt_id}")
         names = [
             _name(t, h, q)
             for t in meta["targets"]
@@ -165,9 +170,8 @@ def predict_pv_load(feats: dict, horizon_min: int = 60) -> dict[str, Band | None
     models, meta = _load(pt_id)
     if horizon_min not in meta["horizons"]:
         raise ValueError(f"horizon_min must be one of {meta['horizons']}, got {horizon_min}")
-    X = pd.DataFrame(
-        [[feats.get(n) for n in features.FEATURES]], columns=features.FEATURES, dtype=float
-    )
+    columns = meta["features"]
+    X = pd.DataFrame([[feats.get(n) for n in columns]], columns=columns, dtype=float)
     kwp = meta["kwp_total"]
     out = {}
     for target in TARGETS:

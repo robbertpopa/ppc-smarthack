@@ -20,7 +20,7 @@ import pandas as pd
 
 from src.eval import plots, robustness
 from src.eval.metrics import EPS, FIXED_SHARE, evaluate, export_by_interval
-from src.ml import features, train
+from src.ml import train
 from src.ml.config import SYDNEY, violation_target
 from src.ml.split import TEST_START, split
 from src.ml.sun import solar_elevation
@@ -175,7 +175,7 @@ def attempts(ctx: dict) -> pd.DataFrame:
         part["cloud_ratio"] = -part["net_now"] / sine
     val_labels = split(labels)["val"]
     surplus, kwp = ctx["surplus"], ctx["kwp"]
-    params, base = meta["hyperparameters"], features.FEATURES
+    params, base = meta["hyperparameters"], meta["features"]
     index = pd.DatetimeIndex(va["target_start"])
 
     def score(name, share, alpha, note):

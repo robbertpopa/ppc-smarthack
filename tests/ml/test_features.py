@@ -3,6 +3,7 @@ import pandas as pd
 import pytest
 
 from src.ml import features, labels
+from src.ml.sun import clearsky_ghi
 
 STEP = pd.Timedelta(minutes=30)
 
@@ -134,3 +135,106 @@ def test_build_accepts_a_plain_datetime(station, frame):
     t = frame["decision_time"].iloc[500]
     plain, stamped = features.build(station, t.to_pydatetime()), features.build(station, t)
     assert same([plain[k] for k in features.FEATURES], [stamped[k] for k in features.FEATURES])
+
+
+V1 = features.FEATURES[:14]
+
+
+@pytest.fixture(scope="module")
+def weather(station):
+    """Hourly weather over the station's period: sunlight at a varying share of clear sky."""
+    hours = pd.date_range(
+        station["interval_start"].min().floor("h") - pd.Timedelta(hours=6),
+        station["interval_start"].max().ceil("h"),
+        freq="h",
+        tz="UTC",
+    )
+    sky = clearsky_ghi(hours + pd.Timedelta(minutes=30))
+    share = 0.3 + 0.6 * (np.arange(len(hours)) % 7) / 6
+    return pd.DataFrame(
+        {
+            "time": hours,
+            "ghi_wm2": sky * share,
+            "t2m_c": 15 + (np.arange(len(hours)) % 24) / 2,
+            "available_at": hours + pd.Timedelta(hours=1),
+        }
+    )
+
+
+@pytest.fixture(scope="module")
+def frame_w(station, weather):
+    return features.build_frame(station, weather=weather)
+
+
+def test_nineteen_features_and_weather_ones_are_nan_without_weather(frame):
+    assert len(features.FEATURES) == 19 and len(V1) == 14
+    for name in features.WEATHER_FEATURES:
+        assert frame[name].isna().all(), name
+    assert frame["clearsky_T"].notna().all() and frame["net_over_clearsky"].notna().any()
+
+
+def test_weather_leaves_the_v1_features_unchanged(frame, frame_w):
+    assert same(frame[V1], frame_w[V1])
+    assert same(frame["clearsky_T"], frame_w["clearsky_T"])
+
+
+def test_weather_features_use_the_newest_finished_hour(station, weather):
+    t = pd.Timestamp("2011-03-05 02:30", tz="UTC")  # 13:30 in Sydney
+    got = features.build(station, t, weather=weather)
+    w = weather.set_index("time")
+    newest = pd.Timestamp("2011-03-05 01:00", tz="UTC")  # hour 01:00-02:00, known at 02:00
+    half = pd.Timedelta(minutes=30)
+    assert got["t2m_now"] == pytest.approx(w.loc[newest, "t2m_c"])
+    assert got["kt_now"] == pytest.approx(w.loc[newest, "ghi_wm2"] / clearsky_ghi(newest + half))
+    lag = newest - pd.Timedelta(hours=1)
+    assert got["kt_lag_1"] == pytest.approx(w.loc[lag, "ghi_wm2"] / clearsky_ghi(lag + half))
+    sky_now = clearsky_ghi(t - STEP + STEP / 2)
+    assert got["net_over_clearsky"] == pytest.approx(got["net_now"] / (sky_now / 1000))
+
+
+def test_weather_from_after_the_decision_changes_nothing(station, weather, frame_w):
+    rng = np.random.default_rng(2)
+    for t in frame_w["decision_time"].sample(20, random_state=2):
+        broken = weather.copy()
+        future = broken["available_at"] > t
+        broken.loc[future, ["ghi_wm2", "t2m_c"]] = rng.uniform(500, 900, (future.sum(), 2))
+        expected = features.build(station, t, weather=weather)
+        got = features.build(station, t, weather=broken)
+        assert same([got[k] for k in features.FEATURES], [expected[k] for k in features.FEATURES])
+        row = features.build_frame(station, weather=broken).set_index("decision_time").loc[t]
+        assert same(row[features.FEATURES], [expected[k] for k in features.FEATURES])
+
+
+def test_build_equals_build_frame_with_weather(station, weather, frame_w):
+    for t in frame_w["decision_time"].sample(100, random_state=3):
+        one = features.build(station, t, weather=weather)
+        row = frame_w.set_index("decision_time").loc[t]
+        assert same([one[k] for k in features.FEATURES], row[features.FEATURES])
+
+
+def test_night_gives_zero_clear_sky_and_no_ratios(station, weather):
+    t = pd.Timestamp("2011-03-05 13:00", tz="UTC")  # target 14:00 UTC: 01:00 in Sydney
+    got = features.build(station, t, weather=weather)
+    assert got["clearsky_T"] == 0.0
+    assert np.isnan(got["kt_now"]) and np.isnan(got["kt_lag_1"])
+    assert np.isnan(got["net_over_clearsky"])
+    assert not np.isnan(got["t2m_now"])  # temperature is known at night too
+
+
+def test_haurwitz_matches_hand_computed_values(monkeypatch):
+    from src.ml import sun
+
+    stamp = pd.Timestamp("2011-03-05 02:00", tz="UTC")
+    for elevation, expected in ((90.0, 1098 * np.exp(-0.057)), (30.0, 549 * np.exp(-0.114))):
+        monkeypatch.setattr(sun, "solar_elevation", lambda ts, lat, lon, e=elevation: e)
+        assert sun.clearsky_ghi(stamp) == pytest.approx(expected)  # 1037.2 and 489.9 W/m^2
+    monkeypatch.setattr(sun, "solar_elevation", lambda ts, lat, lon: np.array([-5.0, 0.0]))
+    assert list(sun.clearsky_ghi(pd.DatetimeIndex([stamp, stamp]))) == [0.0, 0.0]
+
+
+def test_usable_drops_columns_with_no_value(frame):
+    assert features.usable(frame) == [
+        f for f in features.FEATURES if f not in features.WEATHER_FEATURES
+    ]
+    with pytest.raises(ValueError, match="retrain"):
+        features.check_known(["net_now", "cloud_ratio"], "model x")

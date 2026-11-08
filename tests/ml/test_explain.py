@@ -117,7 +117,8 @@ def trained(tmp_path_factory):
 
 
 def test_training_saves_the_explanation_data_and_explain_runs_fast(trained, capsys):
-    from src.ml.predict import model_version  # noqa: F401
+    from src.ml import model_io
+    from src.ml.predict import model_version
 
     decision = pd.Timestamp("2012-05-10 00:00", tz="UTC")
     feats_ = features.build(trained, decision)
@@ -131,9 +132,9 @@ def test_training_saves_the_explanation_data_and_explain_runs_fast(trained, caps
     assert per_call < 200
     assert out["figures"][0]["name"] in features.FEATURES
     table = explain_module.global_importance("PT-A")
-    assert list(table.columns) == ["feature", "importance", "std"] and len(table) == len(
-        features.FEATURES
-    )
+    _, meta = model_io.load(model_version(), "PT-A")  # no weather here: 16 of the 19 features
+    assert list(table.columns) == ["feature", "importance", "std"]
+    assert sorted(table["feature"]) == sorted(meta["features"])
 
 
 def test_explain_requires_identity(trained):

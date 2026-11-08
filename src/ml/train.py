@@ -71,9 +71,12 @@ def predict_quantiles(models: dict[float, object], X) -> np.ndarray:
     return rearrange(raw)
 
 
-def training_rows(labels: pd.DataFrame) -> pd.DataFrame:
-    """Daylight rows with a known target, with ``interval_start`` set to the target time."""
-    frame = features.build_frame(labels)
+def training_rows(labels: pd.DataFrame, weather: pd.DataFrame | None = None) -> pd.DataFrame:
+    """Daylight rows with a known target, with ``interval_start`` set to the target time.
+
+    ``weather`` (``src.ml.weather.load``) fills the weather features; without it they are NaN.
+    """
+    frame = features.build_frame(labels, weather=weather)
     frame["interval_start"] = frame["target_start"]
     keep = daylight(frame) & frame["safe_share"].notna().to_numpy()
     return frame[keep].reset_index(drop=True)
@@ -102,7 +105,7 @@ def _pinball(y, pred) -> dict[str, float]:
     }
 
 
-def _search(pairs, grid, seed, keep_models=False) -> list[dict]:
+def _search(pairs, grid, seed, columns, keep_models=False) -> list[dict]:
     """Fit every setting on every ``(fit, valid)`` pair and score the pooled predictions.
 
     v1 has one pair (train, validation); v2 has the four quarterly folds. The score of a
@@ -114,10 +117,9 @@ def _search(pairs, grid, seed, keep_models=False) -> list[dict]:
         preds, fitted = [], []
         for fit, valid in pairs:
             models = {
-                q: fit_quantile(fit[features.FEATURES], fit["safe_share"], q, params, seed)
-                for q in QUANTILES
+                q: fit_quantile(fit[columns], fit["safe_share"], q, params, seed) for q in QUANTILES
             }
-            preds.append(predict_quantiles(models, valid[features.FEATURES]))
+            preds.append(predict_quantiles(models, valid[columns]))
             fitted.append(models if keep_models else None)
         pred = np.vstack(preds)
         pinball = _pinball(y, pred)
@@ -283,11 +285,12 @@ def train(
             f"need training and validation rows, got {len(fit_set)} and {len(val_rows)}"
         )
 
-    search = _search(pairs, grid, seed, keep_models=not folded)
+    columns = features.usable(fit_set)  # a feature with no value at all cannot be binned
+    search = _search(pairs, grid, seed, columns, keep_models=not folded)
     best = min(search, key=lambda item: item["mean_pinball"])
     params, pred = best["params"], best["pred"]
     if folded:  # the models that go live saw the whole fit period, the last quarter too
-        X_fit, y_fit = fit_set[features.FEATURES], fit_set["safe_share"]
+        X_fit, y_fit = fit_set[columns], fit_set["safe_share"]
         models = {q: fit_quantile(X_fit, y_fit, q, params, seed) for q in QUANTILES}
     else:
         models = best["models"][0]
@@ -333,7 +336,7 @@ def train(
                 str(val_rows["target_start"].min()),
                 str(val_rows["target_start"].max()),
             ],
-            "features": features.FEATURES,
+            "features": columns,
             "quantiles": list(QUANTILES),
             "seed": seed,
             "hyperparameters": params,

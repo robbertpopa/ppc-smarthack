@@ -22,7 +22,8 @@ def env(tmp_path_factory):
 
 
 def scored_like(table, rows=200):
-    frame = features.build_frame(table).dropna(subset=features.FEATURES).iloc[1000 : 1000 + rows]
+    frame = features.build_frame(table)  # no weather here: those features are all NaN
+    frame = frame.dropna(subset=features.usable(frame)).iloc[1000 : 1000 + rows]
     return {"X": frame[features.FEATURES], "rows": frame[["pt_id", "target_start"]]}
 
 
