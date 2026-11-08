@@ -1,96 +1,114 @@
 # Prosumer aggregator price: design
 
-**Status:** design v2, 2026-11-08. Replaces the first version (a "share of spot" buy-back with a grid bonus), which was rewritten after checking how PPC buys and sells today and what PPC's CEO asked for. Not implemented. The earlier plan ([../plans/2026-11-08-dynamic-buyback-pricing.md](../plans/2026-11-08-dynamic-buyback-pricing.md)) matches v1 and must be rewritten after this spec is approved.
+**Status:** design v3, 2026-11-08. Replaces v1 (a "share of spot" buy-back with a grid bonus) and v2 (a monthly "at least the regulated price" guarantee). v3 was built and tested in a scratch worktree (439 tests pass, screen checked in a browser) before the plan was written. Plan: [../plans/2026-11-08-dynamic-buyback-pricing.md](../plans/2026-11-08-dynamic-buyback-pricing.md). Background, numbers and the simulated year: [../../14-prosumers-and-pricing.md](../../14-prosumers-and-pricing.md).
 
 ## Goal
 
-PPC offers an opt-in product in which it acts as the **single buyer** of a prosumer's injected energy, like Italy's GSE (Ritiro Dedicato), which PPC Romania's CEO has said Romania should copy. PPC pays the hourly day-ahead price (PZU) minus a published fee, with a floor, and **shares with the prosumer part of the imbalance cost it saves** by forecasting the aggregated export. PPC's profit comes from that saving, not from a haircut on the prosumer's price.
+PPC offers an opt-in product to prosumers who have a battery and a smart meter. PPC acts as single buyer of their injected energy, like Italy's GSE (Ritiro Dedicato), which PPC Romania's CEO has said Romania should copy. The price follows the hourly day-ahead price (PZU), so shifting energy to the evening pays. A monthly solar adder keeps today's regulated money for the energy a prosumer cannot shift. PPC's gain comes from the value of shifted energy, a fee, and part of the imbalance cost it saves by forecasting the aggregated export. Other prosumers stay on the regulated terms, unchanged.
 
 ## Context (what we found, and how sure we are)
 
 | Fact | Source | Confidence |
 |---|---|---|
-| PPC's prosumer product (MaxControl) prices consumption at 0.097 lei/kWh plus the monthly average of 15-minute PZU prices, with a price floor and cap. The fixed part covers supply and estimated imbalance. The injection price is "per the regulations". | PPC's own offer PDF | High |
-| Law 160/2026: up to 200 kW, the supplier offsets drawn against injected energy within the billing period, at the active-energy price in the contract, until 2030. 200–400 kW: the supplier buys at the monthly weighted-average PZU price on request. | Law-firm summary (BPV Grigorescu); ANRE's page could not be opened | Medium |
-| Whether the law is in force since 26 July 2026 or its application was postponed to 2027 | Two sources disagree | Unresolved |
-| Prosumers up to 400 kW pay no imbalance, so suppliers do. AFEER estimates 200–372 lei/MWh per injected MWh (about 40–75 EUR/MWh). | AFEER (supplier association: an interested party) | Low, cross-check only |
-| Balancing price reached 60,976 lei/MWh on 27 April 2026 | Press (Business Review) | Medium |
-| PPC Romania's CEO: the state, through a state company, should pay prosumers, as GSE does in Italy | profit.ro interview | High |
-| GSE pays the hourly zonal price, monthly (about two months later), with an optional guaranteed minimum of 4.75 €c/kWh for 2026 for small plants, and does the imbalance trading itself. The floor is public money. | Enpal, SurgePV | Medium |
-| PPC owns the supplier (PPC Energie) and the grid operator (Rețele Electrice, formerly E-Distribuție) | PPC press release, Oct 2023 | High |
-| Romanian balancing prices are **not** in the euenergy.live API (it has prices and load only) | probed | High |
+| PPC's prosumer product (MaxControl) prices consumption at 0.097 lei/kWh plus the monthly consumption-weighted average of 15-minute PZU prices, with a price floor and cap. The injection price is "per the regulations". | PPC's own offer PDF | High |
+| Law 160/2026: up to 200 kW the supplier offsets drawn against injected energy within the billing period at the contract's active-energy price, until 2030. 200–400 kW: the supplier buys at the monthly weighted-average PZU price on request. | Law-firm summary (BPV Grigorescu); ANRE's page could not be opened | Medium |
+| Whether the law applies since 26 July 2026 or from 2027 | Two sources disagree | Unresolved |
+| Prosumers up to 400 kW pay no imbalance, so suppliers do. AFEER estimates 200–372 lei/MWh per injected MWh (about 38–72 EUR/MWh at about 5.2 lei/EUR). | AFEER (supplier association: an interested party) | Low, cross-check only |
+| PPC Romania's CEO: a state company should pay prosumers, as GSE does in Italy | profit.ro interview | High |
+| GSE pays the hourly zonal price, monthly, with an optional guaranteed minimum (4.75 €c/kWh for 2026), and does the imbalance trading. The floor is public money. | Enpal, SurgePV | Medium |
+| PPC owns the supplier (PPC Energie) and the grid operator (Rețele Electrice) | PPC press release, Oct 2023 | High |
+| Distributors have no legal access to prosumer batteries; prosumers oppose control | Press (see docs/14) | Medium |
+| Romanian balancing prices are not in the euenergy.live API (prices and load only) | probed | High |
+| The API refuses Python's default client name (HTTP 403) but accepts `curl` | probed | High |
 
 ## The scheme
 
-**Price paid to the prosumer, per exported kWh, per hour:**
+**Who:** prosumers with a battery and a smart meter (SMI). About a third of residential prosumers, and growing. If the storage obligation of Law 255/2024 turns out to be in force (unverified), more.
 
-- `base = max(floor, PZU − fee)`, in EUR/kWh, never negative.
-- `PZU` is the hourly day-ahead price. `fee` is a published aggregator fee for admin and residual risk. `floor` is a minimum price. Italy's floor is state-funded; here **PPC funds it**, so it is a cost in the profit view and the sensitivity table shows how large a floor PPC can afford.
-- **Bonus (settled monthly, after the fact):** `bonus pool = bonus_share × imbalance cost saved`, shared out pro rata to each prosumer's exported kWh. Default `bonus_share = 0.5`.
-- All of `fee`, `floor` and `bonus_share` are placeholders in config. No value is claimed as correct; the evaluation reports a sensitivity grid.
+**What PPC pays for each exported kWh (settled monthly, shown as separate invoice lines):**
 
-**Why the grid headroom is no longer in the price.** In v1 the bonus depended on the agent's safe export limit. That would pass grid data from the grid operator to the supplier, which unbundling rules may forbid. The price now depends only on public PZU data and PPC's own forecast. The safe export limit stays on the operator side.
+1. **Hourly price:** `max(floor, PZU − fee)` for the interval (EUR/MWh). Never negative, so the prosumer is never charged in negative-price hours. `floor` defaults to 0.
+2. **Solar adder:** for each month, the month's average PZU minus its solar-weighted PZU, from public prices and a standard solar shape (Bucharest latitude), floored at 0 and published after the month ends. The same for everyone and independent of what one prosumer does, so it does not dull the incentive to shift. It carries over today's regulated overpayment (about 50 EUR/MWh in March–August, near 0 in winter).
+3. **Imbalance bonus:** `bonus_share` of the measured imbalance saving (below), shared pro rata to exported kWh of participants who share data. Default `bonus_share = 0.5`.
 
-## Imbalance savings (the profit source)
+**What the prosumer pays PPC:** an aggregator fee per exported MWh (default 30 EUR/MWh, range 20–40), covering admin and PPC's remaining imbalance risk. Nothing else: no subscription, no penalty for staying out.
 
-- **PPC's imbalance volume** per 30 minutes is `|actual − forecast|` of the aggregated prosumer export of the station, in MWh.
-- **Two forecasts, on the same test year:** the **baseline** is "same time yesterday" (already in the repository); the **model** is the repository's PV/load forecast (`src/ml/forecast_pv_load.py`, 60-minute horizon) turned into a net-export forecast. A 60-minute horizon means PPC corrects its position on the intraday market about an hour ahead. **This is an assumption**: it needs intraday liquidity at roughly the PZU price.
-- **Cost** = volume × imbalance spread (EUR/MWh). There is no balancing-price series in our data source, so v1 reports three spreads side by side: 30, 60 and 120 EUR/MWh, with AFEER's 40–75 EUR/MWh as a cross-check. A real series (ENTSO-E imbalance prices, needs a token) is an optional upgrade behind the same interface.
-- **Saving** `S` = cost with baseline − cost with model.
+**What PPC does not do:** control inverters or batteries. It reads smart-meter data and, with consent, battery or inverter data, and publishes next-day prices as information. The prosumer's own system decides.
 
-## PPC profit view
+**Why not a "never below the regulated price" guarantee (v2).** In months where the guarantee binds, shifting energy earns the prosumer nothing extra. The simulation (docs/14, section 5b) gave a battery owner +2.4% and PPC about 94% of the value. The solar adder keeps the full evening incentive.
 
-Per scenario and spread, over the test year, against the status quo (buying at PZU and carrying baseline imbalance):
+**Why grid headroom is not in the price (v1).** It would pass grid data from the grid operator to the supplier, which unbundling rules may forbid. The price depends only on public PZU data, meter data and PPC's own forecast. The safe export limit stays on the operator side.
 
-`PPC net = fee × exported kWh + (1 − bonus_share) × S − floor top-ups`
+All of `fee`, `floor` and `bonus_share` are placeholders in `src/pricing/config.py`. No value is claimed as correct; the evaluation reports a fee sensitivity table (0–50 EUR/MWh).
 
-where a floor top-up is `kWh × max(0, floor − (PZU − fee))` in the hours where the floor applies. The view also lists the prosumer side: revenue under (a) a flat tariff at the yearly average PZU, (b) the scheme price, (c) the scheme price plus bonus, and (d) with battery response. **Nothing is asserted in advance**: prosumers export at midday, when PZU is lowest, so the scheme price can still pay less than a flat yearly average. The sensitivity grid (fee 0 / 10 / 20 EUR/MWh, floor 0 / 10 / 20 EUR/MWh, spread 30 / 60 / 120) shows what it takes for both sides to gain, and where PPC's net turns negative.
+## What is measured (the evaluation block)
+
+For the houses with a battery (the first 30% of the station's houses in sorted order, matching the 33% of residential prosumers with one), under the smart export limit, over the test year:
+
+| Row | Prosumer is paid | PPC's margin is |
+|---|---|---|
+| Today | monthly average PZU on the exported kWh | value of that energy (its PZU price) minus what it pays |
+| Hourly price only | hourly price | same formula |
+| Hourly price + solar adder, no battery | hourly + adder | same formula |
+| **Proposed**: hourly + adder + battery response | hourly + adder on the battery-shifted exports | same formula |
+
+Each row reports the prosumer's revenue and its change against today in percent, PPC's margin in EUR and as a percent of the energy's value, and PPC's improvement against today. The fee sensitivity also reports the prosumer's share of the value created. **Nothing is asserted in advance.** Prosumers export at midday, when PZU is lowest, so PPC pays today about 49 EUR/MWh (about 70 in sunny months) above that energy's value, and the adder keeps most of that. Only regulation can remove it.
+
+## Imbalance savings (the profit source beyond shifting)
+
+- PPC's imbalance volume per 30 minutes is `|actual − forecast|` of the station's net export `max(0, pv − load)`, before any limit.
+- Two forecasts on the same test year: the **baseline** is "same time yesterday"; the **model** is the PV/load forecast (`src/ml/forecast_pv_load.py`, 60-minute horizon). A 60-minute horizon means PPC corrects its position on the intraday market about an hour ahead. **This is an assumption:** it needs intraday liquidity at roughly the PZU price.
+- Cost = volume × imbalance spread. There is no balancing-price series in our data source, so three scenario spreads are reported side by side: 30, 60 and 120 EUR/MWh, with AFEER's 38–72 EUR/MWh as a cross-check. A real series (ENTSO-E imbalance prices, needs a token) is an optional upgrade behind the same interface.
+- Saving = baseline cost − model cost. The battery houses' share of the station's exports gets the bonus (`bonus_share` of a positive saving); PPC keeps the rest. A negative saving is not shared.
+- Without a trained PV/load model this part is skipped and the output says so.
 
 ## Data
 
-- **Prices:** euenergy.live, `GET /api/v1/prices?zone=RO&from=&to=`, hourly, EUR/MWh, UTC. Token in `EUENERGY_TOKEN` (gitignored `.env`). CC-BY-4.0: credit euenergy.live. Fetch with `python -m src.pricing.prices fetch --year 2025` (a module, because `.gitignore` allows only listed folders). Saved to `data/pzu/ro.parquet`. Month by month; missing hours: gaps of up to 3 hours carry the last price, longer gaps stay missing and are counted.
-- **Alignment:** the price year differs from the Ausgrid test year, and Ausgrid is Sydney (July is winter). Prices are averaged per (month, hour) in Bucharest time; each Sydney interval takes the **month + 6 and the same local clock hour**. The result shows the shape of the effect, not a forecast in euros, and the pitch says so.
-- **Imbalance spread:** scenario values (above), real series later.
+- **Prices:** euenergy.live, `GET /api/v1/prices?zone=RO&from=&to=`, hourly, EUR/MWh, UTC, token in `EUENERGY_TOKEN` (gitignored `.env`), with a `User-Agent` header. CC-BY-4.0: credit euenergy.live. Fetch with `python -m src.pricing.prices fetch --year 2025` (a module, because `.gitignore` allows only listed folders). Saved to `data/pzu/ro.parquet`, month by month; gaps of up to 3 hours carry the last price, longer gaps stay missing and are counted.
+- **Alignment:** the price year differs from the Ausgrid test year, and Ausgrid is Sydney (July is winter). Prices are averaged per (month, hour) in Bucharest time; each Sydney interval takes **month + 6 and the same local clock hour**. The result shows the shape of the effect, not a forecast in euros, and the pitch says so.
+- **Imbalance spread:** scenario values, real series later.
 
 ## Phases
 
-Five pull requests, in order. Each phase is testable and demoable by itself.
+Four pull requests, in order. Each phase is testable and demoable by itself.
 
-1. **Pricing core.** PZU loader and alignment, price rule (`fee`, `floor`), prosumer revenue under flat / scheme price / with floor, PPC fee income and floor top-ups. Evaluation block and chart behind `python -m src.eval.run --pricing`.
-2. **Imbalance savings and bonus.** Net-export forecast adapter, imbalance volume and cost under baseline and model, bonus pool, PPC net, sensitivity grid. Touches the area P6 is changing (`src/ml/forecast_pv_load.py`, `src/eval/`): rebase before the PR.
-3. **Per-house price in the agent API.** New contract object `HousePrice` (`house_id`, `interval_start`, `buyback_eur_kwh`, `wholesale_eur_mwh`, `floor_applied`, `reason`), carried in `Plan.prices`; `GET /prices` returns the day's wholesale curve and the plan's prices. The price is the hourly base only; the bonus is settled monthly and appears in the evaluation and statement, not in the live price. `src/common/` and `src/agent/` belong to P1, who approves. Update `docs/09-contract.md` and the mocks in the same PR.
-4. **Battery response.** Price-driven dispatch for houses with a battery (a price at or above the day's median is "high"; low price: store; high price: sell into the room under the cap and store only what the cap would waste; idle on fallback hours). Reuses `src/grid/battery.py`. Batteries are assumed on the first 30% of houses (101,243 of 332,684 Romanian prosumers have one, [docs/06](../../06-motivation-and-problems.md)). The live agent has no per-house surplus, so live plans keep `battery_kw = 0`; battery response is measured in the evaluation. Using batteries to cancel PPC's imbalance in real time is a follow-up, not v1: it needs a 15-minute control loop assumption.
-5. **Prices tab in the operator screen.** Day curve with the selected hour marked, each house's price and reason (from `GET /prices`), and tables from the evaluation summary: what prosumers earn and the PPC profit view. Works with the illustrative mock curve when no price data exists, marked "Mock".
+1. **Prices, tariff, solar adder, battery, evaluation** (`pricing/core`). The pure `src/pricing/` modules, the `pricing` block, markdown and chart behind `python -m src.eval.run --pricing`.
+2. **Imbalance savings and bonus** (`pricing/imbalance`). Net-export forecasts, volume and cost, bonus, in the block. Reads `forecast_pv_load.py` (P6's area) without editing it.
+3. **Per-house price in the agent API** (`pricing/api`). `HousePrice` in the contract (`wholesale_eur_mwh`, `hourly_eur_kwh`, `adder_eur_kwh`, `total_eur_kwh`, `floor_applied`, `reason`) carried in `Plan.prices`; a price source with an illustrative mock curve; `GET /prices` returns `interval_start`, `mock`, `curve` (24 UTC hours) and `houses` (the plan's prices, empty when no plan exists). The bonus is settled monthly and appears in the evaluation, not in the live price. The live agent has no per-house surplus, so live plans keep `battery_kw = 0`. `src/common/` and `src/agent/` belong to P1, who approves; `docs/09-contract.md` is updated in the same PR.
+4. **Prices tab in the operator screen** (`pricing/ui`). The day curve with the selected hour marked, each house's price and reason, and the earnings and imbalance tables from the evaluation summary. Works with the mock curve, marked "Mock".
+
+Using batteries to cancel PPC's imbalance in real time is a follow-up, not part of this work.
 
 ## Approval path (to settle with PPC; none of this is checked with them)
 
-- **Law:** up to 200 kW the compensation is by quantity at the contract price until 2030, so this product may fit prosumers who opt out of compensation, or the 200–400 kW tier, better. Needs a legal opinion, and ANRE's updated methodology is pending.
-- **Roles:** acting as a single buyer and balancing party for others' injected energy may need a specific role or licence. Not verified.
-- **Unbundling:** handled by design (no grid data in the price). The operator-side limit and the supplier-side price stay separate.
-- **Internal sign-off:** commercial pricing, energy risk (intraday position management), billing IT (15-minute metering), legal. An opt-in pilot on smart-meter customers is the natural first step.
-- **Questions for PPC:** what is paid for injection today under MaxControl; their actual imbalance cost per injected MWh; whether intraday correction at about PZU cost is realistic; the cost PPC would accept for a floor.
+- **Law:** up to 200 kW the compensation is by quantity at the contract price until 2030, so this product fits prosumers who opt out of compensation, or the 200–400 kW tier, better. For 200–400 kW the regulated price is probably a legal minimum, so the adder matters. Needs a legal opinion; ANRE's updated methodology is pending.
+- **Roles:** acting as single buyer and balancing party for others' energy may need a specific role or licence. Not verified.
+- **Unbundling:** handled by design (no grid data in the price).
+- **Internal sign-off:** commercial pricing, energy risk (intraday position management), billing IT (15-minute metering), legal. An opt-in pilot on smart-meter MaxControl customers with a battery is the natural first step.
+- **Questions for PPC:** what is paid for injection today under MaxControl; their actual imbalance cost per injected MWh; whether intraday correction at about PZU cost is realistic; their real purchase mix; the fee they would accept.
 
 ## Tests
 
 Pure and fast, no network.
-- Price rule: floor applies; never negative; negative PZU pays the floor or zero as configured; fee deducted.
-- Prices: UTC to Bucharest conversion, season alignment, gap fill and flag.
-- Revenue and PPC net: small hand-computed examples (including floor top-ups and a bonus pool).
-- Imbalance: volume and cost on a tiny series; saving is zero when the forecasts are equal.
-- Fetch: saved sample response, no token in CI.
-- Contract: `HousePrice` rejects invalid values; API test for `/prices`.
-- Battery: bounds, no export above the cap, idle on fallback hours.
-- UI: renders from mocks.
+- Price rule: floor, fee, never negative, missing prices stay missing.
+- Prices: UTC to Bucharest, season alignment, gap fill, `User-Agent` and token header, missing file message, token required.
+- Solar adder: weights, zero for flat prices, positive for cheap midday, floored at zero.
+- Settlement: a hand-computed example.
+- Battery: defaults equal the grid battery model; cap and power respected; each day empty; stores waste; idle on fallback and when nothing pays.
+- Evaluation block: signs, fee monotonicity, JSON-safe, markdown, chart.
+- Imbalance: volume, saving zero for equal forecasts, bonus split, a model trained on mock labels.
+- Contract, planner, service, API, screen allowlist and tab.
 
 ## Risks and limits (stated in the pitch)
 
 - The price year and the Ausgrid year differ; results show shape, not euros.
-- The imbalance spread is a scenario value, not market data. The headline is a range, not one number.
-- The saving depends on intraday correction one hour ahead being possible at about PZU cost.
-- PZU is a proxy for PPC's purchase cost. The real cost also includes network and supplier fees.
-- Simulation on Australian household data, not PPC's network or customers.
+- The imbalance spread is a scenario value; the saving assumes intraday correction an hour ahead at about PZU cost.
+- PZU is a proxy for PPC's purchase cost and for the value of the energy; the real mix is not public.
+- A prosumer whose real generation shape differs from the standard shape is not exactly neutral against today.
+- Simulation on Australian household data and one station, not PPC's customers.
+- Battery wear is not counted, and shifted energy must be surplus (a home battery is often worth more covering the home's own evening load).
 - `fee`, `floor` and `bonus_share` are free parameters.
-- If euenergy.live changes or goes down, ENTSO-E (document type A44 for prices, A85 for imbalance, zone `10YRO-TEL------P`) is the fallback and needs its own token.
+- If euenergy.live changes or goes down, ENTSO-E (A44 for prices, A85 for imbalance, zone `10YRO-TEL------P`) is the fallback and needs its own token.
 
 ## Done means
 

@@ -79,7 +79,7 @@ An earlier version of this section used a monthly "at least the regulated price"
 **What PPC pays for injected energy (settled monthly, as separate invoice lines, as PPC's offers already do):**
 
 1. **Hourly price.** Each exported kWh at `max(0, PZU − fee)` for its interval (15 minutes where the meter allows). The prosumer is never charged in negative-price hours.
-2. **Solar adder.** A published per-kWh amount for each month, equal to that month's average PZU minus its generation-weighted PZU, computed from public data after the month ends. It is the same for everyone and does not depend on the prosumer's behaviour, so it does not dull the incentive to shift. It carries over today's regulated overpayment (about 50 EUR/MWh in March–August, about 0 in winter), so a prosumer who does not shift gets roughly today's money. Whether it is floored at 0 in winter months is a choice (January would be −14 EUR/MWh).
+2. **Solar adder.** A published per-kWh amount for each month, equal to that month's average PZU minus its generation-weighted PZU, computed from public data after the month ends. It is the same for everyone and does not depend on the prosumer's behaviour, so it does not dull the incentive to shift. It carries over today's regulated overpayment (about 50 EUR/MWh in March–August, about 0 in winter), so a prosumer who does not shift gets roughly today's money. The code floors it at 0 (January would be −14 EUR/MWh); the simulation in 5b did not, which changes only the winter months.
 3. **Savings share (bonus).** A share (start at 50%) of the imbalance cost PPC measurably saved, for participants who share their data and a day-ahead export schedule.
 
 **What the prosumer pays PPC.**
