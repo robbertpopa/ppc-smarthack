@@ -1,0 +1,50 @@
+<section id="abstinere" data-transition="fade" style="background:#F7F5EF;color:#12202F;font-family:'DM Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:28px">
+<div style="display:flex;flex-direction:column;gap:8px">
+<p style="font-size:24px;font-weight:700;letter-spacing:2px;color:#17706A">04 · ABSTENTION</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">When unsure, the agent does not guess</h2>
+</div>
+<div style="display:flex;align-items:center;gap:16px">
+<div style="width:640px;display:flex;flex-direction:column;gap:24px">
+<div style="background:#DCE7F5;border-radius:20px;padding:28px 32px;display:flex;flex-direction:column;gap:12px">
+<h3 style="font-size:36px;font-weight:700">Input checks</h3>
+<ul style="font-size:28px;line-height:1.4;color:#12202F">
+<li>the net load is missing</li>
+<li>the last safe limit is missing</li>
+<li>the newest reading is over 60 minutes old</li>
+<li>a reading is absurd (over 2× installed power)</li>
+<li>it is night</li>
+</ul>
+</div>
+<div style="background:#DCE7F5;border-radius:20px;padding:28px 32px;display:flex;flex-direction:column;gap:12px">
+<h3 style="font-size:36px;font-weight:700">Uncertainty</h3>
+<p style="font-size:28px;line-height:1.4">spread = q90 − q05 is above the threshold τ</p>
+<p style="font-size:24px;line-height:1.4;color:#33424F">τ is chosen on validation: the highest threshold with at most 2% violations.</p>
+</div>
+</div>
+<x-shape kind="arrow-right" style="width:64px;height:44px;background:#12202F"></x-shape>
+<div style="width:260px;background:#12202F;border-radius:20px;padding:28px 24px;display:flex;flex-direction:column;gap:8px;align-items:center">
+<p style="font-size:36px;font-weight:700;line-height:1.15;text-align:center;color:#F7F5EF">Is either one true?</p>
+</div>
+<x-shape kind="arrow-right" style="width:64px;height:44px;background:#12202F"></x-shape>
+<div style="flex:1;display:flex;flex-direction:column;gap:24px">
+<div style="background:#FBE6C2;border:3px solid #9A5A00;border-radius:20px;padding:28px 32px;display:flex;flex-direction:column;gap:10px">
+<h3 style="font-size:36px;font-weight:700;color:#7A4600">YES · abstain</h3>
+<ul style="font-size:28px;line-height:1.4">
+<li>fixed limit of 36%</li>
+<li>the case enters the review queue</li>
+<li>the reasons go to the log</li>
+</ul>
+</div>
+<div style="background:#D5ECE8;border:3px solid #17706A;border-radius:20px;padding:28px 32px;display:flex;flex-direction:column;gap:10px">
+<h3 style="font-size:36px;font-weight:700;color:#0F4F4A">NO · confident</h3>
+<ul style="font-size:28px;line-height:1.4">
+<li>limit = q05 × kWp</li>
+<li>confidence = 1 − spread / (2 × threshold)</li>
+</ul>
+</div>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1300px;font-size:24px;color:#55616D">Source: src/ml/abstention.py, src/agent/planner.py. The 2% target is a choice the team still has to confirm.</p>
+<p style="position:absolute;right:128px;bottom:64px;width:200px;text-align:right;font-size:24px;color:#55616D">09</p>
+<aside>The theme’s requirement: the agent must be able to say “I am not sure” and send the case to a person. There are two kinds of reasons. First, input checks: missing, too old or impossible data, or night. Second, the model’s uncertainty: the spread q90 minus q05 above a threshold τ. The threshold is not picked by feel: we choose it on the validation period only, as the highest value with at most 2% violations. If no threshold meets the target, τ is minus infinity and the agent always abstains; we do not relax it quietly. When it abstains it applies today’s fixed limit, so it is never worse than the current situation. The crew has a budget of 20 cases a day and the screen shows when it is exceeded.</aside>
+</section>

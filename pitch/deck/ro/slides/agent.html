@@ -1,0 +1,68 @@
+<section id="agent" data-transition="fade" style="background:#F7F5EF;color:#12202F;font-family:'DM Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:28px">
+<div style="display:flex;flex-direction:column;gap:8px">
+<p style="font-size:24px;font-weight:700;letter-spacing:2px;color:#17706A">02 · IDEEA</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">Un singur agent, patru etape</h2>
+</div>
+<div style="position:relative;width:1664px;height:640px">
+<div style="position:absolute;left:0px;top:0px;width:360px;height:330px;background:#FFFDF8;border:2px solid #12202F;border-radius:20px;padding:24px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:center;gap:14px">
+<div style="width:52px;height:52px;border-radius:26px;background:#17706A;display:flex;align-items:center;justify-content:center"><p style="font-size:28px;font-weight:700;color:#F7F5EF">1</p></div>
+<h3 style="font-size:40px;font-weight:700">Percepe</h3>
+</div>
+<p style="font-size:26px;line-height:1.4;color:#55616D">Consum net, ora, soarele, ultima limită sigură</p>
+<div style="flex:1"></div>
+<p style="font-size:24px;font-weight:500;color:#2F5FA5">src/ml/features.py</p>
+</div>
+<div style="position:absolute;left:434px;top:0px;width:360px;height:330px;background:#FFFDF8;border:2px solid #12202F;border-radius:20px;padding:24px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:center;gap:14px">
+<div style="width:52px;height:52px;border-radius:26px;background:#2F5FA5;display:flex;align-items:center;justify-content:center"><p style="font-size:28px;font-weight:700;color:#F7F5EF">2</p></div>
+<h3 style="font-size:40px;font-weight:700">Estimează</h3>
+</div>
+<p style="font-size:26px;line-height:1.4;color:#55616D">Model cuantilic: cea mai mare limită sigură peste o oră</p>
+<div style="flex:1"></div>
+<p style="font-size:24px;font-weight:500;color:#2F5FA5">src/ml/train.py</p>
+</div>
+<div style="position:absolute;left:868px;top:0px;width:360px;height:330px;background:#FFFDF8;border:2px solid #12202F;border-radius:20px;padding:24px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:center;gap:14px">
+<div style="width:52px;height:52px;border-radius:26px;background:#F0A030;display:flex;align-items:center;justify-content:center"><p style="font-size:28px;font-weight:700;color:#12202F">3</p></div>
+<h3 style="font-size:40px;font-weight:700">Decide</h3>
+</div>
+<p style="font-size:26px;line-height:1.4;color:#55616D">Limită pe casă; dacă nu e sigur, limita fixă</p>
+<div style="flex:1"></div>
+<p style="font-size:24px;font-weight:500;color:#2F5FA5">src/agent/planner.py</p>
+</div>
+<div style="position:absolute;left:1302px;top:0px;width:360px;height:330px;background:#FFFDF8;border:2px solid #12202F;border-radius:20px;padding:24px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:center;gap:14px">
+<div style="width:52px;height:52px;border-radius:26px;background:#12202F;display:flex;align-items:center;justify-content:center"><p style="font-size:28px;font-weight:700;color:#F7F5EF">4</p></div>
+<h3 style="font-size:40px;font-weight:700">Acționează</h3>
+</div>
+<p style="font-size:26px;line-height:1.4;color:#55616D">Garda verifică, omul aprobă, planul se execută</p>
+<div style="flex:1"></div>
+<p style="font-size:24px;font-weight:500;color:#2F5FA5">src/agent/service.py</p>
+</div>
+<x-shape kind="arrow-right" style="position:absolute;left:369px;top:145px;width:56px;height:40px;background:#12202F"></x-shape>
+<x-shape kind="arrow-right" style="position:absolute;left:803px;top:145px;width:56px;height:40px;background:#12202F"></x-shape>
+<x-shape kind="arrow-right" style="position:absolute;left:1237px;top:145px;width:56px;height:40px;background:#12202F"></x-shape>
+<x-shape kind="arrow-up" style="position:absolute;left:594px;top:342px;width:40px;height:56px;background:#12202F"></x-shape>
+<x-shape kind="arrow-up" style="position:absolute;left:1462px;top:342px;width:40px;height:56px;background:#12202F"></x-shape>
+<div style="position:absolute;left:0px;top:410px;width:394px;height:230px;background:#12202F;border-radius:20px;padding:24px;display:flex;flex-direction:column;gap:8px">
+<h3 style="font-size:36px;font-weight:700;color:#F7F5EF">Gemenul digital</h3>
+<p style="font-size:26px;line-height:1.4;color:#A9B6C2">pandapower: fizică deterministă, nu ML. Face două lucruri:</p>
+</div>
+<div style="position:absolute;left:434px;top:410px;width:360px;height:230px;background:#DCE7F5;border-radius:20px;padding:24px;display:flex;flex-direction:column;gap:8px">
+<h3 style="font-size:36px;font-weight:700;color:#12202F">Etichete</h3>
+<p style="font-size:26px;line-height:1.4;color:#12202F">Calculează limita sigură din istoric, pentru antrenare.</p>
+</div>
+<div style="position:absolute;left:868px;top:410px;width:360px;height:230px;border:2px dashed #55616D;border-radius:20px;padding:24px;display:flex;flex-direction:column;gap:8px">
+<h3 style="font-size:36px;font-weight:700;color:#12202F">LLM, opțional</h3>
+<p style="font-size:26px;line-height:1.4;color:#55616D">Doar scrie explicații din cifre. Nu decide.</p>
+</div>
+<div style="position:absolute;left:1302px;top:410px;width:360px;height:230px;background:#FBE6C2;border-radius:20px;padding:24px;display:flex;flex-direction:column;gap:8px">
+<h3 style="font-size:36px;font-weight:700;color:#12202F">Gardă</h3>
+<p style="font-size:26px;line-height:1.4;color:#12202F">Reface calculul stației cu limitele planului și blochează ce încalcă.</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1300px;font-size:24px;color:#55616D">Perceive, estimate, decide, act: cerința temei. Detalii: docs/08-parallel-plan.md</p>
+<p style="position:absolute;right:128px;bottom:64px;width:200px;text-align:right;font-size:24px;color:#55616D">05</p>
+<aside>Nu sunt cinci agenți, este unul singur cu patru etape, exact ce cere tema: percepe, estimează, decide, acționează. Percepe: consumul net al stației, ora, poziția soarelui, ultima limită sigură. Estimează: modelul nostru cuantilic. Decide: planner-ul alege limita pe casă și poate să se abțină. Acționează: garda verifică, omul aprobă, planul se execută și se scrie în jurnal. Dedesubt este gemenul digital al rețelei, care nu este ML: produce etichetele pentru antrenare și tot el verifică fiecare plan înainte de execuție. LLM-ul este opțional și doar rescrie explicații din cifre.</aside>
+</section>

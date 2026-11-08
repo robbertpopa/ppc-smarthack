@@ -1,0 +1,82 @@
+<section id="repo" data-transition="fade" style="background:#F7F5EF;color:#12202F;font-family:'DM Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:24px">
+<div style="display:flex;flex-direction:column;gap:8px">
+<p style="font-size:24px;font-weight:700;letter-spacing:2px;color:#17706A">06 · SISTEMUL</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">Cum este construit, în trei benzi</h2>
+</div>
+<div style="display:flex;flex-direction:column;gap:12px">
+<p style="font-size:24px;font-weight:700;letter-spacing:2px;color:#55616D">ÎN TIMPUL DEMO-ULUI</p>
+<div style="display:flex;align-items:center;gap:12px">
+<div style="flex:1;display:flex;flex-direction:column;gap:4px;background:#FFFDF8;border:2px solid #12202F;border-radius:14px;padding:16px 20px">
+<p style="font-size:28px;font-weight:700">Ecranul operatorului</p>
+<p style="font-size:24px;color:#2F5FA5">src/ui · port 8001</p>
+</div>
+<x-shape kind="arrow-right" style="width:56px;height:40px;background:#12202F"></x-shape>
+<div style="flex:1;display:flex;flex-direction:column;gap:4px;background:#FFFDF8;border:2px solid #12202F;border-radius:14px;padding:16px 20px">
+<p style="font-size:28px;font-weight:700">API-ul agentului</p>
+<p style="font-size:24px;color:#2F5FA5">src/agent · port 8000</p>
+</div>
+<x-shape kind="arrow-right" style="width:56px;height:40px;background:#12202F"></x-shape>
+<div style="width:520px;display:flex;flex-direction:column;gap:8px">
+<p style="font-size:24px;border:2px solid #DAD6CA;background:#DCE7F5;border-radius:10px;padding:6px 16px"><b>Model</b> · src/ml/predict.py</p>
+<p style="font-size:24px;border:2px solid #DAD6CA;background:#FBE6C2;border-radius:10px;padding:6px 16px"><b>Gardă</b> · src/grid/guard.py</p>
+<p style="font-size:24px;border:2px solid #DAD6CA;background:#D5ECE8;border-radius:10px;padding:6px 16px"><b>Jurnal</b> · actions.jsonl</p>
+</div>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:12px">
+<p style="font-size:24px;font-weight:700;letter-spacing:2px;color:#55616D">OFFLINE: DE LA DATE LA MODEL</p>
+<div style="display:flex;align-items:center;gap:12px">
+<div style="flex:1;display:flex;flex-direction:column;gap:4px;background:#FFFDF8;border:2px solid #12202F;border-radius:14px;padding:16px 20px">
+<p style="font-size:28px;font-weight:700">Date</p>
+<p style="font-size:24px;color:#2F5FA5">src/ml/data.py</p>
+</div>
+<x-shape kind="arrow-right" style="width:56px;height:40px;background:#12202F"></x-shape>
+<div style="flex:1;display:flex;flex-direction:column;gap:4px;background:#FFFDF8;border:2px solid #12202F;border-radius:14px;padding:16px 20px">
+<p style="font-size:28px;font-weight:700">Etichete</p>
+<p style="font-size:24px;color:#2F5FA5">src/grid/labels.py</p>
+</div>
+<x-shape kind="arrow-right" style="width:56px;height:40px;background:#12202F"></x-shape>
+<div style="flex:1;display:flex;flex-direction:column;gap:4px;background:#FFFDF8;border:2px solid #12202F;border-radius:14px;padding:16px 20px">
+<p style="font-size:28px;font-weight:700">Antrenare</p>
+<p style="font-size:24px;color:#2F5FA5">src/ml/train.py</p>
+</div>
+<x-shape kind="arrow-right" style="width:56px;height:40px;background:#12202F"></x-shape>
+<div style="flex:1;display:flex;flex-direction:column;gap:4px;background:#FFFDF8;border:2px solid #12202F;border-radius:14px;padding:16px 20px">
+<p style="font-size:28px;font-weight:700">Modele</p>
+<p style="font-size:24px;color:#2F5FA5">artifacts/models</p>
+</div>
+<x-shape kind="arrow-right" style="width:56px;height:40px;background:#12202F"></x-shape>
+<div style="flex:1;display:flex;flex-direction:column;gap:4px;background:#FFFDF8;border:2px solid #12202F;border-radius:14px;padding:16px 20px">
+<p style="font-size:28px;font-weight:700">Evaluare</p>
+<p style="font-size:24px;color:#2F5FA5">src/eval/run.py</p>
+</div>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:12px">
+<p style="font-size:24px;font-weight:700;letter-spacing:2px;color:#55616D">LIVRARE: LA FIECARE MERGE ÎN MAIN</p>
+<div style="display:flex;align-items:center;gap:12px">
+<div style="flex:1;display:flex;flex-direction:column;gap:4px;background:#FFFDF8;border:2px solid #12202F;border-radius:14px;padding:16px 20px">
+<p style="font-size:28px;font-weight:700">GitHub Actions</p>
+<p style="font-size:24px;color:#2F5FA5">teste, lint, smoke</p>
+</div>
+<x-shape kind="arrow-right" style="width:56px;height:40px;background:#12202F"></x-shape>
+<div style="flex:1;display:flex;flex-direction:column;gap:4px;background:#FFFDF8;border:2px solid #12202F;border-radius:14px;padding:16px 20px">
+<p style="font-size:28px;font-weight:700">Docker</p>
+<p style="font-size:24px;color:#2F5FA5">infra/Dockerfile</p>
+</div>
+<x-shape kind="arrow-right" style="width:56px;height:40px;background:#12202F"></x-shape>
+<div style="flex:1;display:flex;flex-direction:column;gap:4px;background:#FFFDF8;border:2px solid #12202F;border-radius:14px;padding:16px 20px">
+<p style="font-size:28px;font-weight:700">Terraform</p>
+<p style="font-size:24px;color:#2F5FA5">infra/terraform</p>
+</div>
+<x-shape kind="arrow-right" style="width:56px;height:40px;background:#12202F"></x-shape>
+<div style="flex:1;display:flex;flex-direction:column;gap:4px;background:#FFFDF8;border:2px solid #12202F;border-radius:14px;padding:16px 20px">
+<p style="font-size:28px;font-weight:700">Azure Container Apps</p>
+<p style="font-size:24px;color:#2F5FA5">HTTPS, o replică</p>
+</div>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1400px;font-size:24px;color:#55616D">Rulează și local, fără cont cloud: make smoke, make test. Conform README: 353 de teste.</p>
+<p style="position:absolute;right:128px;bottom:64px;width:200px;text-align:right;font-size:24px;color:#55616D">12</p>
+<aside>Trei benzi. Prima este ce rulează la demo: ecranul operatorului pe portul 8001 vorbește cu API-ul agentului pe 8000, iar API-ul folosește modelul, garda și jurnalul. A doua este drumul offline de la date la model: descărcare și profiluri, etichete din fluxul de putere, antrenare, modele salvate în artifacts și evaluarea cu un singur script. A treia este livrarea: la fiecare merge în main, GitHub Actions rulează testele, apoi Docker și Terraform pun aplicația în Azure Container Apps. Cloud-ul este o implementare, nu o dependență: juriul poate rula totul local din README cu make smoke și make test.</aside>
+</section>

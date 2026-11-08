@@ -1,0 +1,74 @@
+<section id="curent" data-transition="fade" style="background:#F7F5EF;color:#12202F;font-family:'DM Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:28px">
+<div style="display:flex;flex-direction:column;gap:8px">
+<p style="font-size:24px;font-weight:700;letter-spacing:2px;color:#17706A">01 · PROBLEMA</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">Drumul curentului și locul limitei</h2>
+</div>
+<div style="display:flex;align-items:center">
+<div style="width:932px;display:flex;flex-direction:column;gap:12px;background:#DCE7F5;border-radius:20px;padding:16px">
+<p style="font-size:24px;font-weight:700;letter-spacing:2px;color:#2F5FA5">LA PROSUMATOR</p>
+<div style="display:flex;align-items:center;gap:10px">
+<div style="width:186px;display:flex;flex-direction:column;align-items:center;gap:6px;background:#FFFDF8;border:2px solid #12202F;border-radius:14px;padding:16px 8px">
+<p style="font-size:26px;font-weight:700;text-align:center">Panouri</p>
+<p style="font-size:24px;text-align:center;color:#55616D">curent continuu (DC)</p>
+</div>
+<x-shape kind="arrow-right" style="width:32px;height:24px;background:#12202F"></x-shape>
+<div style="width:186px;display:flex;flex-direction:column;align-items:center;gap:6px;background:#FFFDF8;border:2px solid #12202F;border-radius:14px;padding:16px 8px">
+<p style="font-size:26px;font-weight:700;text-align:center">Invertor</p>
+<p style="font-size:24px;text-align:center;color:#55616D">DC în AC, baterie opțională</p>
+</div>
+<x-shape kind="arrow-right" style="width:32px;height:24px;background:#12202F"></x-shape>
+<div style="width:186px;display:flex;flex-direction:column;align-items:center;gap:6px;background:#FFFDF8;border:2px solid #12202F;border-radius:14px;padding:16px 8px">
+<p style="font-size:26px;font-weight:700;text-align:center">Casă</p>
+<p style="font-size:24px;text-align:center;color:#55616D">consumă prima</p>
+</div>
+<x-shape kind="arrow-right" style="width:32px;height:24px;background:#12202F"></x-shape>
+<div style="width:186px;display:flex;flex-direction:column;align-items:center;gap:6px;background:#F0A030;border:2px solid #12202F;border-radius:14px;padding:16px 8px">
+<p style="font-size:26px;font-weight:700;text-align:center;color:#12202F">Contor</p>
+<p style="font-size:24px;text-align:center;color:#12202F">punct de delimitare</p>
+</div>
+</div>
+</div>
+<x-shape kind="arrow-right" style="width:38px;height:28px;background:#12202F"></x-shape>
+<div style="width:694px;display:flex;flex-direction:column;gap:12px;background:#FBE6C2;border-radius:20px;padding:16px">
+<p style="font-size:24px;font-weight:700;letter-spacing:2px;color:#9A5A00">REȚEAUA OPERATORULUI</p>
+<div style="display:flex;align-items:center;gap:10px">
+<div style="width:186px;display:flex;flex-direction:column;align-items:center;gap:6px;background:#FFFDF8;border:2px solid #12202F;border-radius:14px;padding:16px 8px">
+<p style="font-size:26px;font-weight:700;text-align:center">Branșament</p>
+<p style="font-size:24px;text-align:center;color:#55616D">legătura casei</p>
+</div>
+<x-shape kind="arrow-right" style="width:32px;height:24px;background:#12202F"></x-shape>
+<div style="width:186px;display:flex;flex-direction:column;align-items:center;gap:6px;background:#FFFDF8;border:2px solid #12202F;border-radius:14px;padding:16px 8px">
+<p style="font-size:26px;font-weight:700;text-align:center">Linie JT</p>
+<p style="font-size:24px;text-align:center;color:#55616D">joasă tensiune</p>
+</div>
+<x-shape kind="arrow-right" style="width:32px;height:24px;background:#12202F"></x-shape>
+<div style="width:186px;display:flex;flex-direction:column;align-items:center;gap:6px;background:#FFFDF8;border:2px solid #12202F;border-radius:14px;padding:16px 8px">
+<p style="font-size:26px;font-weight:700;text-align:center">Post trafo</p>
+<p style="font-size:24px;text-align:center;color:#55616D">JT către MT</p>
+</div>
+</div>
+</div>
+</div>
+<div style="display:flex;gap:20px">
+<div style="flex:1;display:flex;flex-direction:column;gap:8px;background:#FFFDF8;border:1px solid #DAD6CA;border-top:6px solid #F0A030;border-radius:16px;padding:24px 28px">
+<h3 style="font-size:32px;font-weight:700">Contor</h3>
+<p style="font-size:28px;line-height:1.4;color:#55616D">Aici se măsoară limita (de exemplu 9 kW), dar numărul vine din rețea.</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:8px;background:#FFFDF8;border:1px solid #DAD6CA;border-top:6px solid #9A5A00;border-radius:16px;padding:24px 28px">
+<h3 style="font-size:32px;font-weight:700">Branșament</h3>
+<p style="font-size:28px;line-height:1.4;color:#55616D">Limita este curentul maxim al conexiunii.</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:8px;background:#FFFDF8;border:1px solid #DAD6CA;border-top:6px solid #9A5A00;border-radius:16px;padding:24px 28px">
+<h3 style="font-size:32px;font-weight:700">Linie JT</h3>
+<p style="font-size:28px;line-height:1.4;color:#55616D">Se încălzește, iar tensiunea crește când mulți injectează odată.</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:8px;background:#FFFDF8;border:1px solid #DAD6CA;border-top:6px solid #9A5A00;border-radius:16px;padding:24px 28px">
+<h3 style="font-size:32px;font-weight:700">Post trafo</h3>
+<p style="font-size:28px;line-height:1.4;color:#55616D">Capacitatea postului. O procedură citată limitează injecția JT la 30% din puterea trafo.</p>
+</div>
+</div>
+<p style="font-size:28px;color:#55616D">kW este putere, kWh este energie: 25 kW nu înseamnă 25 kW toată ziua.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1300px;font-size:24px;color:#55616D">Sursă: docs/04-chosen-idea.md</p>
+<p style="position:absolute;right:128px;bottom:64px;width:200px;text-align:right;font-size:24px;color:#55616D">03</p>
+<aside>Curentul pornește de la panouri, trece prin invertor, apoi prin casă, care consumă prima. Ce rămâne ajunge la contor, punctul de delimitare. Limita de 9 kW se măsoară la contor și se programează în invertor, dar numărul vine din rețea. Strangularea fizică poate fi în trei locuri: branșament (curent maxim), linia de joasă tensiune (încălzire și creștere de tensiune) sau postul de transformare. Nu uitați: kW este putere, kWh este energie.</aside>
+</section>

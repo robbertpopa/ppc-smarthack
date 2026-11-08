@@ -9,7 +9,7 @@ from src.agent.sources import MockSource
 from src.common.contract import ActionEvent, Forecast, GridState, Plan, StationConfig
 from src.common.mock_data import load_mock
 
-PACKAGES = ["common", "ml", "grid", "agent", "ui", "eval"]
+PACKAGES = ["common", "ml", "grid", "agent", "ui", "eval", "pricing"]
 
 
 def main() -> None:

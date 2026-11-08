@@ -1,0 +1,17 @@
+{
+  "v": 4,
+  "createdOnFiles": {"v": 1, "at": "2026-11-08T11:00:00Z"},
+  "lists": "css",
+  "title": "PPC Smarthack: dynamic export limits",
+  "order": ["cover", "problema", "curent", "limita", "agent", "flux", "model", "date", "abstinere", "garda", "ciclu", "repo", "demo", "rezultate", "limite", "pasi"],
+  "sections": {
+    "s1": {"description": "The problem: one fixed limit for a grid that keeps changing.", "start": "cover"},
+    "s2": {"description": "The idea: an agent with a model, abstention and a guard.", "start": "agent"},
+    "s3": {"description": "Safety, architecture and the demo.", "start": "garda"},
+    "s4": {"description": "What we know, what we do not, and what comes next.", "start": "rezultate"}
+  },
+  "faces": {
+    "dm-sans": {"family": "DM Sans", "href": "https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap"}
+  },
+  "designSystems": []
+}
