@@ -6,13 +6,46 @@ from src.common.contract import (
     Forecast,
     GridState,
     HouseLimit,
+    HousePrice,
     Plan,
     StationConfig,
 )
+from src.pricing.config import PricingConfig
+from src.pricing.tariff import hourly_price
 
 
 def plan_id_for(pt_id: str, interval_start: AwareDatetime) -> str:
     return f"PLAN-{interval_start.astimezone(timezone.utc):%Y-%m-%d-%H%M}-{pt_id}"
+
+
+def house_prices(
+    station: StationConfig,
+    interval_start: AwareDatetime,
+    wholesale_eur_mwh: float,
+    adder_eur_mwh: float,
+    cfg: PricingConfig,
+) -> list[HousePrice]:
+    """The product's price for each house: hourly price plus the published solar adder."""
+    hourly = hourly_price(wholesale_eur_mwh, cfg)
+    floor_applied = wholesale_eur_mwh - cfg.fee_eur_mwh < cfg.floor_eur_mwh
+    reason = (
+        "floor applies: the wholesale price minus the fee is below the floor"
+        if floor_applied
+        else "hourly price: wholesale minus the fee, plus the solar adder"
+    )
+    return [
+        HousePrice(
+            house_id=house.house_id,
+            interval_start=interval_start,
+            wholesale_eur_mwh=wholesale_eur_mwh,
+            hourly_eur_kwh=round(hourly / 1000, 6),
+            adder_eur_kwh=round(adder_eur_mwh / 1000, 6),
+            total_eur_kwh=round(hourly / 1000, 6) + round(adder_eur_mwh / 1000, 6),
+            floor_applied=floor_applied,
+            reason=reason,
+        )
+        for house in station.houses
+    ]
 
 
 def make_plan(
@@ -21,6 +54,9 @@ def make_plan(
     station: StationConfig,
     interval_start: AwareDatetime | None = None,
     force_abstain: str | None = None,
+    wholesale_eur_mwh: float | None = None,
+    adder_eur_mwh: float = 0.0,
+    pricing: PricingConfig | None = None,
 ) -> Plan:
     if forecast is None and interval_start is None:
         raise ValueError("interval_start is required when there is no forecast")
@@ -70,6 +106,13 @@ def make_plan(
             limit = min(limit, house.contract_cap_kw)
         limits.append(HouseLimit(house_id=house.house_id, export_limit_kw=round(limit, 3)))
 
+    prices = (
+        []
+        if wholesale_eur_mwh is None
+        else house_prices(
+            station, interval_start, wholesale_eur_mwh, adder_eur_mwh, pricing or PricingConfig()
+        )
+    )
     return Plan(
         plan_id=plan_id_for(station.pt_id, interval_start),
         pt_id=station.pt_id,
@@ -91,5 +134,6 @@ def make_plan(
                 reason=reason_for_text,
             )
         ),
+        prices=prices,
         status="proposed",
     )

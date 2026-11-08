@@ -46,7 +46,7 @@ python -m uvicorn src.grid.demo_api:app --port 8000
 ```bash
 API_URL=http://127.0.0.1:8000 python -m uvicorn src.ui.app:app --port 8001
 ```
-Open http://127.0.0.1:8001 (operator screen). The API uses mock forecasts and the real grid guard; its documentation is at http://127.0.0.1:8000/docs.
+Open http://127.0.0.1:8001 (operator screen). The API uses mock forecasts and the real grid guard; its documentation is at http://127.0.0.1:8000/docs. Each plan also carries the product's price per house (hourly price plus a monthly solar adder); `GET /prices` returns the day's wholesale curve and those prices. The demo uses an illustrative curve, marked `mock`.
 
 **With the neighbourhood map (three neighbourhoods, 45 houses).** Needs a customer table with coordinates (`Customer, Generator Capacity, Postcode, lat, lon, localities`; keep it in `data/`, which git ignores). Build the map data once, then start the API with that station:
 ```bash

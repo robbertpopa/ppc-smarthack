@@ -16,12 +16,17 @@ OK = Response(b"{}", media_type="application/json")
 
 
 class AllowlistTests(unittest.TestCase):
+    def test_prices_is_read_only(self):
+        self.assertTrue(is_allowed("GET", "prices"))
+        self.assertFalse(is_allowed("POST", "prices"))
+
     def test_agent_reads_and_writes_are_allowed(self):
         for path in (
             "health",
             "station",
             "forecast",
             "grid_state",
+            "prices",
             "plans",
             "queue",
             "log",
