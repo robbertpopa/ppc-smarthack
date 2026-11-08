@@ -88,6 +88,22 @@ One record per station and interval. `horizon_min` is how far ahead it looks (60
 - Explanation text may only contain numbers that appear in its `figures`; the code refuses to show it otherwise.
 - `abstain: true` means the case goes to a human; the limit actually applied is the static fallback.
 - `status`: `proposed` → `approved` / `rejected` → `executed`.
+- `prices` (optional, empty by default) lists the price of the prosumer product for each house, one `house_price` object per house:
+
+```json
+{
+  "house_id": "H01",
+  "interval_start": "2025-06-21T10:00:00Z",
+  "wholesale_eur_mwh": 100.0,
+  "hourly_eur_kwh": 0.07,
+  "adder_eur_kwh": 0.04,
+  "total_eur_kwh": 0.11,
+  "floor_applied": false,
+  "reason": "hourly price: wholesale minus the fee, plus the solar adder"
+}
+```
+  - `hourly_eur_kwh = max(floor, wholesale − fee)`, `adder_eur_kwh` is the month's published solar adder, and `total_eur_kwh = hourly_eur_kwh + adder_eur_kwh` (the code rejects a record where it does not). No price is ever negative.
+  - `prices` is empty when no wholesale price was available. It carries no grid data: the price depends only on public day-ahead prices and the published adder. Who is eligible (battery and smart meter) is a contract matter and is not shown.
 
 ## 4. `action_event`: the audit log (append-only JSONL)
 

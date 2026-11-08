@@ -23,12 +23,13 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from src.eval import table
+from src.eval import imbalance_eval, pricing_eval, table
 from src.eval.metrics import FIXED_SHARE, evaluate, load_profiles, surplus_kw
 from src.ml import abstention, baselines, calibration, model_io, train
 from src.ml import labels as labels_io
 from src.ml.config import SYDNEY, artifact_uri, profiles_path, violation_target
 from src.ml.split import TEST_START, daylight, split
+from src.pricing import prices as price_data
 
 MOCK_TITLE = "MOCK – NOT A RESULT"
 TITLE = "Evaluation on the test period"
@@ -49,6 +50,14 @@ def _require_report_extra() -> None:
             "--error-analysis needs matplotlib: install it with `pip install '.[report]'` "
             "(it is kept out of the serving image on purpose)"
         ) from error
+
+
+def _has_report_extra() -> bool:
+    try:
+        import matplotlib  # noqa: F401
+    except ImportError:
+        return False
+    return True
 
 
 def eval_dir(run_id: str) -> Path:
@@ -243,6 +252,7 @@ def run(
     robustness=True,
     error_analysis=False,
     grid=None,
+    pricing=False,
 ) -> dict:
     """Evaluate every scenario and write the outputs. Returns the summary."""
     if error_analysis:
@@ -252,6 +262,7 @@ def run(
     out.mkdir(parents=True, exist_ok=True)
     all_rows, summary_scenarios, calibrations, footer, any_mock = {}, {}, [], [], False
     sections = []
+    price_table = price_data.profile(price_data.load()) if pricing else None
     for scenario in scenarios:
         ctx = _prepare(scenario, run_id, allow_mock, use_artifacts, grid)
         pt_id = ctx["labels"]["pt_id"].iloc[0]
@@ -267,6 +278,14 @@ def run(
             from src.eval import error_analysis as analysis
 
             sections.append(analysis.analyse(ctx, result, rows, out, pt_id))
+        if price_table is not None:
+            savings = imbalance_eval.station_savings(ctx, result)
+            block = pricing_eval.compute(ctx, result, price_table, imbalance=savings)
+            if block is not None:
+                extra = {**extra, "pricing": block}
+                pricing_eval.write(out, pt_id, block, MOCK_TITLE if ctx["mock"] else None)
+                if _has_report_extra():
+                    pricing_eval.day_chart(ctx, result, price_table, out, pt_id)
         any_mock |= ctx["mock"]
         all_rows[pt_id] = rows
         meta, test = ctx["meta"], ctx["test_labels"]
@@ -337,6 +356,9 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--error-analysis", action="store_true", help="also write the error analysis"
     )
+    parser.add_argument(
+        "--pricing", action="store_true", help="also write the prosumer price comparison"
+    )
     args = parser.parse_args(argv)
     names = list(labels_io.SCENARIOS) if args.scenario == "all" else [args.scenario]
     names = [n for n in names if (labels_io.labels_path(n) / "labels.parquet").exists()]
@@ -352,6 +374,7 @@ def main(argv: list[str] | None = None) -> None:
             args.allow_mock,
             args.robustness,
             args.error_analysis,
+            pricing=args.pricing,
         )
     except MockLabelsError as err:
         raise SystemExit(str(err)) from err

@@ -1,6 +1,7 @@
 import hashlib
 import json
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -267,3 +268,19 @@ def test_the_control_is_not_scored_again_when_the_rebuilt_totals_are_the_label_t
     calls.clear()
     out = robustness.run_variants(ctx, clean)
     assert len(calls) == 4 and out["notes"]["control_rescored"] is True
+
+
+def test_pricing_flag_adds_the_price_block(env, first):
+    from src.pricing import prices
+
+    idx = pd.date_range("2025-01-01", "2026-01-01", freq="h", tz="UTC", inclusive="left")
+    hour = idx.tz_convert("Europe/Bucharest").hour
+    midday = (hour >= 10) & (hour < 16)
+    year = pd.Series(np.where(midday, 40.0, 150.0), index=idx)
+    prices.save(year, prices.prices_path())
+    summary = eval_run.run(["A"], "priced", allow_mock=True, grid=FAST, pricing=True)
+    block = next(iter(summary["scenarios"].values()))["pricing"]
+    assert len(block["rows"]) == 6 and len(block["sensitivity"]) == 6
+    assert list(eval_run.eval_dir("priced").glob("pricing_*.md"))
+    plain = eval_run.run(["A"], "plain", allow_mock=True, grid=FAST)
+    assert "pricing" not in next(iter(plain["scenarios"].values()))
