@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 
 from src.eval.metrics import STEP_HOURS
+from src.pricing import imbalance as imbalance_model
 from src.pricing import prices, solar
 from src.pricing.battery import battery_houses, dispatch
 from src.pricing.config import PricingConfig
@@ -73,6 +74,50 @@ def _group_exports(ctx: dict, data: dict, fee: float) -> tuple[pd.Series, pd.Ser
     return plain, shifted
 
 
+def _group_share(ctx: dict, data: dict, plain_group: pd.Series) -> float:
+    """The battery houses' share of the station's smart-limit exports."""
+    index, surplus, kwp = data["index"], ctx["surplus"], ctx["kwp"]
+    columns = surplus.columns
+    caps = data["share"].to_numpy()[:, None] * kwp.reindex(columns).to_numpy()[None, :]
+    everyone = np.minimum(surplus.loc[index].fillna(0.0).to_numpy(), caps).sum() * STEP_HOURS
+    return float(plain_group.sum() / everyone) if everyone > 0 else 0.0
+
+
+def _imbalance_block(imbalance, group_share, cfg, today_paid, proposed, base) -> dict | None:
+    """What the imbalance savings add on top, for each spread scenario."""
+    if imbalance is None:
+        return None
+    scenarios = []
+    for item in imbalance["by_spread"]:
+        group_saving = item["saving_eur"] * group_share
+        bonus, kept = imbalance_model.split_saving(group_saving, cfg.bonus_share)
+        scenarios.append(
+            {
+                "spread_eur_mwh": item["spread_eur_mwh"],
+                "station_baseline_mwh": item["baseline_mwh"],
+                "station_model_mwh": item["model_mwh"],
+                "station_saving_eur": item["saving_eur"],
+                "group_share": group_share,
+                "group_saving_eur": group_saving,
+                "prosumer_bonus_eur": bonus,
+                "ppc_keeps_eur": kept,
+                "prosumer_total_eur": proposed["paid_eur"] + bonus,
+                "prosumer_total_vs_today_pct": _pct(proposed["paid_eur"] + bonus, today_paid),
+                "ppc_improvement_total_eur": (
+                    proposed["ppc_margin_paid_eur"]
+                    - base["ppc_margin_eur"]
+                    + kept
+                ),
+            }
+        )
+    return {
+        "horizon_min": imbalance["horizon_min"],
+        "baseline": imbalance["baseline"],
+        "bonus_share": cfg.bonus_share,
+        "scenarios": scenarios,
+    }
+
+
 def _row(name, kwh, paid, value, today):
     margin = value - paid
     return {
@@ -91,8 +136,12 @@ def compute(
     result: dict,
     table: pd.Series,
     cfg: PricingConfig = PricingConfig(),
+    imbalance: dict | None = None,
 ) -> dict | None:
-    """The block of one scenario, or None when there is no surplus table."""
+    """The block of one scenario, or None when there is no surplus table.
+
+    ``imbalance`` is the result of ``imbalance_eval.station_savings`` (or None).
+    """
     data = _inputs(ctx, result, table)
     if data is None:
         return None
@@ -167,6 +216,9 @@ def compute(
         "adder_eur_mwh_by_bucharest_month": data["adder_by_month"].to_dict(),
         "rows": rows,
         "sensitivity": sensitivity,
+        "imbalance": _imbalance_block(
+            imbalance, _group_share(ctx, data, plain), cfg, today["regulated_eur"], proposed, base
+        ),
     }
     return _clean(block)
 
@@ -254,4 +306,23 @@ def write(out, pt_id: str, block: dict, mock_title: str | None = None) -> None:
             f"| {_cell(s['ppc_improvement_eur'], 2, True)} "
             f"| {_cell(s['prosumer_share_of_value_pct'], 0)} |"
         )
+    extra = block.get("imbalance")
+    if extra:
+        lines += [
+            "",
+            f"Imbalance savings ({extra['baseline']} versus the PV/load model at "
+            f"{extra['horizon_min']} min; spread values are scenarios, not market data). "
+            f"Bonus share {extra['bonus_share']:.0%}.",
+            "",
+            "| Spread (EUR/MWh) | Saved, battery houses (EUR) | Prosumer bonus (EUR) "
+            "| Prosumer total vs today (%) | PPC improvement incl. savings (EUR) |",
+            "|---:|---:|---:|---:|---:|",
+        ]
+        for item in extra["scenarios"]:
+            lines.append(
+                f"| {item['spread_eur_mwh']:.0f} | {_cell(item['group_saving_eur'], 2)} "
+                f"| {_cell(item['prosumer_bonus_eur'], 2)} "
+                f"| {_cell(item['prosumer_total_vs_today_pct'], 1, True)} "
+                f"| {_cell(item['ppc_improvement_total_eur'], 2, True)} |"
+            )
     (out / f"pricing_{pt_id}.md").write_text("\n".join(lines) + "\n")

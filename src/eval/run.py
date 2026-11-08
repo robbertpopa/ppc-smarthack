@@ -23,7 +23,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from src.eval import pricing_eval, table
+from src.eval import imbalance_eval, pricing_eval, table
 from src.eval.metrics import FIXED_SHARE, evaluate, load_profiles, surplus_kw
 from src.ml import abstention, baselines, calibration, features, model_io, train
 from src.ml import labels as labels_io
@@ -279,7 +279,8 @@ def run(
 
             sections.append(analysis.analyse(ctx, result, rows, out, pt_id))
         if price_table is not None:
-            block = pricing_eval.compute(ctx, result, price_table)
+            savings = imbalance_eval.station_savings(ctx, result)
+            block = pricing_eval.compute(ctx, result, price_table, imbalance=savings)
             if block is not None:
                 extra = {**extra, "pricing": block}
                 pricing_eval.write(out, pt_id, block, MOCK_TITLE if ctx["mock"] else None)

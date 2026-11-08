@@ -99,6 +99,8 @@ python -m src.eval.run --pricing
 ```
 The first command saves `data/pzu/ro.parquet`. The second adds a `pricing` block to `summary.json`, a `pricing_<station>.md` table and a `pricing_day_<station>.png` chart. Prices are matched to the Ausgrid year by season (Sydney July with Bucharest January) and local hour, so the result shows the shape of the effect, not a forecast in euros. Fee, floor and bonus share are placeholders in `src/pricing/config.py`.
 
+If the PV/load forecast is trained (`python -m src.ml.forecast_pv_load --scenario A`), the table also shows the imbalance savings of that forecast against "same time yesterday" for three imbalance spreads (30, 60 and 120 EUR/MWh, scenario values, not market data) and the bonus prosumers would get. Without the trained model that part is skipped.
+
 ### Environment variables
 | Variable | Default | Used for |
 |---|---|---|
