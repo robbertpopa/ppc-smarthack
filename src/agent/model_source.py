@@ -35,16 +35,17 @@ class ModelSource:
     def input_checks(self, pt_id: str, interval_start: AwareDatetime) -> list[str]:
         """Input check flags for the features ``forecast`` uses; any flag forces abstention.
 
-        Empty when no checks are wired or the features cannot be built (then ``forecast``
-        is None and the plan abstains for that reason).
+        Empty only when no checks are wired. If the checks cannot run (the features cannot
+        be built, or the checker itself fails) the result is ``["input_check_failed"]``:
+        a broken check must stop the model's limit, not let it through silently.
         """
         if self.input_flags is None:
             return []
         try:
             return list(self.input_flags(self._features(pt_id, interval_start)))
         except Exception as exc:
-            logger.warning("no input checks for %s at %s: %r", pt_id, interval_start, exc)
-            return []
+            logger.warning("input checks failed for %s at %s: %r", pt_id, interval_start, exc)
+            return ["input_check_failed"]
 
     def forecast(self, pt_id: str, interval_start: AwareDatetime) -> Forecast | None:
         decision = interval_start.astimezone(timezone.utc) - timedelta(minutes=self.horizon_min)
