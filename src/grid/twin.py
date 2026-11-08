@@ -287,6 +287,16 @@ def binding_limit(grid, injections, share, tolerance=0.001):
     return None
 
 
+def null_share_reason(grid, injections):
+    """Why ``safe_share`` gave None: ``"no_convergence"`` or ``"unsafe_without_export"``.
+
+    The second means a limit is violated even with every export limit at 0 (load alone
+    breaks it), which is a different case from a power flow that did not converge.
+    """
+    verdict = _share_is_safe(grid, injections, 0.0)
+    return "no_convergence" if verdict is None else "unsafe_without_export"
+
+
 def safe_share(grid, injections, scan_steps=20, tolerance=0.001):
     if scan_steps < 1 or not 0 < tolerance < 1:
         raise ValueError("invalid search resolution")

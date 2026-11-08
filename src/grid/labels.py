@@ -23,9 +23,10 @@ import pandas as pd
 
 from src.ml import labels as labels_io
 from src.ml.model_io import git_sha
+from src.ml.split import TEST_START
 
 from .ausgrid import day_profiles, half_hour_columns, house_readings, read_period, select_households
-from .twin import binding_limit, build_grid, safe_share
+from .twin import binding_limit, build_grid, null_share_reason, safe_share
 
 STEP = pd.Timedelta(minutes=30)
 HOUSES_FILE = "station_houses.parquet"
@@ -68,13 +69,14 @@ def _share(job):
     """Return everything the label row needs, so the parent needs no side list to pair them."""
     share = safe_share(_GRID, job)
     houses = job["houses"]
-    return (
+    row = (
         job["interval_start"],
         share,
         binding_limit(_GRID, job, share),
         sum(h["load_kw"] for h in houses),
         sum(h["pv_kw"] for h in houses),
     )
+    return row, None if share is not None else null_share_reason(_GRID, job)
 
 
 def _jobs(frame, eligible, hours, pv_scale):
@@ -203,6 +205,23 @@ def _merge(old, new):
     return merged, int(again.sum())
 
 
+def check_window(start, days, final_eval=False):
+    """Refuse a run that reaches the sealed test year unless it is the final evaluation.
+
+    ``start`` and ``days`` are Sydney local dates, as in the Ausgrid files. The test year
+    starts at ``src.ml.split.TEST_START`` (2012-07-01).
+    """
+    if start is None:
+        raise ValueError("start is required")
+    end = pd.Timestamp(start) + pd.Timedelta(days=days)  # exclusive
+    if end > TEST_START and not final_eval:
+        raise ValueError(
+            f"{pd.Timestamp(start).date()} + {days} days reaches the sealed test year "
+            f"(from {TEST_START.date()}); pass final_eval (--final-eval) only for the "
+            "final evaluation"
+        )
+
+
 def generate(
     source,
     output=None,
@@ -212,6 +231,7 @@ def generate(
     pv_scale=None,
     workers=1,
     scenario="A",
+    final_eval=False,
 ):
     """Write or extend ``labels.parquet`` at ``output`` and ``station_houses.parquet`` next to it.
 
@@ -220,10 +240,9 @@ def generate(
     (``SCENARIO_GRID``); ``transformer_kva`` and ``pv_scale`` override them. Results are
     identical for any ``workers`` (order is kept).
     """
-    if start is None:
-        raise ValueError("start is required")
     if days < 1:
         raise ValueError("days must be positive")
+    check_window(start, days, final_eval)
     if workers < 1:
         raise ValueError("workers must be positive")
     transformer_kva, pv_scale = scenario_grid(scenario, transformer_kva, pv_scale)
@@ -252,6 +271,7 @@ def generate(
     _init_worker(config)
     jobs = _jobs(frame, eligible, hours, pv_scale)
     rows = []
+    null_reasons = {"no_convergence": 0, "unsafe_without_export": 0}
     pool = None
     try:
         if workers > 1:
@@ -261,8 +281,10 @@ def generate(
             results = pool.imap(_share, jobs, chunksize=4)
         else:
             results = map(_share, jobs)
-        for row in results:
+        for row, reason in results:
             rows.append(row)
+            if reason is not None:
+                null_reasons[reason] += 1
             if len(rows) % 100 == 0:
                 print(f"{len(rows)} labels, up to {row[0]}", flush=True)
     finally:
@@ -287,6 +309,13 @@ def generate(
         f"{len(labels)} labels in {output}",
         flush=True,
     )
+    # both kinds are written as converged = False and training drops them: count them apart
+    print(
+        f"null shares: {null_reasons['no_convergence']} power flows did not converge, "
+        f"{null_reasons['unsafe_without_export']} unsafe even without export",
+        flush=True,
+    )
+    return null_reasons
 
 
 if __name__ == "__main__":
@@ -296,12 +325,17 @@ if __name__ == "__main__":
     parser.add_argument(
         "--output", help="labels file; default DATA_DIR/labels/<scenario>/labels.parquet"
     )
-    parser.add_argument("--start", default="2013-01-01")
+    parser.add_argument("--start", required=True, help="first Sydney date, e.g. 2011-07-01")
     parser.add_argument("--days", type=int, default=1)
     parser.add_argument("--transformer-kva", type=float, help="default: the scenario's (A: 400)")
     parser.add_argument("--pv-scale", type=float, help="default: the scenario's (A: 1)")
     parser.add_argument(
         "--workers", type=int, default=1, help=f"processes (this machine has {os.cpu_count()})"
+    )
+    parser.add_argument(
+        "--final-eval",
+        action="store_true",
+        help="allow days from 2012-07-01 on (the sealed test year): final evaluation only",
     )
     args = parser.parse_args()
     generate(
@@ -313,4 +347,5 @@ if __name__ == "__main__":
         args.pv_scale,
         args.workers,
         args.scenario,
+        args.final_eval,
     )
