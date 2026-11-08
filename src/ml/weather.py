@@ -13,11 +13,26 @@ The API refuses a JSON answer longer than about two years, hence one request per
 Coordinates are the per-postcode centres of ``src.ml.geo`` (about a kilometre of precision, which
 is far finer than the data: POWER's cells are ~0.5 x 0.625 degrees for the meteorology and ~1 degree
 for the clouds and radiation, so neighbouring postcodes often receive identical values).
+
+``load(house_ids)`` gives the model's view: hourly sunlight (``ghi_wm2``) and temperature
+(``t2m_c``) for the houses of a station, with the time each value becomes known.
+
+* **Time.** ``time`` is the start of the hour in UTC. The value is the mean over that hour:
+  POWER's solar zenith angle matches the sun at ``time + 30 min`` (0.24 degrees on average over
+  2010-07 to 2012-06 daylight hours in postcode 2008; 4.6 degrees at ``time``, 4.3 at
+  ``time + 60 min``).
+* **Availability rule.** ``available_at = time + 1 h``: a value is used only once its hour is over,
+  so a feature at decision time ``t`` may only use rows with ``available_at <= t``.
+* **History only.** POWER is a reanalysis published days later, not a forecast or a live feed.
+  It stands in for a live weather source in the simulation; it is never a source for the future.
+* **Licence.** CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/); the source is named in
+  the README and on the slides. Details and pitfalls: ``src/ml/DATA.md``.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 import time
@@ -57,6 +72,9 @@ PARAMETERS = (
     "PRECTOTCORR",  # rain, mm/hour
 )
 OUTPUT_FILE = "weather_hourly.parquet"
+# The two parameters the model uses, and their names in ``load()``.
+MODEL_COLUMNS = {"ALLSKY_SFC_SW_DWN": "ghi_wm2", "T2M": "t2m_c"}
+KNOWN_AFTER = pd.Timedelta(hours=1)  # a value is the mean of its hour: known when the hour ends
 
 
 def raw_dir() -> Path:
@@ -176,9 +194,7 @@ def build(start_year: int, end_year: int, csv: bool = False) -> pd.DataFrame:
     """
     table = postcodes()
     years = range(start_year, end_year + 1)
-    missing = [
-        f"{p}_{y}" for p in table["postcode"] for y in years if not raw_path(p, y).exists()
-    ]
+    missing = [f"{p}_{y}" for p in table["postcode"] for y in years if not raw_path(p, y).exists()]
     if missing:
         raise FileNotFoundError(
             f"{len(missing)} answers are not downloaded yet (first: {missing[:3]}): run `fetch`"
@@ -192,9 +208,68 @@ def build(start_year: int, end_year: int, csv: bool = False) -> pd.DataFrame:
     out = pd.concat(parts, ignore_index=True)
     out["postcode"] = out["postcode"].astype("category")
     out.to_parquet(weather_path(), index=False)
+    sha_path(weather_path()).write_text(f"{file_sha256(weather_path())}  {OUTPUT_FILE}\n")
     if csv:
         out.to_csv(weather_path().with_suffix(".csv"), index=False, date_format="%Y-%m-%d %H:%M")
     return out
+
+
+def sha_path(path: Path) -> Path:
+    return path.with_name(path.name + ".sha256")
+
+
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for block in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def load(house_ids: list[str] | None = None) -> pd.DataFrame:
+    """Hourly sunlight and temperature for a station, with the time each value is known.
+
+    Columns: ``time`` (UTC, start of the hour), ``ghi_wm2`` (mean W/m^2 over the hour),
+    ``t2m_c`` (mean C), ``available_at`` (``time + 1 h``). One row per hour, sorted.
+
+    ``house_ids`` (``AG-0001`` form) are the station's houses: the series of their postcodes are
+    averaged, each postcode weighted by its number of houses, skipping missing values. ``None``
+    uses every house. An hour where no postcode has a value stays NaN, never 0.
+    """
+    path = weather_path()
+    if not path.exists():
+        raise FileNotFoundError(
+            f"{path} not found: run `python -m src.ml.weather fetch` then `build`"
+        )
+    houses = geo.load()
+    if house_ids is not None:
+        wanted = set(house_ids)
+        unknown = sorted(wanted - set(houses["house_id"]))
+        if unknown:
+            raise ValueError(f"houses without a postcode in the geo table: {unknown[:5]}")
+        houses = houses[houses["house_id"].isin(wanted)]
+    weights = houses["postcode"].astype(str).value_counts()
+    frame = pd.read_parquet(
+        path,
+        columns=["postcode", "time_utc", *MODEL_COLUMNS],
+        filters=[("postcode", "in", list(weights.index))],
+    )
+    frame["postcode"] = frame["postcode"].astype(str)
+    missing = sorted(set(weights.index) - set(frame["postcode"]))
+    if missing:
+        raise ValueError(f"no weather for postcodes {missing[:5]}: run `fetch` and `build` again")
+    w = frame["postcode"].map(weights).astype("float64")
+    columns = {}
+    for source, name in MODEL_COLUMNS.items():
+        value = frame[source].astype("float64")
+        present = value.notna()
+        num = (value.fillna(0) * w).groupby(frame["time_utc"]).sum()
+        den = w.where(present, 0.0).groupby(frame["time_utc"]).sum()
+        columns[name] = (num / den).where(den > 0)
+    out = pd.DataFrame(columns).rename_axis("time").reset_index()
+    out["time"] = pd.to_datetime(out["time"], utc=True)
+    out["available_at"] = out["time"] + KNOWN_AFTER
+    return out.sort_values("time", ignore_index=True)
 
 
 def describe(out: pd.DataFrame) -> None:
@@ -204,6 +279,7 @@ def describe(out: pd.DataFrame) -> None:
         f"{hours.min()}-{hours.max()} hours each, "
         f"{out['time_utc'].min()} to {out['time_utc'].max()}"
     )
+    print(f"SHA-256 {sha_path(weather_path()).read_text().split()[0]}")
     print("share of missing values per parameter:")
     print((out[list(PARAMETERS)].isna().mean() * 100).round(2).to_string())
     values = out.drop_duplicates("postcode")
