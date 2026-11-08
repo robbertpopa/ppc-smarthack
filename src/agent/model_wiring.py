@@ -36,6 +36,18 @@ def hotspot_c(ratios: list[float], ambient_c: float = AMBIENT_C) -> float | None
     return state.hotspot_c
 
 
+# ``night`` is not checked live: at night there is no PV, so no export limit can bind, and
+# abstaining would send every night interval to the crew and use up its daily budget.
+LIVE_SKIPPED_FLAGS = frozenset({"night"})
+
+
+def live_input_flags(features: dict) -> list[str]:
+    """The training input checks (``abstention.quality_flags``) that force a live abstention."""
+    from src.ml.abstention import quality_flags
+
+    return [f for f in quality_flags(features) if f not in LIVE_SKIPPED_FLAGS]
+
+
 def load_station(settings: Settings) -> StationConfig:
     """Houses of the scenario's station; other settings keep the mock defaults."""
     from src.ml import labels as labels_io
@@ -103,4 +115,11 @@ def make_model_source(settings: Settings, station: StationConfig) -> ModelSource
             state["trafo_hotspot_c"] = hotspot_c(ratios)
         return GridState(interval_start=interval_start, **state)
 
-    return ModelSource(predict, features.build, station_state, grid_state_for, explain=explain)
+    return ModelSource(
+        predict,
+        features.build,
+        station_state,
+        grid_state_for,
+        explain=explain,
+        input_flags=live_input_flags,
+    )

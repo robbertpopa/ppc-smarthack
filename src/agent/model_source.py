@@ -17,18 +17,39 @@ class ModelSource:
         grid_state_for: Callable[[str, datetime], Any],
         horizon_min: int = 60,
         explain: Callable[[Any], Any] | None = None,
+        input_flags: Callable[[Any], list[str]] | None = None,
     ):
         self.explain = explain
+        self.input_flags = input_flags
         self.predict = predict
         self.build_features = build_features
         self.station_state = station_state
         self.grid_state_for = grid_state_for
         self.horizon_min = horizon_min
 
+    def _features(self, pt_id: str, interval_start: AwareDatetime):
+        """The features the model sees for this interval, built at the decision time."""
+        decision = interval_start.astimezone(timezone.utc) - timedelta(minutes=self.horizon_min)
+        return self.build_features(self.station_state(pt_id, decision), decision)
+
+    def input_checks(self, pt_id: str, interval_start: AwareDatetime) -> list[str]:
+        """Input check flags for the features ``forecast`` uses; any flag forces abstention.
+
+        Empty when no checks are wired or the features cannot be built (then ``forecast``
+        is None and the plan abstains for that reason).
+        """
+        if self.input_flags is None:
+            return []
+        try:
+            return list(self.input_flags(self._features(pt_id, interval_start)))
+        except Exception as exc:
+            logger.warning("no input checks for %s at %s: %r", pt_id, interval_start, exc)
+            return []
+
     def forecast(self, pt_id: str, interval_start: AwareDatetime) -> Forecast | None:
         decision = interval_start.astimezone(timezone.utc) - timedelta(minutes=self.horizon_min)
         try:
-            features = self.build_features(self.station_state(pt_id, decision), decision)
+            features = self._features(pt_id, interval_start)
             forecast = self.predict(features)
             if not isinstance(forecast, Forecast):
                 forecast = Forecast.model_validate(forecast)
@@ -47,9 +68,8 @@ class ModelSource:
         """Top factors and similar cases for the forecast; None when unavailable."""
         if self.explain is None:
             return None
-        decision = interval_start.astimezone(timezone.utc) - timedelta(minutes=self.horizon_min)
         try:
-            return self.explain(self.build_features(self.station_state(pt_id, decision), decision))
+            return self.explain(self._features(pt_id, interval_start))
         except Exception as exc:
             logger.warning("no explanation for %s at %s: %r", pt_id, interval_start, exc)
             return None

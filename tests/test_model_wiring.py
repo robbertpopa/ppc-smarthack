@@ -49,3 +49,24 @@ def test_hotspot_rises_with_load():
 
     assert hotspot_c([0.2] * 10) < hotspot_c([0.2] * 5 + [1.4] * 5)
     assert hotspot_c([]) is None
+
+
+def test_a_day_without_readings_abstains_on_the_input_checks(env):
+    service = build_service(Settings(source="model", scenario="A", log_uri=str(env / "c.jsonl")))
+    outside = datetime(2025, 6, 21, 2, 0, tzinfo=timezone.utc)  # no labels history at all
+    plan = service.propose(outside)
+    assert plan.abstain and plan.source == "fallback_static"
+    assert {"missing_net_now", "stale_input"} <= set(plan.reasons)
+
+
+def test_a_normal_day_in_the_label_period_has_no_input_flags(env):
+    service = build_service(Settings(source="model", scenario="A", log_uri=str(env / "d.jsonl")))
+    moment = datetime(2012, 5, 10, 1, 0, tzinfo=timezone.utc)
+    assert service.source.input_checks("PT-A", moment) == []
+
+
+def test_night_is_not_a_live_reason_to_abstain():
+    from src.agent.model_wiring import live_input_flags
+
+    night = {"net_now": 0.1, "share_last": 1.0, "net_lag_1": 0.1, "sun_elev_T": -20.0}
+    assert live_input_flags(night) == []
