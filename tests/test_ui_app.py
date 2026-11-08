@@ -79,7 +79,7 @@ class UiAppTests(unittest.TestCase):
 
     def test_pages_are_served(self):
         client = self.client()
-        self.assertIn("Station operator screen", client.get("/").text)
+        self.assertIn("Station operator screen", client.get("/operator").text)
         self.assertEqual(client.get("/simulation").status_code, 200)
 
     def test_proxy_forwards_the_query_to_the_configured_api(self):
@@ -204,7 +204,7 @@ class UiAppTests(unittest.TestCase):
         self.assertEqual(client.get("/static/map/../index.html").status_code, 404)
 
     def test_the_page_has_the_map_slot_and_keeps_the_simulation_notice(self):
-        page = self.client().get("/").text
+        page = self.client().get("/operator").text
         needles = ('id="mapHost"', "window.StationMap", "/static/map/map.js", "Simulated data")
         for needle in needles:
             self.assertIn(needle, page)
@@ -238,7 +238,7 @@ if __name__ == "__main__":
 
 class PricesTabTests(unittest.TestCase):
     def test_screen_has_the_prices_tab_and_panel(self):
-        html = TestClient(create_app(Settings())).get("/").text
+        html = TestClient(create_app(Settings())).get("/operator").text
         for needle in ('id="tab-prices"', 'id="p-prices"', 'id="priceChart"', 'id="rev"'):
             self.assertIn(needle, html)
         self.assertIn('"compare", "prices"]', html)

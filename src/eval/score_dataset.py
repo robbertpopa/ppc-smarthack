@@ -22,6 +22,53 @@ from src.ml.config import SYDNEY
 from src.ml.split import local_date
 
 
+def model_limits(models, meta, rows):
+    """q05, spread, abstention, the offset limit and the fallback limit for every row.
+
+    The online offset is replayed in time order from ``meta["offset"]["c_start"]``: a label
+    teaches it once its interval is over, and an abstained interval teaches nothing.
+    Returns ``(frame indexed by target_start, raw quantile predictions)``.
+    """
+    pred = train.predict_quantiles(models, rows[meta["features"]])
+    index = pd.DatetimeIndex(rows["target_start"])
+    q05 = pd.Series(pred[:, 0], index=index)
+    spread = pd.Series(pred[:, -1] - pred[:, 0], index=index)
+    flagged = pd.Series(
+        [bool(abstention.quality_flags(r)) for r in rows[features.FEATURES].to_dict("records")],
+        index=index,
+    )
+    info = meta["abstention"]
+    tau = float(info["tau"]) if info["reachable"] else -math.inf
+    abstain = (spread > tau) | flagged
+    offset = meta["offset"]
+    replayed = online_calibration.replay(
+        pd.DataFrame(
+            {
+                "q05": q05,
+                "safe_share": rows["safe_share"].to_numpy(),
+                "decision_time": pd.DatetimeIndex(rows["decision_time"]),
+                "available_at": index + features.STEP,
+                "abstain": abstain.to_numpy(),
+            },
+            index=index,
+        ),
+        offset["gamma"],
+        offset["alpha"],
+        c0=offset["c_start"],
+    )
+    limit = replayed.limit
+    frame = pd.DataFrame(
+        {
+            "q05": q05,
+            "spread": spread,
+            "abstain": abstain,
+            "limit": limit,
+            "fallback": limit.where(~abstain, FIXED_SHARE),
+        }
+    )
+    return frame, pred
+
+
 def score(scenario: str, version: str) -> dict:
     labels = labels_io.load(scenario)
     houses = labels_io.load_station_houses(scenario)
@@ -41,38 +88,9 @@ def score(scenario: str, version: str) -> dict:
     surplus = surplus_kw(load_profiles(houses, dataset.out_dir() / "test.parquet"), houses)
     kwp = houses.set_index("house_id")["kwp"]
 
-    pred = train.predict_quantiles(models, test_rows[meta["features"]])
-    index = pd.DatetimeIndex(test_rows["target_start"])
-    q05 = pd.Series(pred[:, 0], index=index)
-    spread = pd.Series(pred[:, -1] - pred[:, 0], index=index)
-    flagged = pd.Series(
-        [
-            bool(abstention.quality_flags(r))
-            for r in test_rows[features.FEATURES].to_dict("records")
-        ],
-        index=index,
-    )
-    info = meta["abstention"]
-    tau = float(info["tau"]) if info["reachable"] else -math.inf
-    abstain = (spread > tau) | flagged
-    offset = meta["offset"]
-    replayed = online_calibration.replay(
-        pd.DataFrame(
-            {
-                "q05": q05,
-                "safe_share": test_rows["safe_share"].to_numpy(),
-                "decision_time": pd.DatetimeIndex(test_rows["decision_time"]),
-                "available_at": index + features.STEP,
-                "abstain": abstain.to_numpy(),
-            },
-            index=index,
-        ),
-        offset["gamma"],
-        offset["alpha"],
-        c0=offset["c_start"],
-    )
-    limit = replayed.limit
-    fallback = limit.where(~abstain, FIXED_SHARE)
+    frame, pred = model_limits(models, meta, test_rows)
+    q05 = frame["q05"]
+    abstain, limit, fallback = frame["abstain"], frame["limit"], frame["fallback"]
     y = test_rows["safe_share"].to_numpy()
     persistence = test_rows["share_last"].to_numpy()
     results = {

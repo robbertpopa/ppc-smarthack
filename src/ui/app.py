@@ -24,6 +24,7 @@ from src.common.config import Settings
 STATIC = Path(__file__).parent / "static"
 MOCK_INSIGHT = Path(__file__).parent / "mocks" / "ai_insight.json"
 # One name or id: letters, digits, "_" and "-", optionally joined by single dots. No "." or "..".
+DAY_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 NAME = r"[\w\-]+(?:\.[\w\-]+)*"
 READ = re.compile(
     rf"(health|station|forecast|grid_state|prices|plans|plan/{NAME}|queue|log|kill_switch)"
@@ -56,7 +57,35 @@ def create_app(settings: Settings | None = None, run_id: str | None = None) -> F
 
     @app.get("/")
     def index():
+        return FileResponse(STATIC / "replay.html")
+
+    @app.get("/operator")
+    def operator():
         return FileResponse(STATIC / "index.html")
+
+    replay_dir = Path(settings.artifact_uri) / "replay"
+
+    def replay_file(path: Path):
+        if not path.is_file():
+            return JSONResponse({"available": False}, status_code=404)
+        try:
+            return JSONResponse(json.loads(path.read_text(encoding="utf-8")))
+        except (OSError, ValueError):
+            raise HTTPException(status_code=502, detail=f"{path.name} is unreadable") from None
+
+    @app.get("/replay/index")
+    def replay_index():
+        return replay_file(replay_dir / "index.json")
+
+    @app.get("/replay/geo")
+    def replay_geo():
+        return replay_file(replay_dir / "geo.geojson")
+
+    @app.get("/replay/day/{date}")
+    def replay_day(date: str):
+        if not DAY_DATE.fullmatch(date):
+            raise HTTPException(status_code=422, detail="date must look like 2013-05-01")
+        return replay_file(replay_dir / "days" / f"{date}.json")
 
     @app.get("/simulation")
     def simulation():
