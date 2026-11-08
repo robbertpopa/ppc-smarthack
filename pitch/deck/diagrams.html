@@ -1,0 +1,441 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<html lang="en">
+<title>PPC Agent Blueprint</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one narrow reading column; each section is a heading, a sentence, a framed diagram that scrolls sideways on phones. */
+:root {
+  --bg: #ECEFF3;
+  --surface: #FAFBFC;
+  --ink: #14202B;
+  --muted: #4F5D69;
+  --line: #C5CED6;
+  --blue: #2B5BA8;
+  --blue-soft: #DCE6F4;
+  --teal: #0E6F68;
+  --teal-soft: #D3EBE8;
+  --amber: #8F5200;
+  --amber-fill: #F0A83A;
+  --amber-soft: #FBE8C6;
+  --bar-fixed: #9AA7B3;
+  --display: "Bricolage Grotesque", "IBM Plex Sans", system-ui, sans-serif;
+  --sans: "IBM Plex Sans", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0D151D; --surface: #15212C; --ink: #E7EEF4; --muted: #A2B2C0; --line: #2B3B4A;
+    --blue: #8FB4EE; --blue-soft: #1B2E49; --teal: #5CC9BD; --teal-soft: #123F3C;
+    --amber: #F0B04A; --amber-fill: #E8A33A; --amber-soft: #3A2D14; --bar-fixed: #556678;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0D151D; --surface: #15212C; --ink: #E7EEF4; --muted: #A2B2C0; --line: #2B3B4A;
+  --blue: #8FB4EE; --blue-soft: #1B2E49; --teal: #5CC9BD; --teal-soft: #123F3C;
+  --amber: #F0B04A; --amber-fill: #E8A33A; --amber-soft: #3A2D14; --bar-fixed: #556678;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 16px/1.55 var(--sans); }
+.wrap { max-width: 980px; margin: 0 auto; padding-block: 40px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header { display: grid; gap: 12px; padding-bottom: 28px; }
+h1 { font: 700 clamp(2rem, 5vw, 3rem)/1.05 var(--display); margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+.lede { margin: 0; max-width: 62ch; color: var(--muted); font-size: 1.05rem; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 6px; font-size: .9rem; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 8px; }
+.sw { width: 26px; height: 16px; border-radius: 4px; border: 1.5px solid var(--ink); background: var(--surface); }
+.sw.part { border-color: var(--amber); background: var(--amber-soft); }
+.sw.todo { border: 1.5px dashed var(--muted); background: transparent; }
+section { display: grid; gap: 12px; padding-top: 36px; border-top: 1px solid var(--line); margin-top: 36px; }
+section:first-of-type { border-top: 0; margin-top: 0; padding-top: 0; }
+h2 { font: 600 1.55rem/1.15 var(--display); margin: 0; text-wrap: balance; }
+.what { margin: 0; max-width: 66ch; color: var(--muted); }
+figure { margin: 0; display: grid; gap: 10px; min-width: 0; }
+.scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+.scroll svg { display: block; width: 100%; min-width: 760px; height: auto; }
+figcaption { font-size: .9rem; color: var(--muted); max-width: 70ch; }
+.key { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: .85rem; color: var(--muted); }
+.key i { display: inline-block; width: 14px; height: 14px; border-radius: 3px; margin-right: 6px; vertical-align: -2px; }
+/* svg vocabulary */
+.node { fill: var(--surface); stroke: var(--ink); stroke-width: 1.5; }
+.node.ml { fill: var(--blue-soft); stroke: var(--blue); }
+.node.safe { fill: var(--amber-soft); stroke: var(--amber); }
+.node.ok { fill: var(--teal-soft); stroke: var(--teal); }
+.node.part { fill: var(--amber-soft); stroke: var(--amber); stroke-dasharray: 0; }
+.node.todo { fill: none; stroke: var(--muted); stroke-dasharray: 6 4; }
+.t { fill: var(--ink); font: 600 13.5px var(--sans); }
+.t2 { fill: var(--ink); font: 500 12.5px var(--sans); }
+.s { fill: var(--muted); font: 400 12px var(--sans); }
+.l { fill: var(--muted); font: 400 11.5px var(--mono); paint-order: stroke; stroke: var(--surface); stroke-width: 5px; stroke-linejoin: round; }
+.v { fill: var(--ink); font: 500 12px var(--mono); }
+.edge { stroke: var(--ink); stroke-width: 1.6; fill: none; }
+.edge.dash { stroke: var(--muted); stroke-dasharray: 5 4; }
+.life { stroke: var(--line); stroke-width: 1.5; stroke-dasharray: 3 5; }
+.grid { stroke: var(--line); stroke-width: 1; }
+.ah { fill: var(--ink); }
+.ahm { fill: var(--muted); }
+.b-fixed { fill: var(--bar-fixed); }
+.b-model { fill: var(--blue); }
+.b-app { fill: var(--amber-fill); }
+.b-teal { fill: var(--teal); }
+a:focus-visible, .scroll:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z" class="ah"/></marker>
+    <marker id="arrm" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z" class="ahm"/></marker>
+  </defs>
+</svg>
+
+<div class="wrap">
+<header>
+  <h1>How the agent should work</h1>
+  <p class="lede">Six pictures of the finished system for PPC’s dynamic export limits: the loop, one 30-minute cycle, what each house receives, how the model is kept honest, where the money comes from and where it grows next. Everything is a simulation.</p>
+  <div class="legend" aria-label="Legend">
+    <span><i class="sw"></i>In the repository today</span>
+    <span><i class="sw part"></i>Partly there (mock data or not wired in)</span>
+    <span><i class="sw todo"></i>Still to build</span>
+  </div>
+</header>
+
+<section>
+  <h2>The closed loop</h2>
+  <p class="what">Meters feed a forecast, the agent turns it into a limit per house, a guard and a person check it, and the inverters apply it. The new readings start the next cycle. Today the loop is closed on replayed Ausgrid data; the dashed part needs the operator.</p>
+  <figure>
+    <div class="scroll" tabindex="0">
+      <svg viewBox="0 0 880 450" role="img" aria-label="Closed loop: meters and weather, features, quantile model, planner, guard, operator, inverter gateway, house inverters, and back to meters; an action log underneath records every step.">
+        <rect class="node part" x="20" y="36" width="160" height="78" rx="10"/>
+        <text class="t" x="100" y="60" text-anchor="middle">Meters + weather</text>
+        <text class="s" x="100" y="79" text-anchor="middle">Ausgrid replay today,</text>
+        <text class="s" x="100" y="95" text-anchor="middle">real meters later</text>
+        <rect class="node" x="250" y="36" width="160" height="78" rx="10"/>
+        <text class="t" x="330" y="60" text-anchor="middle">Features</text>
+        <text class="s" x="330" y="79" text-anchor="middle">14 inputs known</text>
+        <text class="s" x="330" y="95" text-anchor="middle">one hour earlier</text>
+        <rect class="node ml" x="480" y="36" width="160" height="78" rx="10"/>
+        <text class="t" x="560" y="60" text-anchor="middle">Quantile model</text>
+        <text class="s" x="560" y="79" text-anchor="middle">q05 … q90</text>
+        <text class="s" x="560" y="95" text-anchor="middle">and the spread</text>
+        <rect class="node ok" x="710" y="36" width="160" height="78" rx="10"/>
+        <text class="t" x="790" y="60" text-anchor="middle">Planner</text>
+        <text class="s" x="790" y="79" text-anchor="middle">limit per house,</text>
+        <text class="s" x="790" y="95" text-anchor="middle">or fixed 36%</text>
+
+        <rect class="node safe" x="710" y="236" width="160" height="78" rx="10"/>
+        <text class="t" x="790" y="260" text-anchor="middle">Guard</text>
+        <text class="s" x="790" y="279" text-anchor="middle">own power flow,</text>
+        <text class="s" x="790" y="295" text-anchor="middle">blocks violations</text>
+        <rect class="node" x="480" y="236" width="160" height="78" rx="10"/>
+        <text class="t" x="560" y="260" text-anchor="middle">Operator</text>
+        <text class="s" x="560" y="279" text-anchor="middle">approves or rejects,</text>
+        <text class="s" x="560" y="295" text-anchor="middle">sees the queue</text>
+        <rect class="node todo" x="250" y="236" width="160" height="78" rx="10"/>
+        <text class="t" x="330" y="260" text-anchor="middle">Inverter gateway</text>
+        <text class="s" x="330" y="279" text-anchor="middle">sends the setpoints,</text>
+        <text class="s" x="330" y="295" text-anchor="middle">needs the operator</text>
+        <rect class="node todo" x="20" y="236" width="160" height="78" rx="10"/>
+        <text class="t" x="100" y="260" text-anchor="middle">House inverters</text>
+        <text class="s" x="100" y="279" text-anchor="middle">apply the export</text>
+        <text class="s" x="100" y="295" text-anchor="middle">limit</text>
+
+        <line class="edge" x1="180" y1="75" x2="250" y2="75" marker-end="url(#arr)"/>
+        <text class="l" x="215" y="66" text-anchor="middle">readings</text>
+        <line class="edge" x1="410" y1="75" x2="480" y2="75" marker-end="url(#arr)"/>
+        <text class="l" x="445" y="66" text-anchor="middle">features</text>
+        <line class="edge" x1="640" y1="75" x2="710" y2="75" marker-end="url(#arr)"/>
+        <text class="l" x="675" y="66" text-anchor="middle">forecast</text>
+        <line class="edge" x1="790" y1="114" x2="790" y2="236" marker-end="url(#arr)"/>
+        <text class="l" x="780" y="180" text-anchor="end">plan</text>
+        <line class="edge" x1="710" y1="275" x2="640" y2="275" marker-end="url(#arr)"/>
+        <text class="l" x="675" y="266" text-anchor="middle">passed</text>
+        <line class="edge dash" x1="480" y1="275" x2="410" y2="275" marker-end="url(#arrm)"/>
+        <text class="l" x="445" y="266" text-anchor="middle">approved</text>
+        <line class="edge dash" x1="250" y1="275" x2="180" y2="275" marker-end="url(#arrm)"/>
+        <text class="l" x="215" y="266" text-anchor="middle">setpoint</text>
+        <line class="edge dash" x1="100" y1="236" x2="100" y2="114" marker-end="url(#arrm)"/>
+        <text class="l" x="112" y="180" text-anchor="start">new readings every 30 minutes</text>
+
+        <line class="edge dash" x1="790" y1="314" x2="790" y2="380"/>
+        <line class="edge dash" x1="560" y1="314" x2="560" y2="380"/>
+        <rect class="node ok" x="20" y="380" width="850" height="58" rx="10"/>
+        <text class="t" x="445" y="404" text-anchor="middle">Action log, append-only</text>
+        <text class="s" x="445" y="422" text-anchor="middle">every proposal, block, approval, execution and kill switch is written here; the kill switch cancels open plans</text>
+      </svg>
+    </div>
+    <figcaption>The agent never talks to inverters directly. A plan passes the guard, then a person, and only then leaves the loop.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2>One 30-minute cycle</h2>
+  <p class="what">Who talks to whom, in order. The model sees only what existed an hour before the interval starts. Dashed lines are answers and the parts that do not exist yet.</p>
+  <figure>
+    <div class="scroll" tabindex="0">
+      <svg viewBox="0 0 940 590" role="img" aria-label="Sequence of one cycle between meters, model, agent, guard, operator and inverters, from readings to the next readings.">
+        <line class="life" x1="80" y1="50" x2="80" y2="570"/>
+        <line class="life" x1="235" y1="50" x2="235" y2="570"/>
+        <line class="life" x1="390" y1="50" x2="390" y2="570"/>
+        <line class="life" x1="545" y1="50" x2="545" y2="570"/>
+        <line class="life" x1="700" y1="50" x2="700" y2="570"/>
+        <line class="life" x1="855" y1="50" x2="855" y2="570"/>
+        <rect class="node part" x="18" y="10" width="124" height="40" rx="8"/><text class="t" x="80" y="35" text-anchor="middle">Meters</text>
+        <rect class="node ml" x="173" y="10" width="124" height="40" rx="8"/><text class="t" x="235" y="35" text-anchor="middle">Model</text>
+        <rect class="node ok" x="328" y="10" width="124" height="40" rx="8"/><text class="t" x="390" y="35" text-anchor="middle">Agent</text>
+        <rect class="node safe" x="483" y="10" width="124" height="40" rx="8"/><text class="t" x="545" y="35" text-anchor="middle">Guard</text>
+        <rect class="node" x="638" y="10" width="124" height="40" rx="8"/><text class="t" x="700" y="35" text-anchor="middle">Operator</text>
+        <rect class="node todo" x="793" y="10" width="124" height="40" rx="8"/><text class="t" x="855" y="35" text-anchor="middle">Inverters</text>
+
+        <line class="edge" x1="80" y1="100" x2="390" y2="100" marker-end="url(#arr)"/>
+        <text class="l" x="235" y="92" text-anchor="middle">readings up to t − 60 min</text>
+        <line class="edge" x1="390" y1="145" x2="235" y2="145" marker-end="url(#arr)"/>
+        <text class="l" x="312" y="137" text-anchor="middle">features(t)</text>
+        <line class="edge dash" x1="235" y1="190" x2="390" y2="190" marker-end="url(#arrm)"/>
+        <text class="l" x="312" y="182" text-anchor="middle">q05, q90, spread</text>
+        <rect class="node ok" x="250" y="214" width="280" height="42" rx="8"/>
+        <text class="t2" x="390" y="240" text-anchor="middle">decide: model limit, or fixed 36%</text>
+        <line class="edge" x1="390" y1="300" x2="545" y2="300" marker-end="url(#arr)"/>
+        <text class="l" x="467" y="292" text-anchor="middle">plan + readings</text>
+        <line class="edge dash" x1="545" y1="345" x2="390" y2="345" marker-end="url(#arrm)"/>
+        <text class="l" x="467" y="337" text-anchor="middle">passed or blocked</text>
+        <line class="edge" x1="390" y1="395" x2="700" y2="395" marker-end="url(#arr)"/>
+        <text class="l" x="545" y="387" text-anchor="middle">plan + explanation, queued if unsure</text>
+        <line class="edge dash" x1="700" y1="440" x2="390" y2="440" marker-end="url(#arrm)"/>
+        <text class="l" x="545" y="432" text-anchor="middle">approve or reject</text>
+        <line class="edge dash" x1="390" y1="490" x2="855" y2="490" marker-end="url(#arrm)"/>
+        <text class="l" x="622" y="482" text-anchor="middle">execute: export limit per house</text>
+        <line class="edge dash" x1="855" y1="535" x2="80" y2="535" marker-end="url(#arrm)"/>
+        <text class="l" x="467" y="527" text-anchor="middle">new readings for the next cycle</text>
+      </svg>
+    </div>
+    <figcaption>A forecast for 10:00 is built from data up to 09:00 and only used if the model is sure. Otherwise the plan carries today’s fixed limit and waits for a person.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2>What limit each house gets</h2>
+  <p class="what">The model’s limit applies only where it is sure, and never above the contract cap. Example from the contract file: 52% from the cautious quantile, three houses.</p>
+  <div class="key" aria-label="Legend for the chart">
+    <span><i style="background:var(--bar-fixed)"></i>Fixed limit today, 36% of kWp</span>
+    <span><i style="background:var(--blue)"></i>Model, q05 × kWp</span>
+    <span><i style="background:var(--amber-fill)"></i>Applied when the model is sure</span>
+  </div>
+  <figure>
+    <div class="scroll" tabindex="0">
+      <svg viewBox="0 0 880 370" role="img" aria-label="Export limit in kW for three houses. H01 5 kWp: fixed 1.8, model 2.6, applied 2.6. H02 8 kWp: fixed 2.88, model 4.16, applied 4.16. H06 25 kWp with a 9 kW contract cap: fixed 9.0, model 13.0, applied 9.0.">
+        <line class="grid" x1="170" y1="14" x2="170" y2="330"/>
+        <line class="grid" x1="305" y1="14" x2="305" y2="330"/>
+        <line class="grid" x1="440" y1="14" x2="440" y2="330"/>
+        <line class="grid" x1="575" y1="14" x2="575" y2="330"/>
+        <line class="grid" x1="710" y1="14" x2="710" y2="330"/>
+        <rect x="170" y="330" width="630" height="2" fill="var(--muted)"/>
+        <text class="s" x="170" y="352" text-anchor="middle">0</text>
+        <text class="s" x="305" y="352" text-anchor="middle">3</text>
+        <text class="s" x="440" y="352" text-anchor="middle">6</text>
+        <text class="s" x="575" y="352" text-anchor="middle">9</text>
+        <text class="s" x="710" y="352" text-anchor="middle">12</text>
+        <text class="s" x="800" y="352" text-anchor="end">kW</text>
+
+        <text class="t" x="152" y="64" text-anchor="end">H01 · 5 kWp</text>
+        <text class="s" x="152" y="82" text-anchor="end">no contract cap</text>
+        <rect class="b-fixed" x="170" y="30" width="81" height="22"/><text class="v" x="259" y="46">1.8 kW</text>
+        <rect class="b-model" x="170" y="56" width="117" height="22"/><text class="v" x="295" y="72">2.6 kW</text>
+        <rect class="b-app" x="170" y="82" width="117" height="22"/><text class="v" x="295" y="98">2.6 kW</text>
+
+        <text class="t" x="152" y="164" text-anchor="end">H02 · 8 kWp</text>
+        <text class="s" x="152" y="182" text-anchor="end">no contract cap</text>
+        <rect class="b-fixed" x="170" y="130" width="130" height="22"/><text class="v" x="308" y="146">2.88 kW</text>
+        <rect class="b-model" x="170" y="156" width="187" height="22"/><text class="v" x="365" y="172">4.16 kW</text>
+        <rect class="b-app" x="170" y="182" width="187" height="22"/><text class="v" x="365" y="198">4.16 kW</text>
+
+        <text class="t" x="152" y="264" text-anchor="end">H06 · 25 kWp</text>
+        <text class="s" x="152" y="282" text-anchor="end">cap 9 kW</text>
+        <rect class="b-fixed" x="170" y="230" width="405" height="22"/><text class="v" x="583" y="246">9.0 kW</text>
+        <rect class="b-model" x="170" y="256" width="585" height="22"/><text class="v" x="763" y="272">13.0 kW</text>
+        <rect class="b-app" x="170" y="282" width="405" height="22"/><text class="v" x="583" y="298">9.0 kW</text>
+        <line x1="575" y1="222" x2="575" y2="312" stroke="var(--ink)" stroke-width="2" stroke-dasharray="5 4"/>
+        <text class="l" x="583" y="218" text-anchor="start">contract cap 9 kW</text>
+      </svg>
+    </div>
+    <figcaption>H06 has 25 kW of panels and a 9 kW approval, so the cap, not the model, decides. If the model is unsure, every house gets the grey bar instead: 1.8, 2.88 and 9.0 kW.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2>How the model stays honest</h2>
+  <p class="what">Training, the abstention threshold and the final test use different slices of time. Monitoring and recalibration after deployment are the missing half.</p>
+  <figure>
+    <div class="scroll" tabindex="0">
+      <svg viewBox="0 0 880 330" role="img" aria-label="Model lifecycle: data, labels from the power flow, training, choosing the threshold on validation, a sealed test year, deployment, monitoring and recalibration, which loops back to training.">
+        <rect class="node" x="20" y="30" width="170" height="78" rx="10"/>
+        <text class="t" x="105" y="54" text-anchor="middle">Ausgrid + weather</text>
+        <text class="s" x="105" y="73" text-anchor="middle">300 homes</text>
+        <text class="s" x="105" y="89" text-anchor="middle">July 2010 – June 2013</text>
+        <rect class="node part" x="243" y="30" width="170" height="78" rx="10"/>
+        <text class="t" x="328" y="54" text-anchor="middle">Labels</text>
+        <text class="s" x="328" y="73" text-anchor="middle">safe limit from a power</text>
+        <text class="s" x="328" y="89" text-anchor="middle">flow; mock labels today</text>
+        <rect class="node ml" x="466" y="30" width="170" height="78" rx="10"/>
+        <text class="t" x="551" y="54" text-anchor="middle">Train</text>
+        <text class="s" x="551" y="73" text-anchor="middle">q05 … q90</text>
+        <text class="s" x="551" y="89" text-anchor="middle">to March 2012</text>
+        <rect class="node ml" x="689" y="30" width="170" height="78" rx="10"/>
+        <text class="t" x="774" y="54" text-anchor="middle">Choose threshold τ</text>
+        <text class="s" x="774" y="73" text-anchor="middle">validation only,</text>
+        <text class="s" x="774" y="89" text-anchor="middle">at most 2% violations</text>
+
+        <rect class="node safe" x="689" y="200" width="170" height="78" rx="10"/>
+        <text class="t" x="774" y="224" text-anchor="middle">Sealed test</text>
+        <text class="s" x="774" y="243" text-anchor="middle">July 2012 – June 2013,</text>
+        <text class="s" x="774" y="259" text-anchor="middle">opened once</text>
+        <rect class="node" x="466" y="200" width="170" height="78" rx="10"/>
+        <text class="t" x="551" y="224" text-anchor="middle">Deploy</text>
+        <text class="s" x="551" y="243" text-anchor="middle">models and metadata</text>
+        <text class="s" x="551" y="259" text-anchor="middle">in artifacts/</text>
+        <rect class="node todo" x="243" y="200" width="170" height="78" rx="10"/>
+        <text class="t" x="328" y="224" text-anchor="middle">Monitor</text>
+        <text class="s" x="328" y="243" text-anchor="middle">violations against 2%,</text>
+        <text class="s" x="328" y="259" text-anchor="middle">drift by season</text>
+        <rect class="node todo" x="20" y="200" width="170" height="78" rx="10"/>
+        <text class="t" x="105" y="224" text-anchor="middle">Recalibrate</text>
+        <text class="s" x="105" y="243" text-anchor="middle">online offset on the</text>
+        <text class="s" x="105" y="259" text-anchor="middle">limit, then retrain</text>
+
+        <line class="edge" x1="190" y1="69" x2="243" y2="69" marker-end="url(#arr)"/>
+        <line class="edge" x1="413" y1="69" x2="466" y2="69" marker-end="url(#arr)"/>
+        <line class="edge" x1="636" y1="69" x2="689" y2="69" marker-end="url(#arr)"/>
+        <line class="edge" x1="774" y1="108" x2="774" y2="200" marker-end="url(#arr)"/>
+        <text class="l" x="764" y="158" text-anchor="end">final check</text>
+        <line class="edge" x1="689" y1="239" x2="636" y2="239" marker-end="url(#arr)"/>
+        <line class="edge dash" x1="466" y1="239" x2="413" y2="239" marker-end="url(#arrm)"/>
+        <line class="edge dash" x1="243" y1="239" x2="190" y2="239" marker-end="url(#arrm)"/>
+        <path class="edge dash" d="M105 200 V154 H551 V108" marker-end="url(#arrm)"/>
+        <text class="l" x="330" y="146" text-anchor="middle">new data, retrain</text>
+      </svg>
+    </div>
+    <figcaption>Validation covers only autumn, so violations rose from about 1.8% to 3.5% on the full year in the exploration. Validating on all seasons and learning an offset online is the planned fix.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2>Where the value comes from</h2>
+  <p class="what">A safe higher limit means more exported energy. The pricing layer on main turns that into money: an hourly price for prosumers, a battery that sells in the evening, and less imbalance from a better forecast.</p>
+  <figure>
+    <div class="scroll" tabindex="0">
+      <svg viewBox="0 0 880 470" role="img" aria-label="Value flow: exported energy is settled at the hourly day-ahead price plus a monthly solar adder and compared with the day-ahead value for PPC; a battery shifts export to the evening and the forecast reduces imbalance cost.">
+        <rect class="node ok" x="20" y="40" width="200" height="80" rx="10"/>
+        <text class="t" x="120" y="64" text-anchor="middle">Prosumer export</text>
+        <text class="s" x="120" y="83" text-anchor="middle">capped by the dynamic</text>
+        <text class="s" x="120" y="99" text-anchor="middle">limit from the agent</text>
+        <rect class="node safe" x="340" y="40" width="200" height="80" rx="10"/>
+        <text class="t" x="440" y="64" text-anchor="middle">Settlement</text>
+        <text class="s" x="440" y="83" text-anchor="middle">paid = hourly price</text>
+        <text class="s" x="440" y="99" text-anchor="middle">+ solar adder</text>
+        <rect class="node" x="660" y="40" width="200" height="80" rx="10"/>
+        <text class="t" x="760" y="64" text-anchor="middle">Value for PPC</text>
+        <text class="s" x="760" y="83" text-anchor="middle">day-ahead value of the</text>
+        <text class="s" x="760" y="99" text-anchor="middle">same exported energy</text>
+
+        <rect class="node part" x="200" y="230" width="200" height="80" rx="10"/>
+        <text class="t" x="300" y="254" text-anchor="middle">PZU hourly prices</text>
+        <text class="s" x="300" y="273" text-anchor="middle">Romanian day-ahead,</text>
+        <text class="s" x="300" y="289" text-anchor="middle">mock curve without a token</text>
+        <rect class="node" x="450" y="230" width="180" height="80" rx="10"/>
+        <text class="t" x="540" y="254" text-anchor="middle">Monthly solar adder</text>
+        <text class="s" x="540" y="273" text-anchor="middle">from public prices and</text>
+        <text class="s" x="540" y="289" text-anchor="middle">a standard solar shape</text>
+
+        <rect class="node" x="20" y="370" width="200" height="80" rx="10"/>
+        <text class="t" x="120" y="394" text-anchor="middle">Battery dispatch</text>
+        <text class="s" x="120" y="413" text-anchor="middle">charge at cheap midday</text>
+        <text class="s" x="120" y="429" text-anchor="middle">sell 18–22 h; idle if unsure</text>
+        <rect class="node ml" x="340" y="370" width="200" height="80" rx="10"/>
+        <text class="t" x="440" y="394" text-anchor="middle">PV + load forecast</text>
+        <text class="s" x="440" y="413" text-anchor="middle">q10, q50, q90</text>
+        <text class="s" x="440" y="429" text-anchor="middle">1, 3 and 6 hours ahead</text>
+        <rect class="node" x="660" y="370" width="200" height="80" rx="10"/>
+        <text class="t" x="760" y="394" text-anchor="middle">Imbalance saving</text>
+        <text class="s" x="760" y="413" text-anchor="middle">|actual − forecast|</text>
+        <text class="s" x="760" y="429" text-anchor="middle">× 30, 60 or 120 €/MWh</text>
+
+        <line class="edge" x1="220" y1="80" x2="340" y2="80" marker-end="url(#arr)"/>
+        <text class="l" x="280" y="71" text-anchor="middle">exported kWh</text>
+        <line class="edge" x1="540" y1="80" x2="660" y2="80" marker-end="url(#arr)"/>
+        <text class="l" x="600" y="71" text-anchor="middle">paid vs value</text>
+        <line class="edge" x1="300" y1="230" x2="300" y2="175"/>
+        <line class="edge" x1="540" y1="230" x2="540" y2="175"/>
+        <line class="edge" x1="300" y1="175" x2="540" y2="175"/>
+        <line class="edge" x1="440" y1="175" x2="440" y2="120" marker-end="url(#arr)"/>
+        <line class="edge" x1="120" y1="370" x2="120" y2="120" marker-end="url(#arr)"/>
+        <text class="l" x="110" y="250" text-anchor="end">shifts export</text>
+        <line class="edge" x1="540" y1="410" x2="660" y2="410" marker-end="url(#arr)"/>
+        <text class="l" x="600" y="401" text-anchor="middle">forecast error</text>
+        <line class="edge" x1="760" y1="370" x2="760" y2="120" marker-end="url(#arr)"/>
+        <text class="l" x="750" y="250" text-anchor="end">avoided cost</text>
+      </svg>
+    </div>
+    <figcaption>The imbalance spreads are scenario values, not market data. Real day-ahead prices need an API token; without one the demo uses an illustrative curve.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2>Where it grows next</h2>
+  <p class="what">The transformer station is the natural unit: it sees the sum of everything below it. Export limits are the first of three levers, ordered by what they cost.</p>
+  <figure>
+    <div class="scroll" tabindex="0">
+      <svg viewBox="0 0 880 430" role="img" aria-label="A transformer station fed by houses, a thermal model and a weather forecast, with three levers: export limits for prosumers, invitations to shift consumption, and flagging the station for maintenance.">
+        <rect class="node" x="300" y="10" width="280" height="62" rx="10"/>
+        <text class="t" x="440" y="35" text-anchor="middle">Houses under one station</text>
+        <text class="s" x="440" y="54" text-anchor="middle">the transformer sees the sum</text>
+        <line class="edge" x1="440" y1="72" x2="440" y2="150" marker-end="url(#arr)"/>
+        <text class="l" x="452" y="116" text-anchor="start">meter readings</text>
+
+        <rect class="node ml" x="300" y="150" width="280" height="120" rx="10"/>
+        <text class="t" x="440" y="180" text-anchor="middle">Transformer station</text>
+        <text class="s" x="440" y="202" text-anchor="middle">net-load forecast per station</text>
+        <text class="s" x="440" y="220" text-anchor="middle">safe limit, uncertainty,</text>
+        <text class="s" x="440" y="238" text-anchor="middle">hot-spot headroom</text>
+
+        <rect class="node part" x="20" y="165" width="230" height="90" rx="10"/>
+        <text class="t" x="135" y="190" text-anchor="middle">Thermal model</text>
+        <text class="s" x="135" y="210" text-anchor="middle">IEC 60076-7 equations,</text>
+        <text class="s" x="135" y="226" text-anchor="middle">built, not yet in the plan</text>
+        <line class="edge" x1="250" y1="210" x2="300" y2="210" marker-end="url(#arr)"/>
+
+        <rect class="node todo" x="630" y="165" width="230" height="90" rx="10"/>
+        <text class="t" x="745" y="190" text-anchor="middle">Weather forecast</text>
+        <text class="s" x="745" y="210" text-anchor="middle">clear-sky and cloud</text>
+        <text class="s" x="745" y="226" text-anchor="middle">features in model v2</text>
+        <line class="edge dash" x1="630" y1="210" x2="580" y2="210" marker-end="url(#arrm)"/>
+
+        <line class="edge" x1="440" y1="270" x2="440" y2="300"/>
+        <line class="edge" x1="140" y1="300" x2="740" y2="300"/>
+        <text class="l" x="452" y="292" text-anchor="start">levers, cheapest first</text>
+        <line class="edge" x1="140" y1="300" x2="140" y2="335" marker-end="url(#arr)"/>
+        <line class="edge dash" x1="440" y1="300" x2="440" y2="335" marker-end="url(#arrm)"/>
+        <line class="edge dash" x1="740" y1="300" x2="740" y2="335" marker-end="url(#arrm)"/>
+
+        <rect class="node ok" x="20" y="335" width="240" height="80" rx="10"/>
+        <text class="t" x="140" y="359" text-anchor="middle">1 · Export limit</text>
+        <text class="s" x="140" y="378" text-anchor="middle">for prosumers</text>
+        <text class="s" x="140" y="394" text-anchor="middle">cost: lost solar energy</text>
+        <rect class="node todo" x="320" y="335" width="240" height="80" rx="10"/>
+        <text class="t" x="440" y="359" text-anchor="middle">2 · Shift invitations</text>
+        <text class="s" x="440" y="378" text-anchor="middle">for consumers, a simple rule</text>
+        <text class="s" x="440" y="394" text-anchor="middle">cost: an incentive</text>
+        <rect class="node todo" x="620" y="335" width="240" height="80" rx="10"/>
+        <text class="t" x="740" y="359" text-anchor="middle">3 · Flag the station</text>
+        <text class="s" x="740" y="378" text-anchor="middle">maintenance, ordered by risk</text>
+        <text class="s" x="740" y="394" text-anchor="middle">cost: crew time</text>
+      </svg>
+    </div>
+    <figcaption>Only the first lever exists. The other two reuse the same forecast and the same human queue, with the transformer’s temperature as the extra constraint.</figcaption>
+  </figure>
+</section>
+</div>
+</html>
