@@ -28,7 +28,7 @@ class ReplayRouteTests(unittest.TestCase):
         self.assertIn("Station operator screen", self.client.get("/operator").text)
 
     def test_not_built_gives_404(self):
-        for path in ("/replay/index", "/replay/geo", "/replay/day/2013-05-01"):
+        for path in ("/replay/index", "/replay/geo", "/replay/audit", "/replay/day/2013-05-01"):
             response = self.client.get(path)
             self.assertEqual(response.status_code, 404)
             self.assertFalse(response.json()["available"])

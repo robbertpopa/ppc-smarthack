@@ -183,6 +183,17 @@ def build_geo(order: list[str], customers: list[dict], per_hood=70, per_node=5) 
 
 
 VERSION = train.MODEL_VERSION_V2_DATASET
+CAUSES = {
+    "trafo": "Transformer limit binds: the station cannot take more export than the safe share.",
+    "voltage": "Voltage limit binds: a node would leave its voltage band above the safe share.",
+    "line": "Line limit binds: a feeder would be overloaded above the safe share.",
+    "fixed_too_high": "The fixed limit (36% of each house's kWp) is above the safe share.",
+    "model_too_high": "The model's limit is above the safe share: the forecast was too optimistic.",
+    "abstained": "The model was not sure (wide spread or failed input check), so the fixed limit "
+    "was used, and it is above the safe share.",
+    "no_safe_limit": "No safe limit exists in this interval: the power flow did not converge, or "
+    "the grid is unsafe even with no export.",
+}
 NOTES = [
     "Simulated station: 400 kVA transformer, PV scaled x4, synthetic grid. "
     "Positions are postcode centres.",
@@ -191,6 +202,67 @@ NOTES = [
     "One offline run on data the model never saw; the model was not retrained on it. "
     "Scenario A only.",
 ]
+
+
+def audit_events(days, binding, surplus, kwp, unsafe_times=()) -> dict:
+    """Every interval where a policy broke the safe limit, or no safe limit existed, with causes.
+
+    ``binding`` (voltage, line, trafo or none) comes from the power-flow labels. ``excess_kw`` is
+    the export of a policy above what the safe share would have allowed. Counts are per cause.
+    """
+    kv = kwp.reindex(surplus.columns).to_numpy(dtype=float)
+    events, counts = [], {key: 0 for key in CAUSES}
+    for date, day in days.items():
+        for iv in day["intervals"]:
+            if not (iv["before"]["violation"] or iv["after"]["violation"]):
+                continue
+            start = pd.Timestamp(iv["t"])
+            row = surplus.loc[start].to_numpy(dtype=float)
+            safe_kw = float(np.nansum(np.minimum(row, iv["safe"] * kv)))
+            bind = binding.get(start)
+            bind = bind if isinstance(bind, str) and bind in ("trafo", "voltage", "line") else None
+            causes = [bind] if bind else []
+            if iv["before"]["violation"]:
+                causes.append("fixed_too_high")
+            if iv["after"]["violation"]:
+                causes.append("abstained" if iv["abstained"] else "model_too_high")
+            events.append(
+                {
+                    "t": iv["t"],
+                    "date": date,
+                    "safe": iv["safe"],
+                    "binding": bind,
+                    "abstained": iv["abstained"],
+                    "causes": causes,
+                    **{
+                        key: {
+                            "violation": iv[key]["violation"],
+                            "share": iv[key]["share"],
+                            "excess_kw": round(max(0.0, iv[key]["export_total_kw"] - safe_kw), 2),
+                        }
+                        for key in ("before", "after")
+                    },
+                }
+            )
+            for cause in causes:
+                counts[cause] += 1
+    for start in unsafe_times:
+        t = pd.Timestamp(start)
+        events.append(
+            {
+                "t": t.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "date": str(local_date(pd.Series([t])).dt.strftime("%Y-%m-%d").iloc[0]),
+                "safe": None,
+                "binding": None,
+                "abstained": False,
+                "causes": ["no_safe_limit"],
+                "before": None,
+                "after": None,
+            }
+        )
+        counts["no_safe_limit"] += 1
+    events.sort(key=lambda e: e["t"])
+    return {"causes": CAUSES, "counts": counts, "events": events}
 
 
 def _write(path: Path, payload) -> None:
@@ -240,6 +312,14 @@ def build(scenario="A", version=VERSION, out=None, customers_csv="data/p4/custom
     for date, payload in days.items():
         _write(out / "days" / f"{date}.json", payload)
     _write(out / "geo.geojson", geo)
+    binding = labels.drop_duplicates("interval_start").set_index("interval_start")["binding"]
+    unsafe = labels[
+        ~labels["converged"] & (local_date(labels["interval_start"]) >= dataset.DEMO_START)
+    ]
+    _write(
+        out / "audit.json",
+        audit_events(days, binding, surplus, kwp, unsafe["interval_start"]),
+    )
 
     def total(key, field):
         return round(sum(d["summary"][key][field] for d in days.values()), 2)

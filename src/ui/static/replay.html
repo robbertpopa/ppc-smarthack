@@ -105,6 +105,18 @@ section{margin-top:28px}
     <div class="strip" id="stripB" aria-label="Before, per day"></div>
     <div class="strip" id="stripA" style="margin-top:4px" aria-label="After, per day"></div>
   </section>
+  <section id="audit">
+    <h2 style="font-size:1rem;font-weight:500;margin-bottom:6px">Audit: every interval over the safe limit, with its causes</h2>
+    <p class="sub" id="auditSub"></p>
+    <div class="legend" id="causes" role="group" aria-label="Filter by cause"></div>
+    <div class="bar" style="padding:10px 0">
+      <label class="sub" for="auditView">Show events where</label>
+      <select id="auditView"><option value="any">either policy broke the limit</option><option value="before">the fixed limit broke it</option><option value="after">our limit broke it</option></select>
+      <span class="sub" id="auditCount"></span>
+    </div>
+    <div style="overflow:auto;max-height:420px"><table><thead><tr><th>Time (Sydney)</th><th style="text-align:left">Causes</th><th>Safe share</th><th>Fixed: limit / excess</th><th>Ours: limit / excess</th></tr></thead><tbody id="auditRows"></tbody></table></div>
+    <p class="sub">Excess is the export above what the safe share would have allowed. An event is also logged when no safe limit exists at all.</p>
+  </section>
   <section><h2 style="font-size:1rem;font-weight:500;margin-bottom:6px">What this is and is not</h2><ul class="sub" id="notes" style="margin:0;padding-left:20px"></ul></section>
 </main>
 <script>
@@ -235,6 +247,40 @@ $("speed").onchange = () => { if (S.timer) { stop(); play(); } };
 $("date").onchange = e => { stop(); if (S.index.days.some(d => d.date === e.target.value)) openDay(e.target.value); };
 $("slider").oninput = e => { S.i = Number(e.target.value); render(); };
 $("chart").onclick = e => { const r = e.currentTarget.getBoundingClientRect(); const n = S.day.intervals.length; S.i = Math.max(0, Math.min(n - 1, Math.round(((e.clientX - r.left) / r.width * 960 - 20) / 920 * (n - 1)))); $("slider").value = S.i; render(); };
+const SYDT = new Intl.DateTimeFormat("en-AU", {timeZone: "Australia/Sydney", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false});
+const A = {data: null, cause: null, view: "any", all: false};
+function auditRows() {
+  const hit = e => (A.view === "any" || (e[A.view] && e[A.view].violation)) && (!A.cause || e.causes.includes(A.cause));
+  const rows = A.data.events.filter(hit);
+  $("auditCount").textContent = rows.length + " of " + A.data.events.length + " events";
+  const side = x => x ? (x.violation ? `<b style="color:var(--bad)">${pct(x.share)} / ${fmt(x.excess_kw)} kW</b>` : `${pct(x.share)} / ok`) : "—";
+  $("auditRows").replaceChildren(...rows.slice(0, A.all ? rows.length : 60).map(e => {
+    const tr = document.createElement("tr"); tr.style.cursor = "pointer"; tr.tabIndex = 0;
+    tr.innerHTML = `<td>${SYDT.format(new Date(e.t))}</td><td style="text-align:left">${e.causes.map(c => `<span title="${A.data.causes[c]}">${c.replaceAll("_", " ")}</span>`).join(", ")}</td><td>${e.safe == null ? "—" : pct(e.safe)}</td><td>${side(e.before)}</td><td>${side(e.after)}</td>`;
+    const open = async () => { stop(); await openDay(e.date); S.i = Math.max(0, S.day.intervals.findIndex(i => i.t === e.t)); $("slider").value = S.i; render(); $("mapBox").scrollIntoView({block: "center"}); };
+    tr.onclick = open; tr.onkeydown = k => { if (k.key === "Enter") open(); };
+    return tr;
+  }));
+  if (!A.all && rows.length > 60) { const tr = document.createElement("tr"), td = document.createElement("td"); td.colSpan = 5; td.style.textAlign = "center"; td.innerHTML = `<button class="line" type="button">Show all ${rows.length}</button>`; td.firstChild.onclick = () => { A.all = true; auditRows(); }; tr.append(td); $("auditRows").append(tr); }
+}
+async function loadAudit() {
+  try {
+    A.data = await getJson("/replay/audit");
+    $("auditSub").textContent = "Causes are read from the power-flow labels and from the model's own decision. One event can have several causes.";
+    $("causes").replaceChildren(...Object.entries(A.data.causes).map(([key, text]) => {
+      const b = document.createElement("button"); b.type = "button"; b.className = "line"; b.style.minHeight = "34px"; b.style.padding = "0 12px";
+      b.innerHTML = `<b>${key.replaceAll("_", " ")}</b> · ${A.data.counts[key]}`; b.title = text; b.setAttribute("aria-pressed", "false");
+      b.onclick = () => { A.cause = A.cause === key ? null : key; A.all = false; [...$("causes").children].forEach(c => c.setAttribute("aria-pressed", String(c === b && A.cause === key))); auditRows(); };
+      return b;
+    }));
+    const list = document.createElement("ul"); list.className = "sub"; list.style.cssText = "margin:8px 0 0;padding-left:20px";
+    Object.values(A.data.causes).forEach(t => { const li = document.createElement("li"); li.textContent = t; list.append(li); });
+    $("causes").after(list);
+    auditRows();
+  } catch (e) { $("auditSub").textContent = "Audit not available: " + e.message; }
+}
+$("auditView").onchange = e => { A.view = e.target.value; A.all = false; auditRows(); };
+loadAudit();
 boot();
 </script>
 </body>

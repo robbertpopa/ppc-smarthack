@@ -81,6 +81,10 @@ def create_app(settings: Settings | None = None, run_id: str | None = None) -> F
     def replay_geo():
         return replay_file(replay_dir / "geo.geojson")
 
+    @app.get("/replay/audit")
+    def replay_audit():
+        return replay_file(replay_dir / "audit.json")
+
     @app.get("/replay/day/{date}")
     def replay_day(date: str):
         if not DAY_DATE.fullmatch(date):

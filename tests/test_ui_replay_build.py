@@ -88,3 +88,27 @@ def test_a_house_without_coordinates_is_an_error():
 
     with pytest.raises(ValueError, match="no coordinates"):
         build_geo(["1", "99"], customers(), per_hood=2, per_node=1)
+
+
+def test_audit_lists_every_violation_with_its_causes():
+    from src.ui.replay_build import audit_events
+
+    times = pd.DatetimeIndex(["2013-05-01T00:00Z", "2013-05-01T00:30Z", "2013-05-01T01:00Z"])
+    table = pd.DataFrame(
+        {"safe": [0.9, 0.2, 0.2], "fallback": [0.6, 0.1, 0.36], "abstain": [False, False, True]},
+        index=times,
+    )
+    surplus = pd.DataFrame({"H01": [2.0, 2.0, 2.0]}, index=times)
+    kwp = pd.Series({"H01": 5.0})
+    days = day_payload(table, surplus, kwp)
+    binding = pd.Series(["none", "trafo", "voltage"], index=times)
+    audit = audit_events(days, binding, surplus, kwp, unsafe_times=[times[0]])
+    by_time = {e["t"]: e for e in audit["events"]}
+    quiet = by_time["2013-05-01T00:00:00Z"]  # only the no-safe-limit event for that time
+    assert quiet["causes"] == ["no_safe_limit"]
+    second = by_time["2013-05-01T00:30:00Z"]
+    assert second["causes"] == ["trafo", "fixed_too_high"]  # before broke it, after (0.1) did not
+    assert second["before"]["excess_kw"] == 0.8  # 1.8 exported, 1.0 allowed
+    third = by_time["2013-05-01T01:00:00Z"]
+    assert third["causes"] == ["voltage", "fixed_too_high", "abstained"]
+    assert audit["counts"]["fixed_too_high"] == 2 and audit["counts"]["no_safe_limit"] == 1
