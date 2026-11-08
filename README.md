@@ -88,7 +88,7 @@ These take about 45 s and 40 s. The models and `metadata.json` go to `ARTIFACT_U
 ```bash
 SOURCE=model SCENARIO=A python -m uvicorn src.agent.api:app --port 8000
 ```
-Start the screen as in section 4. On the screen, pick a day inside the label period, for example 2012-01-15; the 02:00 UTC slot is 13:00 in Sydney. On other days the model has no recent readings, so its forecast means nothing.
+Start the screen as in section 4. On the screen, pick a day inside the label period, for example 2012-01-15; the 02:00 UTC slot is 13:00 in Sydney. On other days there are no recent readings: the agent's input checks (`missing_net_now`, `stale_input`, ...) make it abstain, apply the fixed limit and send the case to a person.
 
 ### 9. Reproduce the results (evaluation)
 The evaluation scores the test year, 2012-07-01 → 2013-06-30. Before running it:

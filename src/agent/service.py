@@ -139,8 +139,11 @@ class AgentService:
             pt_id = self.station.pt_id
             forecast = self.source.forecast(pt_id, interval_start)
             grid_state = self.source.grid_state(pt_id, interval_start)
+            checks_of = getattr(self.source, "input_checks", None)
+            flags = checks_of(pt_id, interval_start) if checks_of else []
             station, forced = self._threshold_station()
-            plan = make_plan(forecast, grid_state, station, interval_start, force_abstain=forced)
+            reasons = [*flags, *([forced] if forced else [])]
+            plan = make_plan(forecast, grid_state, station, interval_start, force_abstain=reasons)
             plan = self._with_factors(plan, pt_id, interval_start)
             existing = self._plans.get(plan.plan_id)
             if existing is not None and not (

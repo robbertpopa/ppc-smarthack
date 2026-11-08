@@ -87,3 +87,25 @@ def test_forecast_for_another_station_is_refused(station, forecast):
     other = forecast.model_copy(update={"pt_id": "PT-Z"})
     with pytest.raises(ValueError):
         make_plan(other, None, station)
+
+
+def test_several_forced_reasons_all_abstain_and_are_listed(station, forecast, grid_state):
+    plan = make_plan(
+        forecast, grid_state, station, force_abstain=["missing_net_now", "stale_input"]
+    )
+    assert plan.abstain and plan.source == "fallback_static"
+    assert {"missing_net_now", "stale_input"} <= set(plan.reasons)
+    assert plan.explanation.text.startswith("The newest net reading is missing.")
+
+
+def test_bad_input_is_explained_before_a_wide_spread(station, forecast, grid_state):
+    wide = with_share(forecast, q05=0.2, q90=0.9)
+    plan = make_plan(wide, grid_state, station, force_abstain=["stale_input"])
+    assert plan.explanation.text.startswith("The newest reading is too old.")
+    assert any(r.startswith("spread") for r in plan.reasons)  # the spread is still listed
+
+
+def test_an_unknown_forced_reason_is_written_as_given(station, forecast, grid_state):
+    plan = make_plan(forecast, grid_state, station, force_abstain="threshold lookup failed")
+    assert plan.abstain and "threshold lookup failed" in plan.reasons
+    assert plan.explanation.text.startswith("Threshold lookup failed.")
