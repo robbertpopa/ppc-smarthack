@@ -5,7 +5,8 @@
  * and everything else still works. It shows only what the screen gives it: it never computes a
  * limit or a status.
  *
- * Zoomed out it shows one bubble per neighbourhood; from HOUSE_ZOOM up it shows the houses.
+ * Houses are always drawn: small dots zoomed out, with a status symbol from HOUSE_ZOOM and sized
+ * by kWp when zoomed in. Zoomed out each neighbourhood also gets a name tag at its centre.
  */
 (function () {
   "use strict";
@@ -22,11 +23,11 @@
 .stm .mk,.stm .hood,.stm .ctl button,.stm .chips button{font:inherit;color:var(--ink);cursor:pointer}
 .stm .mk[hidden],.stm .hood[hidden]{display:none}
 .stm .mk{position:absolute;left:0;top:0;width:28px;height:28px;margin:-14px 0 0 -14px;padding:0;border:0;background:transparent;min-height:0;display:flex;align-items:center;justify-content:center}
-.stm .mk i{display:flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:99px;border:2px solid var(--bg);font:700 10px/1 system-ui,sans-serif;font-style:normal;box-shadow:0 1px 4px #0006}
+.stm .mk i{display:flex;align-items:center;justify-content:center;width:var(--d,18px);height:var(--d,18px);border-radius:99px;border:2px solid var(--bg);font:700 10px/1 system-ui,sans-serif;font-style:normal;box-shadow:0 1px 4px #0006}
 .stm .mk.ok i{background:var(--ok);color:#fff}.stm .mk.review i{background:var(--rev);color:#17191c}
-.stm .mk.blocked i{background:var(--bad);color:#fff}.stm .mk.none i{background:var(--line2);color:var(--ink)}
+.stm .mk.blocked i{background:var(--bad);color:#fff;box-shadow:0 0 0 4px color-mix(in srgb,var(--bad) 30%,transparent),0 1px 4px #0006}.stm .mk.none i{background:var(--line2);color:var(--ink)}
 .stm .mk[aria-pressed=true] i{outline:3px solid var(--ink);outline-offset:1px}
-.stm .hood{position:absolute;left:0;top:0;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:0;padding:4px 12px;min-height:40px;border-radius:12px;border:2px solid var(--ink);background:var(--bg);font-size:.85rem;line-height:1.25;white-space:nowrap}
+.stm .hood{position:absolute;left:0;top:0;transform:translate(-50%,-100%);display:flex;flex-direction:row;align-items:center;gap:8px;padding:2px 10px;min-height:30px;border-radius:99px;border:1.5px solid var(--ink);background:var(--bg);font-size:.82rem;line-height:1.25;white-space:nowrap;box-shadow:0 1px 6px #0003}
 .stm .hood b{font-weight:600}.stm .hood span{color:var(--muted);font-size:.78rem}
 .stm .ctl{position:absolute;top:10px;right:10px;display:flex;flex-direction:column;gap:6px}
 .stm .ctl button,.stm .chips button{background:var(--bg);border:1px solid var(--line2);border-radius:8px;min-height:40px;min-width:40px;padding:0 12px;font-weight:500}
@@ -80,7 +81,7 @@
       S = null; return;
     }
     S = {el, root, host, ...data, z: 11, c: data.hoods[0].center, view: null, focus: null, fitted: false, selected: null,
-      tiles: new Map(), tileLayer: node("div"), svg: svgNode("svg", {}), marks: node("div"), houseEls: {}, hoodEls: {}, chips: node("div", "chips")};
+      kwp: {}, tiles: new Map(), tileLayer: node("div"), svg: svgNode("svg", {}), marks: node("div"), houseEls: {}, hoodEls: {}, chips: node("div", "chips")};
     root.append(S.tileLayer, S.svg, S.marks, S.chips);
     Object.keys(S.pos).forEach(id => {
       const b = node("button", "mk none"); b.type = "button"; b.append(node("i", null, "")); b.dataset.id = id;
@@ -180,23 +181,25 @@
     }
     S.tiles.forEach((img, key) => { if (!need.has(key)) { img.remove(); S.tiles.delete(key); } });
     // Outlines, feeders and names
-    const houses = z >= HOUSE_ZOOM;
+    const houses = z >= HOUSE_ZOOM, dot = z >= 14 ? 20 : z >= 12 ? 15 : 10;
     S.svg.setAttribute("width", w); S.svg.setAttribute("height", h); S.svg.replaceChildren();
     S.hoods.forEach(hd => {
       const pts = hd.ring.map(p => { const q = at(p); return q.x.toFixed(1) + "," + q.y.toFixed(1); }).join(" ");
       S.svg.append(svgNode("polygon", {points: pts, style: "fill:color-mix(in srgb,var(--ink) " + (S.focus === hd.id ? 10 : 5) + "%,transparent);stroke:var(--ink);stroke-opacity:.45;stroke-width:1.5;stroke-dasharray:6 4"}));
     });
-    if (houses) S.feeders.forEach(f => {
+    if (z >= 11) S.feeders.forEach(f => {
       S.svg.append(svgNode("polyline", {points: f.pts.map(p => { const q = at(p); return q.x.toFixed(1) + "," + q.y.toFixed(1); }).join(" "), style: "fill:none;stroke:var(--ink);stroke-opacity:.55;stroke-width:2;stroke-dasharray:2 5;stroke-linecap:round"}));
     });
     // Markers
     S.hoods.forEach(hd => {
       const b = S.hoodEls[hd.id]; b.hidden = houses;
-      if (!houses) { const q = at(hd.center); b.style.transform = "translate(" + q.x.toFixed(1) + "px," + q.y.toFixed(1) + "px) translate(-50%,-50%)"; }
+      if (!houses) { const q = at(hd.center); b.style.transform = "translate(" + q.x.toFixed(1) + "px," + (q.y - 8).toFixed(1) + "px) translate(-50%,-100%)"; }
     });
     Object.keys(S.pos).forEach(id => {
-      const b = S.houseEls[id]; b.hidden = !houses;
-      if (houses) { const q = at(S.pos[id]); b.style.transform = "translate(" + q.x.toFixed(1) + "px," + q.y.toFixed(1) + "px)"; }
+      const b = S.houseEls[id], q = at(S.pos[id]), k = Math.min(1, (S.kwp[id] || 5) / 10);
+      b.hidden = false; b.style.transform = "translate(" + q.x.toFixed(1) + "px," + q.y.toFixed(1) + "px)";
+      b.style.setProperty("--d", (z >= 14 ? Math.round(dot * (0.8 + 0.5 * k)) : dot) + "px");
+      b.firstChild.style.fontSize = houses ? "" : "0";
     });
     S.chips.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String((b.dataset.group || null) === S.focus)));
   }
@@ -204,12 +207,15 @@
   function update(view) {
     if (!S) return;
     S.view = view;
+    const W = Object.assign({}, WORD, view.words || {});
     const byId = Object.fromEntries((view.houses || []).map(h => [String(h.id), h]));
     Object.keys(S.houseEls).forEach(id => {
       const h = byId[id], st = h ? h.status : "none", b = S.houseEls[id];
       b.className = "mk " + st; b.firstChild.textContent = MARK[st];
-      b.setAttribute("aria-label", "House " + id + (h ? (h.limit_kw == null ? ", no limit yet" : ", " + h.limit_kw.toFixed(2) + " kilowatts, " + (h.capped ? "contract cap" : WORD[st])) : ""));
+      b.setAttribute("aria-label", "House " + id + (h ? (h.limit_kw == null ? ", no limit yet" : ", " + h.limit_kw.toFixed(2) + " kilowatts, " + (h.capped ? "contract cap" : W[st])) : ""));
       b.setAttribute("aria-pressed", String(view.selected === id));
+      if (h) S.kwp[id] = h.kwp;
+      b.title = "House " + id + (h ? " · " + h.kwp.toFixed(1) + " kWp" + (h.limit_kw == null ? "" : " · limit " + h.limit_kw.toFixed(2) + " kW (" + Math.round(100 * h.share) + "%)") + " · " + W[st] : "");
     });
     S.hoods.forEach(hd => {
       const worst = hd.ids.reduce((a, id) => RANK[(byId[id] || {status: "none"}).status] > RANK[a] ? byId[id].status : a, "none");

@@ -52,6 +52,7 @@ window.StationMap = {
   selected: "109" | null,                    // house picked in the list or on the map
   kill_switch: false,
   groups: [{id: "N1", name: "Normanhurst"}],
+  words: {ok: "..."},                       // optional: wording per status, for tooltips and labels
   houses: [
     {
       id: "109",

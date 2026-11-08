@@ -131,6 +131,7 @@ function mapView() {
   const iv = S.day.intervals[S.i], b = iv[S.view];
   return {
     pt_id: S.index.pt_id, interval_start: iv.t, selected: null, kill_switch: false, groups: S.groups,
+    words: {ok: "within the safe limit", review: "capped below what it could sell", blocked: "limit above what the grid can carry", none: "no reading"},
     houses: S.index.houses.map((h, k) => ({
       id: h.id, group: h.group, kwp: h.kwp, contract_cap_kw: null,
       limit_kw: Math.round(b.share * h.kwp * 100) / 100, share: b.share,
