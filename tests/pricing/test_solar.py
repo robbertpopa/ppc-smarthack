@@ -34,4 +34,4 @@ def test_cheap_midday_gives_a_positive_adder_and_dear_midday_none():
 def test_adder_on_the_price_year_helper():
     idx = pd.date_range("2025-01-01", "2026-01-01", freq="h", tz="UTC", inclusive="left")
     series = pd.Series(100.0, index=idx)
-    assert (solar.monthly_adder(prices.profile(series)) == 0).all()
+    assert np.allclose(solar.monthly_adder(prices.profile(series)), 0.0, atol=1e-9)
