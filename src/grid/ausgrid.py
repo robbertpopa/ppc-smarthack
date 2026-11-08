@@ -18,7 +18,13 @@ def half_hour_columns(frame):
     return list(frame.columns[5:53])
 
 
-def select_households(frame, cl_customers, days):
+def select_households(frame, cl_customers, days, customers=None):
+    """The station's customers, their rows and their capacity.
+
+    Without ``customers``: the first ``STATION_HOUSES`` customers with complete rows.
+    With ``customers`` (an earlier run of the same station): exactly those, in that
+    order, and every one must have complete rows in this period.
+    """
     count = (
         frame.groupby(["Customer", "Consumption Category"])
         .size()
@@ -27,9 +33,18 @@ def select_households(frame, cl_customers, days):
     )
     complete = (count.GC == days) & (count.GG == days)
     complete &= (count.CL == days) | ~count.index.isin(cl_customers)
-    eligible = list(count.index[complete][:STATION_HOUSES])
-    if len(eligible) < STATION_HOUSES:
-        raise ValueError(f"Fewer than {STATION_HOUSES} customers have complete GC and GG rows")
+    if customers is None:
+        eligible = list(count.index[complete][:STATION_HOUSES])
+        if len(eligible) < STATION_HOUSES:
+            raise ValueError(f"Fewer than {STATION_HOUSES} customers have complete GC and GG rows")
+    else:
+        eligible = list(customers)
+        missing = [c for c in eligible if not complete.get(c, False)]
+        if missing:
+            raise ValueError(
+                f"{len(missing)} station customers lack complete rows in this period "
+                f"(first: {missing[:5]})"
+            )
     frame = frame[frame.Customer.isin(eligible)]
     capacity = (
         frame[frame["Consumption Category"] == "GG"]

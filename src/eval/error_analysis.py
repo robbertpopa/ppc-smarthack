@@ -20,9 +20,9 @@ import pandas as pd
 
 from src.eval import plots, robustness
 from src.eval.metrics import EPS, FIXED_SHARE, evaluate, export_by_interval
-from src.ml import features, train
+from src.ml import abstention, features, train
 from src.ml.config import SYDNEY, violation_target
-from src.ml.split import TEST_START, split
+from src.ml.split import TEST_START, folds, oos, split
 from src.ml.sun import solar_elevation
 
 EDGE_DEG = 10.0
@@ -175,7 +175,7 @@ def attempts(ctx: dict) -> pd.DataFrame:
         part["cloud_ratio"] = -part["net_now"] / sine
     val_labels = split(labels)["val"]
     surplus, kwp = ctx["surplus"], ctx["kwp"]
-    params, base = meta["hyperparameters"], features.FEATURES
+    params, base = meta["hyperparameters"], meta["features"]
     index = pd.DatetimeIndex(va["target_start"])
 
     def score(name, share, alpha, note):
@@ -224,6 +224,115 @@ def attempts(ctx: dict) -> pd.DataFrame:
         dominates(table.iloc[i]) for i in range(1, len(table))
     ]
     return table
+
+
+NEW_FEATURES = ("clearsky_T", "kt_now", "kt_lag_1", "t2m_now", "net_over_clearsky")
+PROGRESS_COLUMNS = [
+    "attempt",
+    "scored_on",
+    "pinball_q05",
+    "violation_rate",
+    "export_index",
+    "abstain_rate",
+]
+
+
+def progress(ctx: dict) -> pd.DataFrame | None:
+    """What each v2 change bought, scored on out-of-sample data only (never the test year).
+
+    Every row has its own abstention threshold, chosen the way training chooses it
+    (``abstention.choose_threshold`` on the same predictions), so the violation, export
+    and abstention columns are those of "model + fallback" for that row. ``pinball_q05``
+    is the loss of the model's own ``q05`` (the offset changes the limit, not the model).
+    The first row is v1 as shipped, scored on its validation quarter (Apr-Jun 2012); the
+    others are scored on the four quarterly folds over 2011-07 to 2012-06, each quarter by
+    models that never saw it. ``None`` without a v2 model.
+    """
+    from sklearn.metrics import mean_pinball_loss
+
+    second = ctx.get("v2")
+    if second is None:
+        return None
+    labels, surplus, kwp, target = ctx["labels"], ctx["surplus"], ctx["kwp"], violation_target()
+    params = second["meta"]["hyperparameters"]
+    rows = train.training_rows(labels, second["weather"])
+    pairs, val_rows, val_labels = folds(rows), oos(rows), oos(labels)
+
+    def flags(part):
+        records = part[features.FEATURES].to_dict("records")
+        return pd.Series(
+            [bool(abstention.quality_flags(r)) for r in records],
+            index=pd.DatetimeIndex(part["target_start"]),
+        )
+
+    def line(name, scored_on, part, part_labels, q05, q90, limit=None):
+        index = pd.DatetimeIndex(part["target_start"])
+        share = pd.Series(q05 if limit is None else limit, index=index)
+        spread = pd.Series(np.maximum(q90 - q05, 0.0), index=index)
+        chosen = abstention.choose_threshold(
+            spread, share, part_labels, surplus, kwp, target, flags(part)
+        )
+        loss = float(mean_pinball_loss(part["safe_share"], q05, alpha=0.05))
+        return {
+            "attempt": name,
+            "scored_on": scored_on,
+            "pinball_q05": loss,
+            "violation_rate": chosen["violation_rate"],
+            "export_index": chosen["export_index"],
+            "abstain_rate": chosen["abstain_rate"],
+        }
+
+    def folded(cols):
+        out = []
+        for q in (0.05, 0.90):
+            out.append(
+                np.concatenate(
+                    [
+                        train.fit_quantile(fit[cols], fit["safe_share"], q, params, 0).predict(
+                            valid[cols]
+                        )
+                        for fit, valid in pairs
+                    ]
+                )
+            )
+        return out
+
+    old_split = split(train.training_rows(labels))["val"]
+    cols = ctx["meta"]["features"]
+    v1 = [ctx["models"][q].predict(old_split[cols]) for q in (0.05, 0.90)]
+    year = "2011-07 to 2012-06, four quarterly folds"
+    name = "v1: train to 2012-03, one validation quarter"
+    out = [line(name, "2012-04 to 2012-06", old_split, split(labels)["val"], *v1)]
+    old = [f for f in features.FEATURES if f not in NEW_FEATURES]
+    sky = [f for f in features.FEATURES if f not in features.WEATHER_FEATURES]
+    steps = [("v1 features, quarterly folds", old), ("+ clear-sky features", sky)]
+    full = features.usable(rows)
+    if set(features.WEATHER_FEATURES) & set(full):
+        steps.append(("+ weather features", full))
+    last = None
+    for name, cols in steps:
+        last = folded(cols)
+        out.append(line(name, year, val_rows, val_labels, *last))
+    _, offset_limit = train._choose_offset(
+        val_rows, val_labels, np.column_stack(last), surplus, kwp
+    )
+    out.append(line("+ online offset", year, val_rows, val_labels, *last, limit=offset_limit))
+    return pd.DataFrame(out, columns=PROGRESS_COLUMNS)
+
+
+def _md_progress(frame: pd.DataFrame) -> str:
+    head = (
+        "| change | scored on | pinball q05 | violations | export index | abstentions |\n"
+        "|---|---|---|---|---|---|\n"
+    )
+    body = ""
+    for _, r in frame.iterrows():
+        export = "–" if np.isnan(r["export_index"]) else fmt(r["export_index"])
+        body += (
+            f"| {r['attempt']} | {r['scored_on']} | {fmt(r['pinball_q05'])} | "
+            f"{fmt(r['violation_rate'])} | {export} | {fmt(r['abstain_rate'])} |\n"
+        )
+    return head + body
 
 
 def _pick_day(df: pd.DataFrame, ratio: pd.Series, kind: str):
@@ -293,6 +402,15 @@ def analyse(ctx: dict, result: dict, rows: dict, out_dir, pt_id: str) -> dict:
         (out_dir / f"error_by_{name}_{pt_id}.csv").write_text(_csv(plain))
     tried = attempts(ctx)
     (out_dir / f"attempts_{pt_id}.csv").write_text(_csv(tried))
+    steps = progress(ctx)
+    second = None
+    if steps is not None:
+        (out_dir / f"progress_{pt_id}.csv").write_text(_csv(steps))
+        second = {**result, "scored": result["v2"]["scored"]}
+        tables_v2 = breakdowns(interval_frame(ctx, second, kind))
+        for name, table in tables_v2.items():
+            plain = table.drop(columns="sun_edge_share", errors="ignore")
+            (out_dir / f"error_by_{name}_v2_{pt_id}.csv").write_text(_csv(plain))
 
     plots.violation_by_hour(tables["hour"], out_dir / f"violation_by_hour_{pt_id}.png")
     plots.risk_coverage(result["risk_coverage"], out_dir / f"risk_coverage_{pt_id}.png")
@@ -309,6 +427,17 @@ def analyse(ctx: dict, result: dict, rows: dict, out_dir, pt_id: str) -> dict:
     for name, table in tables.items():
         md += [f"### {TITLES[name]}", "", _md(table), ""]
     md += ["### What we tried (validation only)", "", _md_attempts(tried), ""]
+    if steps is not None:
+        md += [
+            "### What each v2 change bought (out-of-sample year, never the test year)",
+            "",
+            _md_progress(steps),
+            "",
+            "### Model v2 on the test period",
+            "",
+        ]
+        for name, table in tables_v2.items():
+            md += [f"#### {TITLES[name]} (v2)", "", _md(table), ""]
     md += ["### Plots", "", f"![violations by hour](violation_by_hour_{pt_id}.png)", ""]
     md += [f"![{kind} day {day}]({name})" for kind, day, name in shown]
     md += [f"![risk-coverage](risk_coverage_{pt_id}.png)", "", "### Findings", ""]
@@ -359,6 +488,15 @@ def slide_numbers(tables: dict, rows: dict, pt_id: str) -> list[tuple]:
             items.append(
                 (f"Violation rate on {label}", found[key], f"error_by_{table}_{pt_id}.csv", key)
             )
+    second = rows.get("model_v2_fallback")
+    if second is not None:
+        row2 = "Model v2 + fallback"
+        items += [
+            ("Export index, model v2 + fallback (fixed = 100)", second["export_index"],
+             "table.csv", row2),
+            ("Violation rate, model v2 + fallback", second["violation_rate"], "table.csv", row2),
+            ("Abstention rate, model v2 + fallback", second["abstain_rate"], "table.csv", row2),
+        ]  # fmt: skip
     censored = rows.get("robust_censored")
     if censored is not None:
         items.append(

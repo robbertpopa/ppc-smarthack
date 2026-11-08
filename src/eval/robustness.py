@@ -12,6 +12,7 @@ the grid twin and not from meters, are left as they are.
 | noise_30     | every reading multiplied by N(1, 0.3), clipped at 0                      |
 | censored     | the meter only shows what the fixed limit let through: export is capped  |
 |              | at 0.36 x kWp, so sunny middays under-report the potential PV            |
+| weather_missing | v2 only: the weather feed is down, so every weather feature is NaN    |
 | net_only     | the model never sees gross generation or consumption (checked)           |
 """
 
@@ -187,3 +188,44 @@ def run_variants(ctx: dict, clean: dict, seed: int = 0) -> dict:
         extra = flagged_share - clean_flagged
         notes[variant] = {"extra_flagged_by_input_checks": float(extra), **delta}
     return {"rows": rows, "notes": notes}
+
+
+def run_weather_missing(ctx: dict, clean: dict) -> dict:
+    """v2 with every weather feature missing, against v2 with the weather it was trained on.
+
+    The model still predicts (a missing value stays NaN); this shows what the weather feed
+    is worth and how far the limits degrade if it fails. If v2 was trained without weather
+    there is nothing to remove and no row is made. If the cost is large, the fix is a
+    training option that blanks the weather on a fixed 10% of rows (fixed seed); decide from
+    the numbers. Returns ``{"rows": ..., "notes": ...}`` like ``run_variants``.
+    """
+    from src.eval.run import score_model
+
+    if not ctx["v2"]["meta"]["weather"]["used"]:
+        return {
+            "rows": {},
+            "notes": {"weather_missing": {"skipped": "v2 was trained without weather"}},
+        }
+    base = clean["v2"]["rows"]["model_v2_fallback"]
+    scored = score_model(ctx, ctx["labels"], v2=True, weather_missing=True)
+    metrics = evaluate(
+        scored["fallback"],
+        ctx["test_labels"],
+        ctx["surplus"],
+        ctx["kwp"],
+        abstain=scored["abstain"],
+    )
+    delta = {
+        "delta_violation_rate": metrics["violation_rate"] - base["violation_rate"],
+        "delta_export_index": metrics["export_index"] - base["export_index"],
+        "delta_abstain_rate": metrics["abstain_rate"] - base["abstain_rate"],
+    }
+    note = (
+        f"violations {delta['delta_violation_rate'] * 100:+.2f} pt, abstentions "
+        f"{delta['delta_abstain_rate'] * 100:+.1f} pt vs v2 with weather"
+    )
+    row = {**metrics, **delta, "label": f"Model v2 + fallback, weather missing ({note})"}
+    return {
+        "rows": {"robust_v2_weather_missing": row},
+        "notes": {"weather_missing": delta},
+    }

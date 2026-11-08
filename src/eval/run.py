@@ -24,8 +24,8 @@ import numpy as np
 import pandas as pd
 
 from src.eval import imbalance_eval, pricing_eval, table
-from src.eval.metrics import FIXED_SHARE, evaluate, load_profiles, surplus_kw
-from src.ml import abstention, baselines, calibration, features, model_io, train
+from src.eval.metrics import FIXED_SHARE, evaluate, fairness, load_profiles, skill_score, surplus_kw
+from src.ml import abstention, baselines, calibration, features, model_io, online_calibration, train
 from src.ml import labels as labels_io
 from src.ml.config import SYDNEY, artifact_uri, profiles_path, violation_target
 from src.ml.split import TEST_START, daylight, split
@@ -88,6 +88,23 @@ def _load_models(scenario: str, labels: pd.DataFrame, run_id: str, use_artifacts
     return models, meta
 
 
+def _load_v2(scenario: str, labels: pd.DataFrame, run_id: str, use_artifacts: bool, grid):
+    """Models of ``safe-cap-qgb-v2`` next to v1 (same rules), or None if there are none."""
+    pt_id = labels["pt_id"].iloc[0]
+    version = train.MODEL_VERSION_V2
+    if use_artifacts:
+        try:
+            models, meta = model_io.load(version, pt_id)
+        except FileNotFoundError:
+            return None
+    else:
+        own = eval_dir(run_id) / "models_v2"
+        train.train(scenario, grid=grid, out_root=own, version=version)
+        models, meta = model_io.load_dir(own / pt_id)
+    weather = train._optional_weather(scenario) if meta.get("weather", {}).get("used") else None
+    return {"models": models, "meta": meta, "weather": weather}
+
+
 def _surplus(test_labels, houses, mock: bool, allow_mock: bool):
     """Surplus per house for the export numbers, or fail: it is the main metric.
 
@@ -118,7 +135,9 @@ def _surplus(test_labels, houses, mock: bool, allow_mock: bool):
     return profiles, surplus, kwp
 
 
-def _prepare(scenario: str, run_id: str, allow_mock: bool, use_artifacts: bool, grid) -> dict:
+def _prepare(
+    scenario: str, run_id: str, allow_mock: bool, use_artifacts: bool, grid, v2: bool = True
+) -> dict:
     labels = labels_io.load(scenario)
     mock = labels_io.is_mock(labels)
     if mock and not allow_mock:
@@ -135,10 +154,11 @@ def _prepare(scenario: str, run_id: str, allow_mock: bool, use_artifacts: bool, 
     houses = labels_io.load_station_houses(scenario)
     profiles, surplus, kwp = _surplus(test_labels, houses, mock, allow_mock)
     models, meta = _load_models(scenario, labels, run_id, use_artifacts, grid)
+    second = _load_v2(scenario, labels, run_id, use_artifacts, grid) if v2 else None
     return {
         "scenario": scenario, "labels": labels, "test_labels": test_labels, "houses": houses,
         "profiles": profiles, "surplus": surplus, "kwp": kwp, "models": models, "meta": meta,
-        "mock": mock,
+        "mock": mock, "v2": second,
     }  # fmt: skip
 
 
@@ -155,29 +175,60 @@ def tau_of(meta: dict) -> float:
     return float(info["tau"]) if info["reachable"] else -math.inf
 
 
-def score_model(ctx: dict, labels: pd.DataFrame) -> dict:
+def score_model(
+    ctx: dict, labels: pd.DataFrame, v2: bool = False, weather_missing: bool = False
+) -> dict:
     """Run the clean models on test-period features built from ``labels``.
 
     ``labels`` is normally the clean label table; the robustness variants pass a copy
     whose inputs (``load_kw``, ``pv_kw``, ``net_kw``) were corrupted. The target
     ``safe_share`` is never touched, so the scored rows are the same.
+
+    ``v2`` scores ``safe-cap-qgb-v2``: its weather features, and its limit is ``q05`` minus
+    the online offset, replayed in time order from the start value in the metadata (a label
+    teaches the offset only once it is known, and an abstained interval teaches nothing).
+    ``weather_missing`` blanks the weather features of v2 (the weather feed is down).
     """
+    model = ctx["v2"] if v2 else ctx
+    meta = model["meta"]
+    weather = None if (not v2 or weather_missing) else model["weather"]
     # features need at most 24 h of history, so the test period plus two days is enough
     start = pd.Timestamp(TEST_START).tz_localize(SYDNEY).tz_convert("UTC") - LOOK_BACK
     labels = labels[labels["interval_start"] >= start]
-    rows = split(train.training_rows(labels))["test"]
-    X = rows[features.FEATURES]
-    pred = train.predict_quantiles(ctx["models"], X)
+    rows = split(train.training_rows(labels, weather))["test"]
+    X = rows[meta["features"]]
+    pred = train.predict_quantiles(model["models"], X)
     index = pd.DatetimeIndex(rows["target_start"])
     q05 = pd.Series(pred[:, 0], index=index)
     spread = pd.Series(pred[:, -1] - pred[:, 0], index=index)
     flagged = pd.Series(
-        [bool(abstention.quality_flags(r)) for r in X.to_dict("records")], index=index
+        [bool(abstention.quality_flags(r)) for r in rows[features.FEATURES].to_dict("records")],
+        index=index,
     )
-    abstain = (spread > tau_of(ctx["meta"])) | flagged
+    abstain = (spread > tau_of(meta)) | flagged
+    limit = q05
+    if v2:
+        offset = meta["offset"]
+        replayed = online_calibration.replay(
+            pd.DataFrame(
+                {
+                    "q05": q05,
+                    "safe_share": rows["safe_share"].to_numpy(),
+                    "decision_time": pd.DatetimeIndex(rows["decision_time"]),
+                    "available_at": index + features.STEP,
+                    "abstain": abstain.to_numpy(),
+                },
+                index=index,
+            ),
+            offset["gamma"],
+            offset["alpha"],
+            c0=offset["c_start"],
+        )
+        limit = replayed.limit
     return {
         "rows": rows, "X": X, "pred": pred, "index": index, "q05": q05, "spread": spread,
-        "flagged": flagged, "abstain": abstain, "fallback": q05.where(~abstain, FIXED_SHARE),
+        "flagged": flagged, "abstain": abstain, "limit": limit,
+        "fallback": limit.where(~abstain, FIXED_SHARE),
     }  # fmt: skip
 
 
@@ -202,6 +253,13 @@ def policies(ctx: dict) -> dict:
         "oracle": evaluate(shares["oracle"], test, surplus, kwp),
     }
     y = rows["safe_share"].to_numpy()
+    persistence = rows["share_last"].to_numpy()
+    for key, share in (("fixed", shares["fixed"]), ("model_fallback", fallback)):
+        results[key]["jain"] = fairness(share, test, surplus, kwp)
+    results["oracle"]["jain"] = fairness(shares["oracle"], test, surplus, kwp)
+    for key in ("model_q05", "model_fallback"):
+        results[key]["skill_q05"] = skill_score(y, q05.to_numpy(), persistence)
+    second = _policies_v2(ctx, labels, persistence, y) if ctx.get("v2") else None
     cal_test = calibration.quantile_coverage(y, pred, train.QUANTILES)
     cal_val = meta["validation"]["coverage_val"]
     cal = pd.DataFrame(
@@ -218,8 +276,27 @@ def policies(ctx: dict) -> dict:
     return {
         "rows": results, "calibration": cal, "drift": drift, "risk_coverage": curve,
         "tau": None if not info["reachable"] else tau, "n_test": len(rows),
-        "scored": scored,
+        "scored": scored, "v2": second,
     }  # fmt: skip
+
+
+def _policies_v2(ctx: dict, labels: pd.DataFrame, persistence, y) -> dict:
+    """Rows of ``safe-cap-qgb-v2`` on the same test intervals as v1."""
+    test, surplus, kwp = ctx["test_labels"], ctx["surplus"], ctx["kwp"]
+    scored = score_model(ctx, labels, v2=True)
+    skill = skill_score(y, scored["q05"].to_numpy(), persistence)
+    rows = {
+        "model_v2_q05": evaluate(scored["limit"], test, surplus, kwp),
+        "model_v2_fallback": evaluate(
+            scored["fallback"], test, surplus, kwp, abstain=scored["abstain"]
+        ),
+    }
+    for result in rows.values():
+        result["skill_q05"] = skill
+    rows["model_v2_fallback"]["jain"] = fairness(scored["fallback"], test, surplus, kwp)
+    meta = ctx["v2"]["meta"]
+    tau = tau_of(meta)
+    return {"rows": rows, "scored": scored, "tau": None if math.isinf(tau) else tau}
 
 
 def _clean_note(value):
@@ -237,7 +314,13 @@ def _clean(results: dict) -> dict:
         "per_day_max",
         "n_intervals",
     )
-    extra = ("delta_violation_rate", "delta_export_index", "delta_abstain_rate")
+    extra = (
+        "delta_violation_rate",
+        "delta_export_index",
+        "delta_abstain_rate",
+        "skill_q05",
+        "jain",
+    )
     return {
         k: {m: _round(r[m]) for m in (*keep, *(e for e in extra if e in r))}
         for k, r in results.items()
@@ -253,6 +336,7 @@ def run(
     error_analysis=False,
     grid=None,
     pricing=False,
+    v2=True,
 ) -> dict:
     """Evaluate every scenario and write the outputs. Returns the summary."""
     if error_analysis:
@@ -264,7 +348,7 @@ def run(
     sections = []
     price_table = price_data.profile(price_data.load()) if pricing else None
     for scenario in scenarios:
-        ctx = _prepare(scenario, run_id, allow_mock, use_artifacts, grid)
+        ctx = _prepare(scenario, run_id, allow_mock, use_artifacts, grid, v2)
         pt_id = ctx["labels"]["pt_id"].iloc[0]
         result = policies(ctx)
         rows, extra = result["rows"], {}
@@ -274,6 +358,23 @@ def run(
             variants = robust.run_variants(ctx, result)
             rows = {**rows, **variants["rows"]}
             extra = {"robustness": {k: _clean_note(v) for k, v in variants["notes"].items()}}
+        if result["v2"] is not None:
+            second = result["v2"]
+            rows = {**rows, **second["rows"]}
+            if robustness and variants["rows"]:
+                weak = robust.run_weather_missing(ctx, result)
+                rows = {**rows, **weak["rows"]}
+                extra["robustness"] = {**extra["robustness"], **_clean_note(weak["notes"])}
+            meta2 = ctx["v2"]["meta"]
+            extra["v2"] = {
+                "model_version": meta2["model_version"],
+                "threshold": _round(second["tau"]) if second["tau"] is not None else None,
+                "offset": _clean_note(
+                    {k: meta2["offset"][k] for k in ("gamma", "alpha", "c_start", "reachable")}
+                ),
+                "weather_used": bool(meta2["weather"]["used"]),
+                "labels_sha256": meta2["labels_sha256"],
+            }
         if error_analysis:
             from src.eval import error_analysis as analysis
 
@@ -354,6 +455,9 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument("--no-robustness", dest="robustness", action="store_false")
     parser.add_argument(
+        "--no-v2", dest="v2", action="store_false", help="score only safe-cap-qgb-v1"
+    )
+    parser.add_argument(
         "--error-analysis", action="store_true", help="also write the error analysis"
     )
     parser.add_argument(
@@ -375,6 +479,7 @@ def main(argv: list[str] | None = None) -> None:
             args.robustness,
             args.error_analysis,
             pricing=args.pricing,
+            v2=args.v2,
         )
     except MockLabelsError as err:
         raise SystemExit(str(err)) from err

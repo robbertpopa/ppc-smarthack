@@ -26,3 +26,16 @@ def test_factors_are_added_and_every_number_is_a_figure():
 def test_no_factors_leaves_the_explanation_unchanged():
     assert add_factors(base(), None, LABELS) == base()
     assert add_factors(base(), {"figures": []}, LABELS) == base()
+
+
+def test_the_offset_is_its_own_factor_with_grounded_numbers():
+    lowered = {**FACTORS, "offset": {"c": 0.043, "points": 4, "lowers": True}}
+    out = add_factors(base(), lowered, LABELS)
+    assert "online offset lowers the limit by 4 points because recent limits were too high" in (
+        out.text
+    )
+    assert any(f.name == "offset_points" and f.value == 4 for f in out.figures) and grounded(out)
+    raised = {**FACTORS, "offset": {"c": -0.02, "points": 2, "lowers": False}}
+    text = add_factors(base(), raised, LABELS).text
+    assert "raises the limit by 2 points because recent limits were all safe" in text
+    assert "online offset" not in add_factors(base(), {**FACTORS, "offset": None}, LABELS).text

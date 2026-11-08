@@ -76,13 +76,26 @@ python -m src.ml.weather fetch
 ```bash
 python -m src.ml.weather build
 ```
-This caches 400 answers under `DATA_DIR/raw/nasa_power/hourly/` (safe to rerun) and writes `DATA_DIR/weather_hourly.parquet` with its SHA-256. `src.ml.weather.load()` gives the station's hourly sunlight and temperature with `available_at = time + 1 h`; no model feature uses it yet.
+This caches 400 answers under `DATA_DIR/raw/nasa_power/hourly/` (safe to rerun) and writes `DATA_DIR/weather_hourly.parquet` with its SHA-256. `src.ml.weather.load()` gives the station's hourly sunlight and temperature with `available_at = time + 1 h`. Model `safe-cap-qgb-v2` (section 7) uses it for its cloudiness and temperature features and trains without it if the file is missing; the agent uses the temperature as the transformer's ambient (`docs/12-thermal-model.md`) and assumes 20 °C where it has none.
 
 ### 6. Labels
 ```bash
 python -m src.ml.labels mock --scenario A
 ```
-This writes mock labels with the real schema to `DATA_DIR/labels/A/`. The scenarios are `A`, `B` and `B-VAR`. Real labels come from the power flow (`python -m src.grid.labels`), but its output does not yet match the schema the training reads. Until it does, training runs on mock labels and its numbers are not results.
+This writes mock labels with the real schema to `DATA_DIR/labels/A/`. The scenarios are `A`, `B` and `B-VAR`. Real labels come from the power flow, in the same schema, with `station_houses.parquet` next to them. Without `--output` they go to `DATA_DIR/labels/<scenario>/`; a run into a folder that holds mock labels stops, so remove those first. Each run reads one Ausgrid file and appends to the folder: an interval computed again replaces the earlier one, and later runs keep the same houses and grid settings. Two training years take two runs, the later file first: customer 27 has no controlled-load rows after 2012-01-12, so the houses picked from 2010–11 are not all complete in 2011–12, while the ones picked from 2011–12 are complete in 2010–11.
+
+```bash
+python -m src.grid.labels --source "data/raw/ausgrid/Solar home 2011-2012.csv" --scenario A --start 2011-07-01 --days 366 --workers 8
+```
+```bash
+python -m src.grid.labels --source "data/raw/ausgrid/Solar home 2010-2011.csv" --scenario A --start 2010-07-01 --days 365 --workers 8
+```
+
+`--start` is required, and a run that reaches 2012-07-01 (the sealed test year) stops unless you pass `--final-eval`, which is for the final evaluation only. Expect about 5–7 s per day of labels with 4–8 workers, so roughly an hour and a half for the two training years. The run prints how many shares are null because the power flow did not converge and how many because the load alone breaks a limit; both are written as `converged = false`.
+
+Only scenario `A` has agreed grid settings (400 kVA, PV scale 1); `B` needs `--transformer-kva` and `--pv-scale`, and `B-VAR` is not supported yet. `python -m src.grid.audit_labels --source FILE --labels DATA_DIR/labels/A/labels.parquet` re-solves sampled boundaries of the days that file holds.
+
+Until real labels cover training and validation, training runs on mock labels and its numbers are not results.
 
 ### 7. Train
 ```bash
@@ -91,13 +104,13 @@ python -m src.ml.train --scenario A
 ```bash
 python -m src.ml.forecast_pv_load --scenario A
 ```
-These take about 45 s and 40 s. The models and `metadata.json` go to `ARTIFACT_URI/models/<version>/PT-A/`.
+These take about 45 s and 40 s. Add `--model-version safe-cap-qgb-v2` to the first one for model v2 (about 3 minutes, 80 model fits; the default stays `safe-cap-qgb-v1`, which is unchanged). v2 chooses its settings on four quarterly folds over 2011-07 → 2012-06 instead of the three validation months, refits on 2010-07 → 2012-06, uses the weather if it was downloaded (section 5), picks the step `gamma` of the online offset on that year of out-of-sample predictions, and chooses the abstention threshold on the offset limit. The models, `metadata.json` (folds per quarter, `offset`, `abstention`, whether weather was used) and the out-of-sample predictions (`oos_predictions.parquet`) go to `ARTIFACT_URI/models/<version>/PT-A/`. To serve v2 set `MODEL_VERSION=safe-cap-qgb-v2`; unsetting it is the rollback.
 
 ### 8. The agent on the trained model
 ```bash
 SOURCE=model SCENARIO=A python -m uvicorn src.agent.api:app --port 8000
 ```
-Start the screen as in section 4. On the screen, pick a day inside the label period, for example 2012-01-15; the 02:00 UTC slot is 13:00 in Sydney. On other days the model has no recent readings, so its forecast means nothing.
+Start the screen as in section 4. On the screen, pick a day inside the label period, for example 2012-01-15; the 02:00 UTC slot is 13:00 in Sydney. On other days there are no recent readings: the agent's input checks (`missing_net_now`, `stale_input`, ...) make it abstain, apply the fixed limit and send the case to a person.
 
 ### 9. Reproduce the results (evaluation)
 The evaluation scores the test year, 2012-07-01 → 2013-06-30. Before running it:
@@ -109,7 +122,7 @@ Then run:
 ```bash
 python -m src.eval.run --scenario all --run-id final --error-analysis
 ```
-The output goes to `ARTIFACT_URI/eval/final/`. The screen's comparison panel reads its `summary.json` when started with `EVAL_RUN_ID=final`. Every number in the presentation comes from this output. `python -m src.common.pipeline --run-id final` runs training, the PV/load forecast and the evaluation in one command.
+The evaluation trains and scores `safe-cap-qgb-v1` and `safe-cap-qgb-v2` side by side (`--no-v2` scores only v1; the v1 numbers are the same either way). The table has two extra columns, the skill of `q05` against the last known share (1 minus the ratio of the two pinball losses) and Jain's fairness index between houses, a "Model v2 + fallback" row, and a robustness row for a down weather feed. With `--error-analysis` it also writes `progress_<station>.csv` (what each v2 change bought, on the out-of-sample year) and `error_by_*_v2_<station>.csv` (the failure tables for v2). The output goes to `ARTIFACT_URI/eval/final/`. The screen's comparison panel reads its `summary.json` when started with `EVAL_RUN_ID=final`. Every number in the presentation comes from this output. `python -m src.common.pipeline --run-id final` runs training, the PV/load forecast and the evaluation in one command.
 
 ### 10. Prices and the prosumer price comparison (optional)
 The evaluation can compare what battery owners earn today on an older compensation contract (the regulated monthly average price) and on PPC's MaxControl (the 15-minute spot price minus the injection tariff) with an hourly price plus a monthly solar adder, and what each does to PPC's margin. It needs one year of Romanian day-ahead prices from [euenergy.live](https://euenergy.live) (CC-BY-4.0, free token). Put `EUENERGY_TOKEN=<your token>` in `.env` (the file is not committed), then:

@@ -201,3 +201,27 @@ def test_the_plot_warning_filter_is_not_process_wide(tmp_path):
     curve = pd.DataFrame({"coverage": [0.1, 1.0], "risk": [0.0, 0.05]})
     plots.risk_coverage(curve, tmp_path / "x.png")
     assert not any(marker in (f[1].pattern if f[1] is not None else "") for f in warnings.filters)
+
+
+def test_progress_table_scores_every_v2_change_out_of_sample(summary):
+    steps = pd.read_csv(out() / "progress_PT-A.csv")
+    assert list(steps["attempt"]) == [
+        "v1: train to 2012-03, one validation quarter",
+        "v1 features, quarterly folds",
+        "+ clear-sky features",
+        "+ online offset",  # no weather in this data folder: that row is left out
+    ]
+    assert steps["scored_on"].str.contains("2012-06").all()  # nothing reaches the test year
+    assert not steps["scored_on"].str.contains("2013").any()
+    assert steps[["pinball_q05", "violation_rate", "abstain_rate"]].notna().all().all()
+    # the offset changes the limit and not the model: same pinball as the row before it
+    assert steps["pinball_q05"].iloc[-1] == steps["pinball_q05"].iloc[-2]
+    text = (out() / "error_analysis.md").read_text()
+    assert "What each v2 change bought" in text and "Model v2 on the test period" in text
+
+
+def test_v2_failure_tables_cover_the_same_test_intervals(summary):
+    total = summary["scenarios"]["PT-A"]["rows"]["fixed"]["n_intervals"]
+    for table in TABLES:
+        frame = pd.read_csv(out() / f"error_by_{table}_v2_PT-A.csv")
+        assert frame["n_intervals"].sum() == total, table

@@ -116,3 +116,34 @@ def test_a_working_model_gives_a_plan_from_its_cautious_quantile(tmp_path):
     plan = service(source(), tmp_path).propose(NOON)
     assert not plan.abstain and plan.source == "model"
     assert plan.safe_cap_share_used == good_forecast().safe_cap_share.q05
+
+
+def test_input_checks_see_the_features_the_forecast_uses():
+    seen = {}
+
+    def flags(features):
+        seen["checked"] = features
+        return ["stale_input"]
+
+    model = source(seen=seen)
+    model.input_flags = flags
+    assert model.input_checks("PT-A", NOON) == ["stale_input"]
+    assert seen["checked"]["t"] == DECISION  # built at the decision time, like the forecast
+
+
+def test_without_checks_or_with_broken_ones_there_are_no_flags():
+    assert source().input_checks("PT-A", NOON) == []
+    model = source()
+    model.input_flags = lambda features: 1 / 0
+    assert model.input_checks("PT-A", NOON) == []
+    assert model.forecast("PT-A", NOON) is not None
+
+
+def test_an_input_flag_makes_the_agent_abstain_and_queue_the_case(tmp_path):
+    model = source()
+    model.input_flags = lambda features: ["missing_net_now", "stale_input"]
+    agent = service(model, tmp_path)
+    plan = agent.propose(NOON)
+    assert plan.abstain and plan.source == "fallback_static"
+    assert {"missing_net_now", "stale_input"} <= set(plan.reasons)
+    assert [p.plan_id for p in agent.queue()["pending"]] == [plan.plan_id]

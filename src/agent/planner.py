@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from datetime import timezone
 
 from src.agent.explain import build_explanation, ensure_grounded
@@ -12,6 +13,16 @@ from src.common.contract import (
 )
 from src.pricing.config import PricingConfig
 from src.pricing.tariff import hourly_price
+
+# Live input checks (``src.ml.abstention.quality_flags``) as the operator reads them. The flag
+# name itself goes in ``reasons``; this sentence goes in the explanation (no digits: every
+# number in the text must be one of the figures).
+INPUT_CHECK_TEXT = {
+    "missing_net_now": "The newest net reading is missing",
+    "missing_share_last": "The last known safe share is missing",
+    "stale_input": "The newest reading is too old",
+    "out_of_range_net": "A net reading is out of range",
+}
 
 
 def plan_id_for(pt_id: str, interval_start: AwareDatetime) -> str:
@@ -53,11 +64,12 @@ def make_plan(
     grid_state: GridState | None,
     station: StationConfig,
     interval_start: AwareDatetime | None = None,
-    force_abstain: str | None = None,
+    force_abstain: str | Sequence[str] | None = None,
     wholesale_eur_mwh: float | None = None,
     adder_eur_mwh: float = 0.0,
     pricing: PricingConfig | None = None,
 ) -> Plan:
+    """The plan for one interval. ``force_abstain`` (one reason or several) always abstains."""
     if forecast is None and interval_start is None:
         raise ValueError("interval_start is required when there is no forecast")
     if forecast is not None:
@@ -84,9 +96,12 @@ def make_plan(
         reasons.append("grid state did not converge")
         reason_for_text = reason_for_text or "The grid state could not be computed"
 
-    if force_abstain:
-        reasons.append(force_abstain)
-        reason_for_text = reason_for_text or force_abstain.capitalize()
+    forced = [force_abstain] if isinstance(force_abstain, str) else list(force_abstain or ())
+    bad_input = bool(forced) and forced[0] in INPUT_CHECK_TEXT
+    if forced:
+        reasons.extend(forced)
+        first = forced[0]
+        reason_for_text = reason_for_text or INPUT_CHECK_TEXT.get(first, first.capitalize())
 
     abstain = bool(reasons)
     if abstain:
@@ -128,7 +143,8 @@ def make_plan(
                 source=source,
                 share=share,
                 static_share=station.static_share,
-                spread=spread,
+                # bad input explains the case better than the spread computed from it
+                spread=None if bad_input else spread,
                 threshold=station.spread_threshold,
                 grid_state=grid_state,
                 reason=reason_for_text,

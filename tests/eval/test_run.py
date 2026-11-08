@@ -99,7 +99,7 @@ def test_only_the_test_period_is_scored(env, monkeypatch):
 
     monkeypatch.setattr(eval_run, "evaluate", spy)
     eval_run.run(["A"], "spy", allow_mock=True, robustness=False, grid=FAST)
-    assert len(seen) == 6
+    assert len(seen) == 8  # six policies of v1, two of v2
     assert all(
         low >= TEST_START and high <= pd.Timestamp("2013-06-30 14:00", tz="UTC")
         for low, high in seen
@@ -216,7 +216,8 @@ def test_counts_are_whole_numbers_in_the_markdown_table(first):
     lines = (eval_run.eval_dir("one") / "table.md").read_text().splitlines()
     row = next(line for line in lines if "| Model + fallback |" in line)
     cells = [c.strip() for c in row.strip("|").split("|")]
-    assert cells[-1].isdigit() and cells[-2].isdigit()  # intervals and flagged per day (max)
+    # intervals and flagged per day (max) come before the skill and fairness columns
+    assert cells[-3].isdigit() and cells[-4].isdigit()
 
 
 def test_the_control_rebuild_equals_the_clean_row(first):
@@ -284,3 +285,50 @@ def test_pricing_flag_adds_the_price_block(env, first):
     assert list(eval_run.eval_dir("priced").glob("pricing_*.md"))
     plain = eval_run.run(["A"], "plain", allow_mock=True, grid=FAST)
     assert "pricing" not in next(iter(plain["scenarios"].values()))
+
+
+def test_v2_is_scored_next_to_v1_and_v1_numbers_do_not_move(env, first):
+    plain = eval_run.run(["A"], "no-v2", allow_mock=True, grid=FAST, v2=False)
+    rows, old = first["scenarios"]["PT-A"]["rows"], plain["scenarios"]["PT-A"]["rows"]
+    assert {"model_v2_q05", "model_v2_fallback"} <= set(rows)
+    assert not {"model_v2_q05", "model_v2_fallback"} & set(old)
+    assert {k: rows[k] for k in old} == old  # the same numbers for everything v1 had
+    entry = first["scenarios"]["PT-A"]["v2"]
+    assert entry["model_version"] == "safe-cap-qgb-v2" and entry["offset"]["gamma"] > 0
+    text = (eval_run.eval_dir("one") / "table.md").read_text()
+    assert "Model v2 + fallback" in text and "Fairness between houses (Jain)" in text
+
+
+def test_skill_and_fairness_columns_are_filled(first):
+    rows = first["scenarios"]["PT-A"]["rows"]
+    for key in ("model_q05", "model_fallback", "model_v2_q05", "model_v2_fallback"):
+        assert -5 < rows[key]["skill_q05"] < 1
+    for key in ("fixed", "model_fallback", "oracle", "model_v2_fallback"):
+        assert 0 < rows[key]["jain"] <= 1
+    assert "skill_q05" not in rows["fixed"]  # a policy without quantiles has no skill
+
+
+def test_weather_missing_case_needs_weather_in_v2(env, monkeypatch):
+    plain = eval_run.run(["A"], "nw", allow_mock=True, grid=FAST)
+    note = plain["scenarios"]["PT-A"]["robustness"]["weather_missing"]
+    assert "skipped" in note  # v2 was trained without weather: nothing to remove
+    time = pd.date_range("2010-06-30", "2013-07-01", freq="1h", tz="UTC")
+    rng = np.random.default_rng(1)
+    weather = pd.DataFrame(
+        {
+            "time": time,
+            "ghi_wm2": rng.uniform(0, 900, len(time)),
+            "t2m_c": rng.uniform(5, 35, len(time)),
+            "available_at": time + pd.Timedelta("1h"),
+        }
+    )
+    monkeypatch.setattr("src.ml.weather.load", lambda ids=None: weather)
+    out = eval_run.run(["A"], "ww", allow_mock=True, grid=FAST)
+    entry = out["scenarios"]["PT-A"]
+    assert "robust_v2_weather_missing" in entry["rows"]
+    assert set(entry["robustness"]["weather_missing"]) == {
+        "delta_violation_rate",
+        "delta_export_index",
+        "delta_abstain_rate",
+    }
+    assert entry["v2"]["weather_used"] is True

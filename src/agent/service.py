@@ -154,14 +154,17 @@ class AgentService:
             pt_id = self.station.pt_id
             forecast = self.source.forecast(pt_id, interval_start)
             grid_state = self.source.grid_state(pt_id, interval_start)
+            checks_of = getattr(self.source, "input_checks", None)
+            flags = checks_of(pt_id, interval_start) if checks_of else []
             station, forced = self._threshold_station()
+            reasons = [*flags, *([forced] if forced else [])]
             wholesale = self.prices.wholesale(interval_start) if self.prices else None
             plan = make_plan(
                 forecast,
                 grid_state,
                 station,
                 interval_start,
-                force_abstain=forced,
+                force_abstain=reasons,
                 wholesale_eur_mwh=wholesale,
                 adder_eur_mwh=self.prices.adder(interval_start) if self.prices else 0.0,
             )

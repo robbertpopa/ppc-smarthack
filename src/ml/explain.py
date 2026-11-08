@@ -23,7 +23,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from src.ml import features as feature_set
 from src.ml import model_io
 from src.ml.config import SYDNEY
 
@@ -42,6 +41,11 @@ LABELS: dict[str, str] = {
     "doy_sin": "season (sine)",
     "doy_cos": "season (cosine)",
     "is_weekend": "weekend",
+    "clearsky_T": "clear-sky sunlight at the target time (kW per square metre)",
+    "kt_now": "how clear the sky is now (measured over clear-sky sunlight)",
+    "kt_lag_1": "how clear the sky was an hour earlier",
+    "t2m_now": "air temperature now (degrees C)",
+    "net_over_clearsky": "net load now against clear-sky sunlight",
 }
 TOP_FACTORS = 3
 SIMILAR = 5
@@ -78,11 +82,17 @@ def global_importance_of(model, X_val: pd.DataFrame, y_val, seed: int = 0) -> pd
     )
 
 
-def build_artifacts(models: dict, train_rows: pd.DataFrame, val_rows: pd.DataFrame, seed: int = 0):
-    """Everything ``explain`` needs besides the models; written next to them by ``save``."""
+def build_artifacts(
+    models: dict, train_rows: pd.DataFrame, val_rows: pd.DataFrame, seed: int = 0, val_q05=None
+):
+    """Everything ``explain`` needs besides the models; written next to them by ``save``.
+
+    ``val_q05``: out-of-sample ``q05`` of the validation rows, when ``models`` were fitted
+    on them too (v2 refits on everything). Without it ``q05`` is predicted by ``models``.
+    """
     from src.ml.train import predict_quantiles
 
-    names = feature_set.FEATURES
+    names = _names(models)
     importance = global_importance_of(models[0.05], val_rows[names], val_rows["safe_share"], seed)
     slots = _slot(val_rows["target_start"]).to_numpy()
     reference = {
@@ -93,6 +103,8 @@ def build_artifacts(models: dict, train_rows: pd.DataFrame, val_rows: pd.DataFra
     past = pd.concat([train_rows, val_rows], ignore_index=True)
     index = past[[*names, "target_start", "safe_share"]].copy()
     index["q05"] = predict_quantiles(models, past[names])[:, 0]
+    if val_q05 is not None:
+        index.loc[index.index[len(train_rows) :], "q05"] = np.asarray(val_q05)
     # The models were fitted on the training rows, so their q05 there is an in-sample
     # prediction, tighter than on new decisions. It is only shown for validation cases.
     index["in_sample"] = [True] * len(train_rows) + [False] * len(val_rows)
@@ -147,9 +159,30 @@ def _is_missing(value) -> bool:
     return value is None or (isinstance(value, float) and np.isnan(value))
 
 
-def explain_with(models: dict, art: dict, feats: dict) -> dict:
-    """Top factors and similar cases for one decision (pure: no disk, no clock)."""
-    names = feature_set.FEATURES
+def _names(models: dict) -> list[str]:
+    """The features the models were trained on, in their order (set by ``fit``)."""
+    return list(models[0.05].feature_names_in_)
+
+
+def offset_factor(c: float | None) -> dict | None:
+    """The online offset as a factor of its own, or None when there is none to report.
+
+    ``c > 0`` lowers the limit below ``q05`` (recent limits were too high); ``c < 0`` raises
+    it (recent limits were all safe). ``points`` is the size in percentage points of the
+    kWp share.
+    """
+    if c is None or not np.isfinite(c) or round(abs(c) * 100) == 0:
+        return None
+    return {"c": float(c), "points": round(abs(float(c)) * 100), "lowers": bool(c > 0)}
+
+
+def explain_with(models: dict, art: dict, feats: dict, offset_c: float | None = None) -> dict:
+    """Top factors and similar cases for one decision (pure: no disk, no clock).
+
+    ``offset_c`` is the current online offset of the station (model v2); it is returned as
+    ``offset`` next to the model's own factors, because the limit sent is ``q05 - c``.
+    """
+    names = _names(models)
     target = pd.Timestamp(feats["target_start"]).tz_convert("UTC")
     decision = pd.Timestamp(feats["decision_time"]).tz_convert("UTC")
     values = {f: (None if _is_missing(feats.get(f)) else float(feats[f])) for f in names}
@@ -176,12 +209,12 @@ def explain_with(models: dict, art: dict, feats: dict) -> dict:
         "figures": figures,
         "missing": missing,
         "q05": actual,
-        "similar": _similar(art, values, decision),
+        "offset": offset_factor(offset_c),
+        "similar": _similar(art, values, decision, names),
     }
 
 
-def _similar(art: dict, values: dict, decision: pd.Timestamp) -> list[dict]:
-    names = feature_set.FEATURES
+def _similar(art: dict, values: dict, decision: pd.Timestamp, names: list[str]) -> list[dict]:
     index = art["index"]
     # only cases whose outcome was known at the decision time (never from the future)
     known = index["target_start"] + STEP <= decision
@@ -221,7 +254,10 @@ def _similar(art: dict, values: dict, decision: pd.Timestamp) -> list[dict]:
 
 
 def explain(feats: dict) -> dict:
-    """``{"figures": [...], "similar": [...], "missing": [...], "q05": float}``."""
+    """``{"figures": [...], "similar": [...], "missing": [...], "q05": float, "offset": ...}``.
+
+    ``offset`` is None for v1 and whenever the offset rounds to zero points.
+    """
     from src.ml.predict import _load, model_version
 
     pt_id = feats.get("pt_id")
@@ -231,9 +267,11 @@ def explain(feats: dict) -> dict:
         if feats.get(key) is None:
             raise ValueError(f"features must include {key}")
     version = model_version()
-    models, _ = _load(version, pt_id)
+    models, meta = _load(version, pt_id)
     folder = model_io.model_dir(version, pt_id)
-    return explain_with(models, model_io.cached("explain", folder, load_artifacts), feats)
+    # the live offset if the caller tracks one, else the start value the model was saved with
+    offset_c = feats.get("offset_c", meta.get("offset", {}).get("c_start"))
+    return explain_with(models, model_io.cached("explain", folder, load_artifacts), feats, offset_c)
 
 
 def clear_cache() -> None:
