@@ -31,11 +31,15 @@ from .twin import binding_limit, build_grid, null_share_reason, safe_share
 STEP = pd.Timedelta(minutes=30)
 HOUSES_FILE = "station_houses.parquet"
 
-# Grid settings per scenario (step 00 of docs/tasks/p6-ml-v2.md). Only A is agreed: the
-# defaults the generator always used. TODO(P3 with P2): agree B (transformer size and PV
-# scale) and B-VAR (B plus reactive-power control, which the twin does not model yet).
+# Grid settings per scenario (step 00 of docs/tasks/p6-ml-v2.md). Only A is agreed. A is the
+# "transformer binds" scenario of docs/04-chosen-idea.md: 400 kVA with PV x4. Measured on three
+# summer days (2011-12-19 to 21, 84 daylight intervals each setting), 400 kVA with PV x1 or x2
+# gives safe_share = 1 in every interval (nothing binds, a constant target); PV x4 gives 74%
+# ones and the transformer binding in 26%. In none of the probed settings did voltage or a line
+# bind. TODO(P3 with P2): agree B (a setting where voltage binds, which needs a weaker feeder)
+# and B-VAR (B plus reactive-power control, which the twin does not model yet).
 SCENARIO_GRID = {
-    "A": {"transformer_kva": 400.0, "pv_scale": 1.0},
+    "A": {"transformer_kva": 400.0, "pv_scale": 4.0},
     "B": None,
     "B-VAR": None,
 }

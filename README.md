@@ -93,7 +93,7 @@ python -m src.grid.labels --source "data/raw/ausgrid/Solar home 2010-2011.csv" -
 
 `--start` is required, and a run that reaches 2012-07-01 (the sealed test year) stops unless you pass `--final-eval`, which is for the final evaluation only. Expect about 5–7 s per day of labels with 4–8 workers, so roughly an hour and a half for the two training years. The run prints how many shares are null because the power flow did not converge and how many because the load alone breaks a limit; both are written as `converged = false`.
 
-Only scenario `A` has agreed grid settings (400 kVA, PV scale 1); `B` needs `--transformer-kva` and `--pv-scale`, and `B-VAR` is not supported yet. `python -m src.grid.audit_labels --source FILE --labels DATA_DIR/labels/A/labels.parquet` re-solves sampled boundaries of the days that file holds.
+Only scenario `A` has agreed grid settings (400 kVA, PV scale 4: at PV scale 1 or 2 no limit ever binds and every label is 1); `B` needs `--transformer-kva` and `--pv-scale`, and `B-VAR` is not supported yet. `python -m src.grid.audit_labels --source FILE --labels DATA_DIR/labels/A/labels.parquet` re-solves sampled boundaries of the days that file holds.
 
 Until real labels cover training and validation, training runs on mock labels and its numbers are not results.
 

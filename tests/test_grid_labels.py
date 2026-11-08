@@ -11,7 +11,7 @@ if find_spec("pandapower") is None or find_spec("pyarrow") is None:
 import pandas as pd  # noqa: E402
 
 from src.grid.ausgrid import day_profiles, half_hour_columns, read_period, select_households  # noqa: E402
-from src.grid.labels import check_window, generate, label_frame  # noqa: E402
+from src.grid.labels import check_window, generate, label_frame, scenario_grid  # noqa: E402
 from src.ml import labels as labels_io  # noqa: E402
 
 SLOTS = [f"{i // 2}:{30 * (i % 2):02d}" for i in range(48)]
@@ -79,7 +79,7 @@ class LabelTests(unittest.TestCase):
     def test_generate_uses_daylight_window_and_utc_times(self):
         write_csv(self.source)
         output = self.labels_file()
-        generate(self.source, output, "2012-01-01", 1)
+        generate(self.source, output, "2012-01-01", 1, transformer_kva=400, pv_scale=1.0)
         labels = pd.read_parquet(output)
         self.assertEqual(len(labels), 16)
         self.assertEqual(labels.interval_start.iloc[0], pd.Timestamp("2011-12-31T21:00:00Z"))
@@ -92,7 +92,9 @@ class LabelTests(unittest.TestCase):
         write_csv(self.source, controlled={5: {"01/01/2012", "02/01/2012"}})
         data = Path(self.directory.name) / "data"
         with mock.patch.dict(os.environ, {"DATA_DIR": str(data)}):
-            generate(self.source, None, "2012-01-01", 1, scenario="A")
+            generate(
+                self.source, None, "2012-01-01", 1, transformer_kva=400, pv_scale=1.0, scenario="A"
+            )
             labels = labels_io.load("A")
             houses = labels_io.load_station_houses("A")
         self.assertEqual(list(labels.columns), list(labels_io.COLUMNS))
@@ -111,6 +113,16 @@ class LabelTests(unittest.TestCase):
         self.assertEqual(houses.source_house_id.iloc[0], "AG-0001")
         self.assertEqual(len(houses), 210)
         self.assertTrue((houses.transformer_kva == 400.0).all())
+
+    def test_scenario_a_is_the_transformer_binds_station(self):
+        self.assertEqual(scenario_grid("A"), (400.0, 4.0))
+        write_csv(self.source)
+        output = self.labels_file()
+        generate(self.source, output, "2012-01-01", 1)  # scenario A, no overrides
+        labels = pd.read_parquet(output)
+        houses = pd.read_parquet(output.parent / "station_houses.parquet")
+        self.assertTrue((houses.pv_scale == 4.0).all() and (houses.transformer_kva == 400.0).all())
+        self.assertTrue((labels.binding == "trafo").any())  # a constant target would be no label
 
     def test_a_null_share_stays_null(self):
         frame = label_frame(
