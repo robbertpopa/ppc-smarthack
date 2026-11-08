@@ -1,0 +1,322 @@
+{
+  "abstention": {
+    "abstain_rate": 0.10822510822510822,
+    "crew_budget_holds": true,
+    "crew_cases_per_day": 20,
+    "flagged_per_day_max": 3.0,
+    "flagged_per_day_mean": 3.0,
+    "holdout": {
+      "abstain_rate_second_half": 0.10662824207492795,
+      "gap_to_target": 0.005936599423631124,
+      "tau_first_half": 0.7280255500704499,
+      "violation_rate_first_half": 0.014450867052023121,
+      "violation_rate_second_half": 0.025936599423631124
+    },
+    "reachable": true,
+    "share_flagged_by_input_checks": 0.10822510822510822,
+    "target_reason": "share of daylight validation intervals allowed to exceed the safe limit; 2% is the level the exploration reached with a fallback (team to confirm)",
+    "tau": 0.732475222408563,
+    "violation_rate_with_fallback": 0.01875901875901876,
+    "violation_target": 0.02
+  },
+  "features": [
+    "net_now",
+    "net_lag_1",
+    "net_lag_2",
+    "net_lag_3",
+    "net_same_T_yesterday",
+    "share_last",
+    "share_same_T_yesterday",
+    "sun_elev_T",
+    "sun_elev_now",
+    "hour_sin",
+    "hour_cos",
+    "doy_sin",
+    "doy_cos",
+    "is_weekend",
+    "clearsky_T",
+    "net_over_clearsky"
+  ],
+  "fold_note": "val_period is the four out-of-sample quarters; the final models are refitted on train_period",
+  "folds": [
+    {
+      "n_train": 19690,
+      "n_val": 693,
+      "name": "2013 Jan-Feb",
+      "pinball": {
+        "0.05": 0.00786732991852541,
+        "0.1": 0.012317802761784468,
+        "0.2": 0.018331773707222554,
+        "0.5": 0.022343551528191157,
+        "0.9": 0.012232719501117621
+      },
+      "q05_coverage": 0.01443001443001443,
+      "q05_violation_rate": 0.01443001443001443,
+      "valid_period": [
+        "2012-12-31 19:00:00+00:00",
+        "2013-01-25 08:30:00+00:00"
+      ]
+    }
+  ],
+  "git_sha": "7f56683c86397b3431e172942f240e63cab62190-dirty",
+  "hyperparameter_search": [
+    {
+      "mean_pinball_oos": 0.014841831843619363,
+      "params": {
+        "learning_rate": 0.05,
+        "max_iter": 300,
+        "max_leaf_nodes": 31,
+        "min_samples_leaf": 40
+      }
+    },
+    {
+      "mean_pinball_oos": 0.01586790388210416,
+      "params": {
+        "learning_rate": 0.05,
+        "max_iter": 300,
+        "max_leaf_nodes": 15,
+        "min_samples_leaf": 80
+      }
+    },
+    {
+      "mean_pinball_oos": 0.014618635483368243,
+      "params": {
+        "learning_rate": 0.1,
+        "max_iter": 150,
+        "max_leaf_nodes": 31,
+        "min_samples_leaf": 40
+      }
+    },
+    {
+      "mean_pinball_oos": 0.01470573451801784,
+      "params": {
+        "learning_rate": 0.05,
+        "max_iter": 300,
+        "max_leaf_nodes": 63,
+        "min_samples_leaf": 20
+      }
+    }
+  ],
+  "hyperparameters": {
+    "learning_rate": 0.1,
+    "max_iter": 150,
+    "max_leaf_nodes": 31,
+    "min_samples_leaf": 40
+  },
+  "is_mock_labels": false,
+  "labels_sha256": "8875e87450c42d4c37a6e303d2bed5eb28df9cc2b51b11a8d5e484ee0bbfb04f",
+  "model_version": "safe-cap-qgb-v2-dataset",
+  "offset": {
+    "alpha": 0.02,
+    "c_bounds": [
+      -0.05,
+      0.3
+    ],
+    "c_start": -0.0025799999999999218,
+    "export_index": 92.75319541271433,
+    "gamma": 0.003,
+    "period": [
+      "2012-12-31 19:00:00+00:00",
+      "2013-01-25 08:30:00+00:00"
+    ],
+    "reachable": true,
+    "reason": "gamma with the highest export index whose violation rate on the out-of-sample year is at most alpha; if none, the lowest violation rate (reachable is false)",
+    "table": [
+      {
+        "c_final": -0.0018600000000000344,
+        "export_index": 92.19932951499777,
+        "gamma": 0.001,
+        "n_intervals": 693,
+        "violation_rate": 0.017316017316017316
+      },
+      {
+        "c_final": -0.0025799999999999218,
+        "export_index": 92.75319541271433,
+        "gamma": 0.003,
+        "n_intervals": 693,
+        "violation_rate": 0.01875901875901876
+      },
+      {
+        "c_final": 0.0014000000000001741,
+        "export_index": 91.3157464691487,
+        "gamma": 0.01,
+        "n_intervals": 693,
+        "violation_rate": 0.020202020202020204
+      },
+      {
+        "c_final": 0.004199999999998948,
+        "export_index": 86.59428498042405,
+        "gamma": 0.03,
+        "n_intervals": 693,
+        "violation_rate": 0.020202020202020204
+      }
+    ],
+    "violation_rate": 0.01875901875901876
+  },
+  "pt_id": "PT-A",
+  "quantiles": [
+    0.05,
+    0.1,
+    0.2,
+    0.5,
+    0.9
+  ],
+  "scenario": "A",
+  "seed": 0,
+  "sklearn_version": "1.9.1",
+  "train_period": [
+    "2010-06-30 21:00:00+00:00",
+    "2013-01-25 08:30:00+00:00"
+  ],
+  "val_period": [
+    "2012-12-31 19:00:00+00:00",
+    "2013-01-25 08:30:00+00:00"
+  ],
+  "validation": {
+    "abstention": {
+      "abstain_rate": 0.10822510822510822,
+      "crew_budget_holds": true,
+      "crew_cases_per_day": 20,
+      "flagged_per_day_max": 3.0,
+      "flagged_per_day_mean": 3.0,
+      "holdout": {
+        "abstain_rate_second_half": 0.10662824207492795,
+        "gap_to_target": 0.005936599423631124,
+        "tau_first_half": 0.7280255500704499,
+        "violation_rate_first_half": 0.014450867052023121,
+        "violation_rate_second_half": 0.025936599423631124
+      },
+      "reachable": true,
+      "share_flagged_by_input_checks": 0.10822510822510822,
+      "target_reason": "share of daylight validation intervals allowed to exceed the safe limit; 2% is the level the exploration reached with a fallback (team to confirm)",
+      "tau": 0.732475222408563,
+      "violation_rate_with_fallback": 0.01875901875901876,
+      "violation_target": 0.02
+    },
+    "baselines_val": {
+      "fixed": {
+        "export_index": 100.0,
+        "n_intervals": 693.0,
+        "n_null_label": 7.0,
+        "violation_rate": 0.2582972582972583
+      },
+      "last_known": {
+        "export_index": 103.5440159425,
+        "n_intervals": 693.0,
+        "n_null_label": 7.0,
+        "violation_rate": 0.20202020202020202
+      },
+      "oracle": {
+        "export_index": 99.4546141701958,
+        "n_intervals": 693.0,
+        "n_null_label": 7.0,
+        "violation_rate": 0.0
+      },
+      "same_hour_yesterday": {
+        "export_index": 107.54420067172288,
+        "n_intervals": 693.0,
+        "n_null_label": 7.0,
+        "violation_rate": 0.20923520923520925
+      }
+    },
+    "coverage_val": {
+      "0.05": 0.01443001443001443,
+      "0.1": 0.024531024531024532,
+      "0.2": 0.050505050505050504,
+      "0.5": 0.1645021645021645,
+      "0.9": 0.354978354978355
+    },
+    "folds": [
+      {
+        "n_train": 19690,
+        "n_val": 693,
+        "name": "2013 Jan-Feb",
+        "pinball": {
+          "0.05": 0.00786732991852541,
+          "0.1": 0.012317802761784468,
+          "0.2": 0.018331773707222554,
+          "0.5": 0.022343551528191157,
+          "0.9": 0.012232719501117621
+        },
+        "q05_coverage": 0.01443001443001443,
+        "q05_violation_rate": 0.01443001443001443,
+        "valid_period": [
+          "2012-12-31 19:00:00+00:00",
+          "2013-01-25 08:30:00+00:00"
+        ]
+      }
+    ],
+    "n_train": 20383,
+    "n_val": 693,
+    "offset": {
+      "alpha": 0.02,
+      "c_bounds": [
+        -0.05,
+        0.3
+      ],
+      "c_start": -0.0025799999999999218,
+      "export_index": 92.75319541271433,
+      "gamma": 0.003,
+      "period": [
+        "2012-12-31 19:00:00+00:00",
+        "2013-01-25 08:30:00+00:00"
+      ],
+      "reachable": true,
+      "reason": "gamma with the highest export index whose violation rate on the out-of-sample year is at most alpha; if none, the lowest violation rate (reachable is false)",
+      "table": [
+        {
+          "c_final": -0.0018600000000000344,
+          "export_index": 92.19932951499777,
+          "gamma": 0.001,
+          "n_intervals": 693,
+          "violation_rate": 0.017316017316017316
+        },
+        {
+          "c_final": -0.0025799999999999218,
+          "export_index": 92.75319541271433,
+          "gamma": 0.003,
+          "n_intervals": 693,
+          "violation_rate": 0.01875901875901876
+        },
+        {
+          "c_final": 0.0014000000000001741,
+          "export_index": 91.3157464691487,
+          "gamma": 0.01,
+          "n_intervals": 693,
+          "violation_rate": 0.020202020202020204
+        },
+        {
+          "c_final": 0.004199999999998948,
+          "export_index": 86.59428498042405,
+          "gamma": 0.03,
+          "n_intervals": 693,
+          "violation_rate": 0.020202020202020204
+        }
+      ],
+      "violation_rate": 0.01875901875901876
+    },
+    "params": {
+      "learning_rate": 0.1,
+      "max_iter": 150,
+      "max_leaf_nodes": 31,
+      "min_samples_leaf": 40
+    },
+    "pinball_val": {
+      "0.05": 0.00786732991852541,
+      "0.1": 0.012317802761784468,
+      "0.2": 0.018331773707222554,
+      "0.5": 0.022343551528191157,
+      "0.9": 0.012232719501117621
+    },
+    "pt_id": "PT-A",
+    "q05_policy": {
+      "export_index": 92.75319541271433,
+      "n_intervals": 693,
+      "violation_rate": 0.01875901875901876
+    }
+  },
+  "weather": {
+    "sha256": null,
+    "used": false
+  }
+}
