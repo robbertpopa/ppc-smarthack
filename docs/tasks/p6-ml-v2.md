@@ -611,17 +611,17 @@ Research agents reported these; checking showed them wrong or unsupported. Do no
 Post one line per merged step, then the final line.
 
 - [ ] 00 setup: "PR #25 merged; labels take <…> per week of data per scenario; mapping A/B/B-VAR agreed: <…>."
-- [ ] 10: "grid labels write the ML schema; one real day trains."
-- [ ] 11: "the live agent abstains on missing, stale or out-of-range readings."
-- [ ] 12: "hot-spot uses measured temperature when known."
-- [ ] 01: "weather for Sydney 2010–13 downloaded, SHA-256 <…>."
-- [ ] 02: "19 features; no-leak test passes."
-- [ ] 03: "v2 trains on four quarterly folds; per-quarter q05 violation rates <…>."
-- [ ] 04: "offset γ = <…>, τ = <…>, flagged per day max <…> vs crew <…>."
-- [ ] 05: "v1 and v2 side by side; skill and Jain columns; weather-missing case."
-- [ ] 06: "explanations show the offset and weather factors."
-- [ ] 07: "what-we-tried table v1 → v2 on the out-of-sample year."
+- [x] 10: "grid labels write the ML schema; one real day trains." (PR #31, in the P6 pull request)
+- [x] 11: "the live agent abstains on missing, stale or out-of-range readings."
+- [x] 12: "hot-spot uses measured temperature when known."
+- [x] 01: "weather for Sydney 2010–13 downloaded, SHA-256 <…>."
+- [x] 02: "19 features; no-leak test passes."
+- [x] 03: "v2 trains on four quarterly folds; per-quarter q05 violation rates <…>." Code done; the rates come with the real labels (step 08), mock rates are not results.
+- [x] 04: "offset γ = <…>, τ = <…>, flagged per day max <…> vs crew <…>." Code done; the numbers come with the real labels (step 08).
+- [x] 05: "v1 and v2 side by side; skill and Jain columns; weather-missing case."
+- [x] 06: "explanations show the offset and weather factors."
+- [x] 07: "what-we-tried table v1 → v2 on the out-of-sample year."
 - [ ] 08: "final evaluation in eval/final."
-- [ ] 09: "README and data docs updated; P1 requests posted."
+- [~] 09: "README and data docs updated; P1 requests posted."
 
 Final: "P6 merged: safe-cap-qgb-v2 with weather features, quarterly folds and an online offset. Test year, scenarios A / B / B-VAR: violations <…>, export index <…>, skill vs last known <…>, Jain <…>; v1 next to it in eval/final."
