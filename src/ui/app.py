@@ -51,6 +51,10 @@ def create_app(settings: Settings | None = None, run_id: str | None = None) -> F
     def simulation():
         return FileResponse(STATIC / "simulation.html")
 
+    @app.get("/static/theme.css")
+    def theme():
+        return FileResponse(STATIC / "theme.css", media_type="text/css")
+
     @app.get("/eval/summary")
     def eval_summary():
         if not RUN_ID.fullmatch(run_id):

@@ -3,36 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Station operator screen</title>
+<title>PPC · Station operator screen</title>
+<link rel="stylesheet" href="/static/theme.css">
 <style>
-:root{--bg:#fbfbf9;--ink:#17191c;--on-ink:#fff;--muted:#656a70;--line:#e6e6e1;--line2:#c9c9c2;--soft:#f1f1ed;--ok:#2f7d5b;--rev:#c98600;--revtext:#8a5300;--bad:#b3261e;--band:#e4e9f3}
-@media (prefers-color-scheme:dark){:root{--bg:#111314;--ink:#ececea;--on-ink:#111314;--muted:#9aa0a6;--line:#262a2d;--line2:#3a3f43;--soft:#1b1e20;--ok:#4aa37e;--rev:#e0a93b;--revtext:#e0b45c;--bad:#e5645a;--band:#232c3a}}
-*{box-sizing:border-box}
-body{font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--ink);background:var(--bg);margin:0;padding:0 0 56px;line-height:1.5;font-variant-numeric:tabular-nums}
-.wrap{max-width:1200px;margin:0 auto;padding:0 28px}
-h1,h2,p{margin:0}
-.muted{color:var(--muted)}
-.sub{color:var(--muted);font-size:.85rem}
-button,input{font:inherit;color:inherit}
-input{padding:8px 10px;border:1px solid var(--line2);border-radius:8px;background:var(--bg);min-height:40px;max-width:100%}
-button{min-height:44px;padding:0 22px;border-radius:8px;border:1px solid var(--ink);background:var(--ink);color:var(--on-ink);font-weight:500;cursor:pointer}
-button.line{background:transparent;color:var(--ink);border-color:var(--line2)}
-button.text{background:transparent;border-color:transparent;color:var(--ink);padding:0 10px;min-width:44px}
-button.kill{min-height:40px;padding:0 16px;background:transparent;color:var(--bad);border-color:color-mix(in srgb,var(--bad) 40%,transparent)}
-button:disabled{opacity:.4;cursor:not-allowed}
-button:focus-visible,input:focus-visible,summary:focus-visible,a:focus-visible{outline:3px solid var(--rev);outline-offset:2px}
-header.top{border-bottom:1px solid var(--line)}
-header.top .wrap{display:flex;flex-wrap:wrap;gap:10px 20px;align-items:center;justify-content:space-between;padding-top:18px;padding-bottom:18px}
-.brand{display:flex;gap:14px;align-items:baseline;flex-wrap:wrap}
-.tools{display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:.9rem}
-.tools .simtag{color:var(--revtext);font-weight:500}
-.dot{display:inline-block;width:10px;height:10px;border-radius:99px;background:var(--line2);flex:none}
-.dot.ok{background:var(--ok)}.dot.rev{background:var(--rev)}.dot.bad{background:var(--bad)}
-details{position:relative}summary{cursor:pointer;color:var(--muted);list-style:none;padding:10px 2px}
-.pop{position:absolute;right:0;top:100%;z-index:5;background:var(--bg);border:1px solid var(--line2);border-radius:10px;padding:14px;width:min(290px,86vw);display:flex;flex-direction:column;gap:10px;box-shadow:0 10px 28px #0002}
-label{display:block;font-weight:500;font-size:.85rem;margin-bottom:3px}
-.err{color:var(--bad);font-weight:500;padding-top:14px}.err:empty{display:none}
-.hero{display:flex;flex-wrap:wrap;gap:36px 72px;padding:40px 0 32px;align-items:flex-start}
+.hero{display:flex;flex-wrap:wrap;gap:36px 72px;margin-top:28px;padding:36px 40px;border-radius:4px;background:var(--bg);color:var(--ink);align-items:flex-start}
 .hero .lead{flex:1 1 460px;min-width:0}.hero .stats{flex:1 1 300px;max-width:420px;min-width:0}
 .when{display:flex;gap:10px;align-items:center;font-size:.9rem;color:var(--muted);margin-bottom:10px}
 .hero h1{font-size:2.4rem;line-height:1.15;font-weight:500;letter-spacing:-.01em}
@@ -62,18 +36,18 @@ label{display:block;font-weight:500;font-size:.85rem;margin-bottom:3px}
 .legend{display:flex;flex-wrap:wrap;gap:4px 20px;font-size:.8rem;color:var(--muted);margin-top:10px}
 nav.tabs{display:flex;flex-wrap:wrap;margin-top:30px;border-bottom:1px solid var(--line)}
 .tab{background:none;border:0;border-bottom:2px solid transparent;border-radius:0;padding:12px 2px;margin-right:26px;color:var(--muted);font-weight:400}
-.tab[aria-selected=true]{color:var(--ink);border-bottom-color:var(--ink);font-weight:500}
+.tab[aria-selected=true]{color:var(--ink);border-bottom-color:var(--brand);font-weight:700}
 .panel{padding-top:24px}
 .two{display:flex;flex-wrap:wrap;gap:32px 56px;align-items:flex-start}
 .two>*{flex:1 1 380px;min-width:0}
-h2.h{font-size:.78rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin:0 0 12px}
+h2.h{font-size:.78rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin:0 0 12px}
 .tag{font-size:.72rem;font-weight:600;color:var(--revtext);border:1px solid color-mix(in srgb,var(--rev) 55%,transparent);border-radius:4px;padding:1px 6px;margin-left:8px;text-transform:none;letter-spacing:0}
 .hrow{width:100%;min-height:52px;text-align:left;background:transparent;color:var(--ink);border:0;border-top:1px solid var(--line);border-radius:0;padding:10px 4px;display:flex;align-items:center;gap:14px;font-weight:400}
 .hrow[aria-pressed=true]{background:var(--soft)}
 .hrow .id{width:44px;font-weight:500}.hrow .lim{width:82px;font-size:1.05rem;font-weight:500}
-.hrow .bar{flex:1;height:4px;border-radius:99px;background:var(--line);min-width:40px}.hrow .bar i{display:block;height:100%;border-radius:99px;background:var(--ink)}
+.hrow .bar{flex:1;height:4px;border-radius:99px;background:var(--line);min-width:40px}.hrow .bar i{display:block;height:100%;border-radius:99px;background:var(--brand)}
 .hrow .note{width:108px;text-align:right;font-size:.8rem;color:var(--muted)}
-.mapbox{min-height:360px;border:1px dashed var(--line2);border-radius:10px;position:relative;overflow:hidden}
+.mapbox{min-height:360px;border:1px dashed var(--line2);border-radius:4px;position:relative;overflow:hidden}
 .mapbox.live{border-style:solid;height:440px}
 .mapempty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;padding:24px}
 .mapnote{font-size:.8rem;color:var(--revtext);margin-top:8px}
@@ -82,7 +56,7 @@ ol.tree li{display:flex;gap:16px;padding-bottom:22px}
 ol.tree .rail{display:flex;flex-direction:column;align-items:center;width:22px;flex:none}
 ol.tree .mk{width:22px;height:22px;border-radius:99px;display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:700;border:1.5px solid var(--line2);background:var(--bg);color:var(--muted)}
 ol.tree .ok .mk{background:var(--ink);border-color:var(--ink);color:var(--on-ink)}
-ol.tree .warn .mk{background:var(--rev);border-color:var(--rev);color:#17191c}
+ol.tree .warn .mk{background:var(--rev);border-color:var(--rev);color:var(--on-brand)}
 ol.tree .bad .mk{background:var(--bad);border-color:var(--bad);color:#fff}
 ol.tree .now .mk{border:2px solid var(--ink);color:var(--ink)}
 ol.tree .line{flex:1;width:1px;background:var(--line2);margin-top:4px}
@@ -90,13 +64,13 @@ ol.tree li:last-child .line{display:none}
 ol.tree .body{flex:1;min-width:0}
 ol.tree .t{display:flex;justify-content:space-between;gap:16px;align-items:baseline}
 ol.tree .t b{font-weight:500}.ol-v{font-size:.9rem;color:var(--muted);text-align:right}
-ol.tree .warn .ol-v{color:var(--revtext)}ol.tree .bad .ol-v{color:var(--bad)}
+ol.tree .warn .ol-v{color:var(--revtext)}ol.tree .bad .ol-v{color:var(--badtext)}
 ol.tree .alt{font-size:.82rem;color:var(--muted)}
 ol.tree .todo .t b{color:var(--muted)}
 .opt{display:flex;gap:12px;padding:11px 0;border-top:1px solid var(--line);align-items:baseline}
 .opt .s{width:56px;font-size:1.1rem}.opt .w{flex:1}.opt .w small{display:block;color:var(--muted);font-size:.82rem}
 .opt.chosen .s,.opt.chosen b{font-weight:600}
-.drv{padding:8px 0}.drv .top{display:flex;justify-content:space-between;font-size:.9rem}.drv .bar{height:4px;background:var(--line);border-radius:99px;margin-top:6px}.drv .bar i{display:block;height:100%;border-radius:99px;background:var(--ink)}
+.drv{padding:8px 0}.drv .top{display:flex;justify-content:space-between;font-size:.9rem}.drv .bar{height:4px;background:var(--line);border-radius:99px;margin-top:6px}.drv .bar i{display:block;height:100%;border-radius:99px;background:var(--brand)}
 .stack{display:flex;flex-direction:column;gap:36px}
 table{width:100%;border-collapse:collapse;font-size:.9rem}
 th,td{text-align:left;padding:9px 8px 9px 0;border-top:1px solid var(--line);vertical-align:top}
@@ -107,7 +81,7 @@ th{color:var(--muted);font-weight:500;font-size:.8rem}
 .trace{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.82rem}
 .trace div{padding:5px 0;border-top:1px solid var(--line);display:flex;gap:14px}
 .trace .o{color:var(--muted);width:52px;flex:none}.trace .s{width:64px;flex:none;color:var(--muted)}
-.empty{border:1px dashed var(--line2);border-radius:10px;padding:14px;font-size:.9rem;color:var(--muted)}
+.empty{border:1px dashed var(--line2);border-radius:4px;padding:14px;font-size:.9rem;color:var(--muted)}
 footer{margin-top:44px;padding-top:16px;border-top:1px solid var(--line);font-size:.82rem;color:var(--muted)}
 a{color:var(--ink)}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
@@ -116,7 +90,7 @@ a{color:var(--ink)}
 <body>
 <header class="top">
   <div class="wrap">
-    <div class="brand"><b id="stationName" style="font-size:1.05rem">Station</b><span class="muted" id="station" style="font-size:.9rem">Loading…</span></div>
+    <div class="brand"><span class="wordmark" aria-label="PPC">ppc</span><b id="stationName" style="font-size:1.05rem">Station</b><span class="muted" id="station" style="font-size:.9rem">Loading…</span></div>
     <div class="tools">
       <span class="simtag" title="The grid is a model, not PPC's network, and nothing here controls real inverters."><i class="dot rev"></i> Simulated data</span>
       <span class="sub" id="killState">Kill switch …</span>
@@ -135,7 +109,7 @@ a{color:var(--ink)}
 <div class="wrap">
   <p class="err" id="err" role="alert"></p>
 
-  <section class="hero" aria-live="polite">
+  <section class="hero on-navy" aria-live="polite">
     <div class="lead">
       <div class="when"><i class="dot" id="stateDot"></i><span id="verdictWhen"></span></div>
       <h1 id="verdictHead">Loading…</h1>
@@ -314,7 +288,7 @@ async function loadKill(t, my) {
   if (my !== gen) return;
   state.kill = !!k.on;
   $("killState").textContent = k.on ? "Kill switch ON" : "Kill switch off";
-  $("killState").style.color = k.on ? "var(--bad)" : "";
+  $("killState").style.color = k.on ? "var(--badtext)" : "";
   $("killState").style.fontWeight = k.on ? "600" : "";
   $("killToggle").textContent = k.on ? "Turn off" : "Kill switch";
   $("killToggle").className = k.on ? "line" : "kill";
@@ -680,7 +654,7 @@ async function loadComparison() {
   const scenarios = s.scenarios || {};
   note.className = "sub";
   note.textContent = (s.mock ? "MOCK, NOT A RESULT. " : "") + "Run " + s.run_id + (s.git_sha ? " · commit " + String(s.git_sha).slice(0, 8) : "") + ". Numbers come from the evaluation output, not from this page.";
-  if (s.mock) { note.style.color = "var(--bad)"; note.style.fontWeight = "600"; }
+  if (s.mock) { note.style.color = "var(--badtext)"; note.style.fontWeight = "600"; }
   const head = table.tHead, body = table.tBodies[0]; head.replaceChildren(); body.replaceChildren();
   const hr = el("tr"); hr.append(el("th", "Station · policy")); COLS.forEach(c => hr.append(el("th", c[1]))); head.append(hr);
   Object.keys(scenarios).forEach(k => {
@@ -784,7 +758,6 @@ const shiftDay = n => { const d = new Date($("date").value + "T00:00:00Z"); if (
 $("prevDay").onclick = () => shiftDay(-1);
 $("nextDay").onclick = () => shiftDay(1);
 $("today").onclick = () => { const n = new Date(); $("date").value = n.toISOString().slice(0, 10); slot = n.getUTCHours() * 2 + (n.getUTCMinutes() >= 30 ? 1 : 0); setBusy(true); refresh(); };
-matchMedia("(prefers-color-scheme: dark)").addEventListener("change", drawChart);
 
 $("date").value = new Date().toISOString().slice(0, 10);
 showTab(location.hash.slice(1));

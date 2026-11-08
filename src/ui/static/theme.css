@@ -1,0 +1,45 @@
+/* PPC Group visual identity: tokens and base components shared by the operator and simulation pages. */
+:root{
+  --bg:#fff;--soft:#f2f2f2;--ink:#000f1e;--on-ink:#fff;--muted:#67757c;
+  --line:#dddfe0;--line2:#c5c9cc;
+  --brand:#00a3e0;--brand-text:#0064b4;--on-brand:#000f1e;
+  --ok:#0f872d;--rev:#f06e00;--revtext:#b24f00;--bad:#fa4616;--badtext:#c2370c;--band:#a2d3f3;
+  --font:"Open Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+*{box-sizing:border-box}
+body{font-family:var(--font);color:var(--ink);background:var(--bg);margin:0;padding:0 0 56px;line-height:1.5;font-variant-numeric:tabular-nums}
+.wrap{max-width:1200px;margin:0 auto;padding:0 28px}
+h1,h2,p{margin:0}
+.muted{color:var(--muted)}
+.sub{color:var(--muted);font-size:.85rem}
+a{color:var(--brand-text)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* Dark navy surfaces re-point the tokens so everything inside reads correctly. */
+header.top,.on-navy{--bg:#000f1e;--soft:#0b2236;--ink:#fff;--on-ink:#000f1e;--muted:#c5c9cc;--line:#1c3246;--line2:#3b5266;--revtext:#ff9a4d;--badtext:#ff8a62;--brand-text:#62c3e8}
+
+button,input,select{font:inherit;color:inherit}
+input,select{padding:8px 10px;border:1px solid var(--line2);border-radius:4px;background:var(--bg);min-height:40px;max-width:100%}
+button{min-height:44px;padding:0 24px;border-radius:4px;border:1px solid var(--brand);background:var(--brand);color:var(--on-brand);font-weight:700;font-size:.875rem;cursor:pointer}
+button:hover:not(:disabled){background:#31b3e4;border-color:#31b3e4}
+button.line{background:transparent;color:var(--ink);border-color:var(--line2)}
+button.line:hover:not(:disabled){background:var(--soft);border-color:var(--ink)}
+button.text{background:transparent;border-color:transparent;color:var(--ink);padding:0 10px;min-width:44px;font-weight:600}
+button.kill{min-height:40px;padding:0 16px;background:transparent;color:var(--badtext);border-color:var(--bad)}
+button.kill:hover:not(:disabled){background:var(--bad);border-color:var(--bad);color:#fff}
+button:disabled{opacity:.4;cursor:not-allowed}
+button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible,a:focus-visible{outline:3px solid var(--brand);outline-offset:2px}
+label{display:block;font-weight:600;font-size:.85rem;margin-bottom:3px}
+
+header.top{background:var(--bg);color:var(--ink);border-bottom:3px solid var(--brand)}
+header.top .wrap{display:flex;flex-wrap:wrap;gap:10px 20px;align-items:center;justify-content:space-between;padding-top:16px;padding-bottom:16px}
+.wordmark{font-weight:800;font-size:1.6rem;letter-spacing:-.04em;line-height:1;text-transform:lowercase}
+.brand{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.tools{display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:.9rem}
+.tools .simtag,.simtag{color:var(--revtext);font-weight:600}
+.dot{display:inline-block;width:10px;height:10px;border-radius:99px;background:var(--line2);flex:none}
+.dot.ok{background:var(--ok)}.dot.rev{background:var(--rev)}.dot.bad{background:var(--bad)}
+details{position:relative}summary{cursor:pointer;color:var(--muted);list-style:none;padding:10px 2px}
+.pop{position:absolute;right:0;top:100%;z-index:5;background:var(--bg);border:1px solid var(--line2);border-radius:4px;padding:14px;width:min(290px,86vw);display:flex;flex-direction:column;gap:10px;box-shadow:0 10px 28px #0004}
+.err{color:var(--badtext);font-weight:600;padding-top:14px}.err:empty{display:none}
+.card{background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:20px}
