@@ -125,7 +125,7 @@ State at `99fee37` (2026-11-07), all merged by P2:
 
 Missing: **real labels** (`DATA_DIR/labels/` does not exist; only exploration files in `data/prepared/`). Local data folders also hold `data/ausgrid`, `data/simbench`, a GoiEner sample in `data/goiener` (not used) and empty `data/ukpn_*` folders.
 
-Label generator today (`src/grid/labels.py`, P3): one Ausgrid CSV per run (`--source`, `--start`, `--days`, `--transformer-kva`, `--pv-scale`, `--workers`); daylight 06:00–20:00 Sydney with PV > 0; it builds the **synthetic three-feeder station** by default (SimBench is optional through `build_grid({"topology": "simbench", ...})`) and names the station `PT-synthetic-<kVA>kVA`.
+Label generator today (`src/grid/labels.py`, P3): one Ausgrid CSV per run (`--source`, `--scenario`, `--output`, `--start`, `--days`, `--transformer-kva`, `--pv-scale`, `--workers`); daylight 06:00–20:00 Sydney with PV > 0; it builds the **synthetic three-feeder station** by default (SimBench is optional through `build_grid({"topology": "simbench", ...})`), names the station `PT-<scenario>` and writes `labels.parquet` in the schema of `src/ml/labels.py` plus `station_houses.parquet`, by default into `DATA_DIR/labels/<scenario>/`; later runs append and keep the same houses.
 
 ### Since then (main at `76be12f`, 2026-11-08)
 | Change | What it means for P6 |

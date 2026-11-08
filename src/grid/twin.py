@@ -244,7 +244,7 @@ def _allowed_limit(info, share):
     return limit if cap is None else min(limit, float(cap))
 
 
-def _share_is_safe(grid, injections, share):
+def _state_at(grid, injections, share):
     data = {
         **injections,
         "houses": [
@@ -252,10 +252,39 @@ def _share_is_safe(grid, injections, share):
             for h in injections["houses"]
         ],
     }
-    state = solve(grid, data)
+    return solve(grid, data)
+
+
+def _share_is_safe(grid, injections, share):
+    state = _state_at(grid, injections, share)
     if not state["converged"]:
         return None
     return not limit_violations(grid, state)
+
+
+# limit_violations message prefix -> the ``binding`` value of the label schema
+_BINDING = (("Voltage", "voltage"), ("Line", "line"), ("Transformer", "trafo"))
+
+
+def binding_limit(grid, injections, share, tolerance=0.001):
+    """The limit that stops the share from going higher: voltage, line, trafo or none.
+
+    ``"none"`` when the share is 1 (nothing binds). ``None`` when the share is unknown
+    or nothing is violated just above it (the search assumes a higher share is never
+    safer). Voltage wins when several limits are violated at once.
+    """
+    if share is None:
+        return None
+    if share >= 1.0:
+        return "none"
+    state = _state_at(grid, injections, min(share + tolerance, 1.0))
+    if not state["converged"]:
+        return None
+    violations = limit_violations(grid, state)
+    for prefix, name in _BINDING:
+        if any(v.startswith(prefix) for v in violations):
+            return name
+    return None
 
 
 def safe_share(grid, injections, scan_steps=20, tolerance=0.001):

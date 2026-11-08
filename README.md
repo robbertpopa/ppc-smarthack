@@ -82,7 +82,18 @@ This caches 400 answers under `DATA_DIR/raw/nasa_power/hourly/` (safe to rerun) 
 ```bash
 python -m src.ml.labels mock --scenario A
 ```
-This writes mock labels with the real schema to `DATA_DIR/labels/A/`. The scenarios are `A`, `B` and `B-VAR`. Real labels come from the power flow (`python -m src.grid.labels`), but its output does not yet match the schema the training reads. Until it does, training runs on mock labels and its numbers are not results.
+This writes mock labels with the real schema to `DATA_DIR/labels/A/`. The scenarios are `A`, `B` and `B-VAR`. Real labels come from the power flow, in the same schema, with `station_houses.parquet` next to them. Without `--output` they go to `DATA_DIR/labels/<scenario>/`; a run into a folder that holds mock labels stops, so remove those first. Each run reads one Ausgrid file and appends to the folder: an interval computed again replaces the earlier one, and later runs keep the same houses and grid settings. Two training years take two runs, the later file first: customer 27 has no controlled-load rows after 2012-01-12, so the houses picked from 2010–11 are not all complete in 2011–12, while the ones picked from 2011–12 are complete in 2010–11.
+
+```bash
+python -m src.grid.labels --source "data/raw/ausgrid/Solar home 2011-2012.csv" --scenario A --start 2011-07-01 --days 366 --workers 8
+```
+```bash
+python -m src.grid.labels --source "data/raw/ausgrid/Solar home 2010-2011.csv" --scenario A --start 2010-07-01 --days 365 --workers 8
+```
+
+Only scenario `A` has agreed grid settings (400 kVA, PV scale 1); `B` needs `--transformer-kva` and `--pv-scale`, and `B-VAR` is not supported yet. `python -m src.grid.audit_labels --source FILE --labels DATA_DIR/labels/A/labels.parquet` re-solves sampled boundaries of the days that file holds.
+
+Until real labels cover training and validation, training runs on mock labels and its numbers are not results.
 
 ### 7. Train
 ```bash
