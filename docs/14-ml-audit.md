@@ -1,6 +1,6 @@
 # ML pipeline audit: open findings
 
-A critical audit of the data, labels, training and evaluation of the safe-cap model. It was first written on 2026-11-07 against `16f8d30`. It was re-checked on 2026-11-08 against `main` at `eabaf20` and the open P6 pull requests. Only what is still open is described in full; what has been fixed since is in the table at the end.
+A critical audit of the data, labels, training and evaluation of the safe-cap model. It was first written on 2026-11-07 against `16f8d30`. It was re-checked on 2026-11-08 against `main` at `eabaf20`, and the status table was updated after the P6 pull requests were merged (`main` at `550da39`). Only what is still open is described in full; what has been fixed since is in the table at the end.
 
 Every finding names the code it rests on as `file:line` on `eabaf20`. **Confirmed** means it was measured or reproduced. **Suspected** means it was read in the code but not measured.
 
@@ -26,7 +26,7 @@ The code is careful about time: features use only what is known at decision time
 
 **M3: Daylight-only labels make the model abstain every morning.** Confirmed.
 - `src/grid/labels.py:37` keeps 06:00–20:00 local with PV > 0, and the mock keeps sun above the horizon (`src/ml/labels.py:188`). The features take `net_*` from the label file (`src/ml/features.py:85`), so the first hour after sunrise never has `net_now`.
-- 12.3 % of rows with a target have no `net_now`, and 14.4 % abstain on the input checks alone (`src/ml/abstention.py:156`). This also shows live once #37 runs the checks in the agent. The trees learn "NaN means morning", while a real meter reports net at night too.
+- 12.3 % of rows with a target have no `net_now`, and 14.4 % abstain on the input checks alone (`src/ml/abstention.py:156`). This also shows live, now that #37 runs the checks in the agent. The trees learn "NaN means morning", while a real meter reports net at night too.
 - Fix: build `net_*` from `profiles.parquet` over all 48 intervals, so that only `share_last` can be missing. On the first quarter of 2011 the prototype brings missing `net_now` from 11.6 % to 0.1 %, and input-check abstention from 11.6 % to 3.9 %.
 
 **M4: The model is most confident where it is most often wrong, at the edges of the day.** Confirmed on mock labels, suspected on real ones.
@@ -35,12 +35,12 @@ The code is careful about time: features use only what is known at decision time
 
 **M1: The validation period is one season.** Confirmed.
 - `src/ml/split.py:14-15`: hyperparameters and the abstention threshold are chosen on April–June 2012 only, and the test is a full year.
-- Fix: P6 step 03, with quarterly folds; it is in review.
+- Fix: P6 step 03 (quarterly folds) is merged through #38 and #40; it needs real labels to show its effect.
 
 **S1: Two Ausgrid readers clean the data differently.** Confirmed.
 - `src/grid/ausgrid.py:6` reads the raw CSV with no cleaning. `src/ml/ausgrid.py:27` caps generation at 1.2 × kWp and keeps the `Row Quality` flag. In 2011-12, 1,111 readings that `profiles.parquet` nulls out (for example 2.37 kW on a 1.92 kWp house) still go into the power flow, so labels and exported-energy numbers come from different data.
 - The grid code also names houses `3` where the ML code uses `AG-0003` (#31 maps them).
-- Fix: have the label generator read `profiles.parquet`, as a separate PR after #31.
+- Fix: have the label generator read `profiles.parquet`, as a separate PR.
 
 **S2: `src.ml` and `src.eval` import each other.** Confirmed.
 - `src/ml/train.py:23`, `src/ml/abstention.py:22` and `src/ml/baselines.py:21` import `src.eval.metrics`, and `src/eval/error_analysis.py:23` imports `src.ml`. `src/ml/predict.py:88` imports `src.ml.train`, so serving a forecast loads the training code.
@@ -86,16 +86,18 @@ The code is careful about time: features use only what is known at decision time
 - On `main`, `src/ml/train.py:210` writes the top-level `abstention` key that `src/ml/abstention.py:197` reads. A model saved by an older commit (`a3d8176`) lacks it, and then the agent abstains on every interval with "abstention threshold lookup failed".
 - Retraining fixes it. A `schema_version` in `metadata.json`, checked on load, would name the cause instead.
 
-## Fixed or in review since the first audit
+## Fixed since the first audit
 
 | Finding | Status |
 |---|---|
-| C2: the grid label schema was rejected by `src.ml.labels.validate` | in review, #31 |
-| C3: the label generator defaulted to `--start 2013-01-01` | in review, #31 (start required, test year needs `--final-eval`) |
-| M6: houses changed with the run window | in review, #31 (later runs keep the station's houses) |
-| S4: no test between the grid writer and the ML reader | in review, #31 (`labels_io.load` on the generator output) |
-| M5: no weather in the model | weather loader merged (#36); features in review (#39); not yet passed to training or the agent |
-| Live agent ignored the input checks | in review, #37 |
+| C2: the grid label schema was rejected by `src.ml.labels.validate` | merged, #31 |
+| C3: the label generator defaulted to `--start 2013-01-01` | merged, #31 (start required, test year needs `--final-eval`) |
+| M6: houses changed with the run window | merged, #31 (later runs keep the station's houses) |
+| S4: no test between the grid writer and the ML reader | merged, #31 (`labels_io.load` on the generator output) |
+| M5: no weather in the model | merged: weather loader (#36), weather features (#39), transformer ambient from weather (#40). Training does not pass weather to the features yet |
+| Live agent ignored the input checks | merged, #37 and #41 (a broken check fails closed) |
+| M1: one-season validation | code merged, #38 and #40 (quarterly folds) |
+| M4: overconfident at the edges of the day | partly: online offset merged in #40 (P6 step 04); not measured on real labels |
 | S3: Sydney hardcoded in `src/ml/sun.py:11` and `src/ml/config.py:12` | accepted: the data and the station are in Sydney; it matters only for a station elsewhere |
 | S5: two definitions of a daylight interval | negligible: 56 intervals, 0.001 % of PV energy (customer 1: 0.1 of 4,866 kWh outside 06–20) |
 
