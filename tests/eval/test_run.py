@@ -280,7 +280,7 @@ def test_pricing_flag_adds_the_price_block(env, first):
     prices.save(year, prices.prices_path())
     summary = eval_run.run(["A"], "priced", allow_mock=True, grid=FAST, pricing=True)
     block = next(iter(summary["scenarios"].values()))["pricing"]
-    assert len(block["rows"]) == 4 and len(block["sensitivity"]) == 6
+    assert len(block["rows"]) == 6 and len(block["sensitivity"]) == 6
     assert list(eval_run.eval_dir("priced").glob("pricing_*.md"))
     plain = eval_run.run(["A"], "plain", allow_mock=True, grid=FAST)
     assert "pricing" not in next(iter(plain["scenarios"].values()))

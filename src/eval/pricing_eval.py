@@ -11,13 +11,13 @@ from src.eval.metrics import STEP_HOURS
 from src.pricing import imbalance as imbalance_model
 from src.pricing import prices, solar
 from src.pricing.battery import battery_houses, dispatch
-from src.pricing.config import PricingConfig
+from src.pricing.config import MAXCONTROL_TG_EUR_MWH, PricingConfig
 from src.pricing.settlement import settle
 from src.pricing.tariff import hourly_price_series
 
 FEES = (0, 10, 20, 30, 40, 50)  # EUR/MWh, for the sensitivity table
 SUMMER_MONTHS = (12, 1, 2)  # Sydney summer, the sunniest part of the Ausgrid year
-TITLE = "Prosumer revenue and PPC margin: regulated price versus hourly price with solar adder"
+TITLE = "Prosumer revenue and PPC margin: older contract, MaxControl and the proposed price"
 SOURCE_NOTE = "Prices: hourly day-ahead (PZU), Romania, via euenergy.live (CC-BY-4.0)."
 
 
@@ -149,6 +149,10 @@ def compute(
     none = adder * 0.0
     plain, shifted = _group_exports(ctx, data, cfg.fee_eur_mwh)
     today = settle(plain, wholesale, monthly, none, cfg)
+    tg_cfg = dataclasses.replace(cfg, fee_eur_mwh=MAXCONTROL_TG_EUR_MWH)
+    _, tg_shifted = _group_exports(ctx, data, tg_cfg.fee_eur_mwh)
+    maxcontrol = settle(plain, wholesale, monthly, none, tg_cfg)
+    maxcontrol_battery = settle(tg_shifted, wholesale, monthly, none, tg_cfg)
     hourly_only = settle(plain, wholesale, monthly, none, cfg)
     with_adder = settle(plain, wholesale, monthly, adder, cfg)
     proposed = settle(shifted, wholesale, monthly, adder, cfg)
@@ -158,28 +162,42 @@ def compute(
     }
     rows = [
         _row(
-            "Today: regulated monthly average",
+            "Older contract today: regulated monthly average",
             today["exported_kwh"],
             today["regulated_eur"],
             today["value_eur"],
             None,
         ),
         _row(
-            "Hourly price only (no adder, no battery)",
+            "PPC MaxControl today: 15-minute spot minus TG, no battery response",
+            maxcontrol["exported_kwh"],
+            maxcontrol["hourly_eur"],
+            maxcontrol["value_eur"],
+            base,
+        ),
+        _row(
+            "PPC MaxControl today with battery response",
+            maxcontrol_battery["exported_kwh"],
+            maxcontrol_battery["hourly_eur"],
+            maxcontrol_battery["value_eur"],
+            base,
+        ),
+        _row(
+            "Proposed hourly price only (fee, no adder, no battery)",
             hourly_only["exported_kwh"],
             hourly_only["hourly_eur"],
             hourly_only["value_eur"],
             base,
         ),
         _row(
-            "Hourly price + solar adder, no battery",
+            "Proposed hourly price + solar adder, no battery",
             with_adder["exported_kwh"],
             with_adder["paid_eur"],
             with_adder["value_eur"],
             base,
         ),
         _row(
-            "Hourly price + solar adder + battery response (proposed)",
+            "Proposed hourly price + solar adder + battery response",
             proposed["exported_kwh"],
             proposed["paid_eur"],
             proposed["value_eur"],

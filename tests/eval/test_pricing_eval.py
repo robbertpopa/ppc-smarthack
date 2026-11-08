@@ -41,10 +41,15 @@ def test_block_shape_and_signs(table):
     block = pricing_eval.compute(ctx, result, table)
     assert block["battery_houses"] == ["H1"]  # ceil(0.3 * 3) = 1, first in sorted order
     names = [r["name"] for r in block["rows"]]
-    assert names[0] == "Today: regulated monthly average" and "proposed" in names[-1]
-    today, hourly, adder, proposed = block["rows"]
+    assert names[0].startswith("Older contract today") and names[-1].startswith("Proposed")
+    today, maxcontrol, maxcontrol_battery, hourly, adder, proposed = block["rows"]
     assert today["prosumer_vs_today_pct"] == 0.0 and today["ppc_improvement_eur"] == 0.0
     assert today["ppc_margin_eur"] < 0  # PPC pays the monthly average for cheap midday energy
+    # MaxControl already pays the spot price: PPC's margin on the energy is about zero, and a
+    # battery lets the prosumer earn the evening price
+    assert abs(maxcontrol["ppc_margin_eur"]) < abs(today["ppc_margin_eur"]) / 10
+    assert maxcontrol["prosumer_eur"] < today["prosumer_eur"]
+    assert maxcontrol_battery["prosumer_eur"] > maxcontrol["prosumer_eur"]
     assert hourly["prosumer_eur"] < today["prosumer_eur"]  # no adder: the prosumer loses
     assert adder["prosumer_eur"] > hourly["prosumer_eur"]
     assert proposed["prosumer_eur"] > adder["prosumer_eur"]  # the battery adds revenue
@@ -71,7 +76,7 @@ def test_markdown_is_written(tmp_path, table):
     pricing_eval.write(tmp_path, "PT-A", block, "MOCK, NOT A RESULT")
     text = (tmp_path / "pricing_PT-A.md").read_text()
     assert text.startswith("# MOCK, NOT A RESULT") and "euenergy.live" in text
-    assert "battery response (proposed)" in text and "Fee sensitivity" in text
+    assert "MaxControl" in text and "battery response" in text and "Fee sensitivity" in text
 
 
 def test_summer_day_chart_is_written(tmp_path, table):

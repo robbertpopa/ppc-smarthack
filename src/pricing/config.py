@@ -1,5 +1,9 @@
 from dataclasses import dataclass
 
+# The grid injection tariff (TG) that PPC's MaxControl offer deducts from the 15-minute spot
+# price it pays for injected energy: 0.00363 lei/kWh, about 0.7 EUR/MWh at 5.2 lei/EUR.
+MAXCONTROL_TG_EUR_MWH = 0.7
+
 
 @dataclass(frozen=True)
 class PricingConfig:
