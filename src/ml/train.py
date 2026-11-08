@@ -63,9 +63,12 @@ def predict_quantiles(models: dict[float, object], X) -> np.ndarray:
     return rearrange(raw)
 
 
-def training_rows(labels: pd.DataFrame) -> pd.DataFrame:
-    """Daylight rows with a known target, with ``interval_start`` set to the target time."""
-    frame = features.build_frame(labels)
+def training_rows(labels: pd.DataFrame, weather: pd.DataFrame | None = None) -> pd.DataFrame:
+    """Daylight rows with a known target, with ``interval_start`` set to the target time.
+
+    ``weather`` (``src.ml.weather.load``) fills the weather features; without it they are NaN.
+    """
+    frame = features.build_frame(labels, weather=weather)
     frame["interval_start"] = frame["target_start"]
     keep = daylight(frame) & frame["safe_share"].notna().to_numpy()
     return frame[keep].reset_index(drop=True)
@@ -115,8 +118,9 @@ def train(
         raise ValueError(
             f"need training and validation rows, got {len(train_rows)} and {len(val_rows)}"
         )
-    X_train, y_train = train_rows[features.FEATURES], train_rows["safe_share"]
-    X_val, y_val = val_rows[features.FEATURES], val_rows["safe_share"].to_numpy()
+    columns = features.usable(train_rows)
+    X_train, y_train = train_rows[columns], train_rows["safe_share"]
+    X_val, y_val = val_rows[columns], val_rows["safe_share"].to_numpy()
 
     search = []
     for params in grid:
@@ -199,7 +203,7 @@ def train(
                 str(val_rows["target_start"].min()),
                 str(val_rows["target_start"].max()),
             ],
-            "features": features.FEATURES,
+            "features": columns,
             "quantiles": list(QUANTILES),
             "seed": seed,
             "hyperparameters": params,

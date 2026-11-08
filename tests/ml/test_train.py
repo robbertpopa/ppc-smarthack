@@ -33,11 +33,11 @@ def test_rearrange_sorts_and_clips():
 
 
 def test_same_seed_gives_identical_predictions(env, report):
-    first, _ = model_io.load(train.MODEL_VERSION, "PT-A")
+    first, meta = model_io.load(train.MODEL_VERSION, "PT-A")
     train.train("A", grid=FAST)
     second, _ = model_io.load(train.MODEL_VERSION, "PT-A")
     rows = train.training_rows(labels.load("A"))
-    X = rows[train.features.FEATURES]
+    X = rows[meta["features"]]
     assert np.array_equal(train.predict_quantiles(first, X), train.predict_quantiles(second, X))
 
 
@@ -64,7 +64,9 @@ def test_metadata_has_every_field(env, report):
     for key in required:
         assert key in meta, key
     assert meta["is_mock_labels"] is True
-    assert meta["features"] == train.features.FEATURES
+    # trained without weather: every feature but the three weather ones, in FEATURES order
+    expected = [f for f in train.features.FEATURES if f not in train.features.WEATHER_FEATURES]
+    assert meta["features"] == expected
     assert len(meta["labels_sha256"]) == 64
     json.dumps(meta)  # it is plain JSON
 

@@ -36,11 +36,7 @@ def clear_cache() -> None:
 def _load(version: str, pt_id: str):
     def loader(folder):
         models, meta = model_io.load_dir(folder)
-        if meta["features"] != feature_set.FEATURES:
-            raise ValueError(
-                f"model {version}/{pt_id} was trained on other features than the code now builds; "
-                "retrain it"
-            )
+        feature_set.check_known(meta["features"], f"model {version}/{pt_id}")
         return models, meta
 
     return model_io.cached("safe-cap", model_io.model_dir(version, pt_id), loader)
@@ -103,8 +99,9 @@ def predict(features: dict, horizon_min: int = SAFE_CAP_HORIZON_MIN) -> Forecast
 
     models, meta = _load(model_version(), pt_id)
     pv_load = _pv_load(features)
-    row = [features.get(name) for name in feature_set.FEATURES]  # always in FEATURES order
-    X = pd.DataFrame([row], columns=feature_set.FEATURES, dtype=float)  # None becomes NaN
+    columns = meta["features"]  # the model's own features, in its training order
+    row = [features.get(name) for name in columns]
+    X = pd.DataFrame([row], columns=columns, dtype=float)  # None becomes NaN
     q = predict_quantiles(models, X)[0]
     shares = {f"q{round(p * 100):02d}": float(v) for p, v in zip(QUANTILES, q, strict=True)}
     return Forecast(

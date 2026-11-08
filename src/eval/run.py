@@ -25,7 +25,7 @@ import pandas as pd
 
 from src.eval import table
 from src.eval.metrics import FIXED_SHARE, evaluate, load_profiles, surplus_kw
-from src.ml import abstention, baselines, calibration, features, model_io, train
+from src.ml import abstention, baselines, calibration, model_io, train
 from src.ml import labels as labels_io
 from src.ml.config import SYDNEY, artifact_uri, profiles_path, violation_target
 from src.ml.split import TEST_START, daylight, split
@@ -157,7 +157,7 @@ def score_model(ctx: dict, labels: pd.DataFrame) -> dict:
     start = pd.Timestamp(TEST_START).tz_localize(SYDNEY).tz_convert("UTC") - LOOK_BACK
     labels = labels[labels["interval_start"] >= start]
     rows = split(train.training_rows(labels))["test"]
-    X = rows[features.FEATURES]
+    X = rows[ctx["meta"]["features"]]
     pred = train.predict_quantiles(ctx["models"], X)
     index = pd.DatetimeIndex(rows["target_start"])
     q05 = pd.Series(pred[:, 0], index=index)

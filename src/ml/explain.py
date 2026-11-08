@@ -23,7 +23,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from src.ml import features as feature_set
 from src.ml import model_io
 from src.ml.config import SYDNEY
 
@@ -42,6 +41,11 @@ LABELS: dict[str, str] = {
     "doy_sin": "season (sine)",
     "doy_cos": "season (cosine)",
     "is_weekend": "weekend",
+    "clearsky_T": "clear-sky sunlight at the target time (kW per square metre)",
+    "kt_now": "how clear the sky is now (measured over clear-sky sunlight)",
+    "kt_lag_1": "how clear the sky was an hour earlier",
+    "t2m_now": "air temperature now (degrees C)",
+    "net_over_clearsky": "net load now against clear-sky sunlight",
 }
 TOP_FACTORS = 3
 SIMILAR = 5
@@ -82,7 +86,7 @@ def build_artifacts(models: dict, train_rows: pd.DataFrame, val_rows: pd.DataFra
     """Everything ``explain`` needs besides the models; written next to them by ``save``."""
     from src.ml.train import predict_quantiles
 
-    names = feature_set.FEATURES
+    names = _names(models)
     importance = global_importance_of(models[0.05], val_rows[names], val_rows["safe_share"], seed)
     slots = _slot(val_rows["target_start"]).to_numpy()
     reference = {
@@ -147,9 +151,14 @@ def _is_missing(value) -> bool:
     return value is None or (isinstance(value, float) and np.isnan(value))
 
 
+def _names(models: dict) -> list[str]:
+    """The features the models were trained on, in their order (set by ``fit``)."""
+    return list(models[0.05].feature_names_in_)
+
+
 def explain_with(models: dict, art: dict, feats: dict) -> dict:
     """Top factors and similar cases for one decision (pure: no disk, no clock)."""
-    names = feature_set.FEATURES
+    names = _names(models)
     target = pd.Timestamp(feats["target_start"]).tz_convert("UTC")
     decision = pd.Timestamp(feats["decision_time"]).tz_convert("UTC")
     values = {f: (None if _is_missing(feats.get(f)) else float(feats[f])) for f in names}
@@ -176,12 +185,11 @@ def explain_with(models: dict, art: dict, feats: dict) -> dict:
         "figures": figures,
         "missing": missing,
         "q05": actual,
-        "similar": _similar(art, values, decision),
+        "similar": _similar(art, values, decision, names),
     }
 
 
-def _similar(art: dict, values: dict, decision: pd.Timestamp) -> list[dict]:
-    names = feature_set.FEATURES
+def _similar(art: dict, values: dict, decision: pd.Timestamp, names: list[str]) -> list[dict]:
     index = art["index"]
     # only cases whose outcome was known at the decision time (never from the future)
     known = index["target_start"] + STEP <= decision

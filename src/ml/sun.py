@@ -49,3 +49,18 @@ def solar_elevation(ts, lat: float = SYDNEY_LAT, lon: float = SYDNEY_LON):
     cos_zenith = np.sin(lat_r) * np.sin(decl) + np.cos(lat_r) * np.cos(decl) * np.cos(hour_angle)
     elevation = 90 - np.degrees(np.arccos(np.clip(cos_zenith, -1, 1)))
     return float(elevation[0]) if scalar else elevation
+
+
+def clearsky_ghi(ts, lat: float = SYDNEY_LAT, lon: float = SYDNEY_LON):
+    """Clear-sky sunlight on a horizontal surface in W/m^2 (Haurwitz model), 0 at night.
+
+    ``1098 * cos z * exp(-0.057 / cos z)`` with ``cos z = sin(elevation)``. Like
+    ``solar_elevation`` it depends on time alone, so it never leaks the future. It is the
+    sky's ceiling: measured sunlight divided by it gives how clear the sky is.
+    """
+    elevation = solar_elevation(ts, lat, lon)
+    cos_z = np.sin(np.radians(np.asarray(elevation, dtype=float)))
+    up = cos_z > 0
+    safe = np.where(up, cos_z, 1.0)
+    ghi = np.where(up, 1098.0 * safe * np.exp(-0.057 / safe), 0.0)
+    return float(ghi) if np.ndim(ts) == 0 else ghi
