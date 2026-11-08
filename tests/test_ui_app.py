@@ -234,3 +234,11 @@ class UiAppTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PricesTabTests(unittest.TestCase):
+    def test_screen_has_the_prices_tab_and_panel(self):
+        html = TestClient(create_app(Settings())).get("/").text
+        for needle in ('id="tab-prices"', 'id="p-prices"', 'id="priceChart"', 'id="rev"'):
+            self.assertIn(needle, html)
+        self.assertIn('"compare", "prices"]', html)
