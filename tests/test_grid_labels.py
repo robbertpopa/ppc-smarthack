@@ -1,7 +1,9 @@
+import os
 import tempfile
 import unittest
 from importlib.util import find_spec
 from pathlib import Path
+from unittest import mock
 
 if find_spec("pandapower") is None or find_spec("pyarrow") is None:
     raise unittest.SkipTest("label tests require the simulation and grid-tools extras")
@@ -10,6 +12,7 @@ import pandas as pd  # noqa: E402
 
 from src.grid.ausgrid import day_profiles, half_hour_columns, read_period, select_households  # noqa: E402
 from src.grid.labels import generate  # noqa: E402
+from src.ml import labels as labels_io  # noqa: E402
 
 SLOTS = [f"{i // 2}:{30 * (i % 2):02d}" for i in range(48)]
 
@@ -69,22 +72,72 @@ class LabelTests(unittest.TestCase):
 
     def test_generate_uses_daylight_window_and_utc_times(self):
         write_csv(self.source)
-        output = Path(self.directory.name) / "labels.parquet"
+        output = Path(self.directory.name) / "A"
         generate(self.source, output, "2013-01-01", 1)
-        labels = pd.read_parquet(output)
+        labels = pd.read_parquet(output / "labels.parquet")
         self.assertEqual(len(labels), 16)
-        self.assertEqual(labels.interval_start.iloc[0], "2012-12-31T21:00:00Z")
-        self.assertEqual(labels.interval_start.iloc[-1], "2013-01-01T04:30:00Z")
-        self.assertTrue((labels.safe_cap_share == 1.0).all())
+        self.assertEqual(labels.interval_start.iloc[0], pd.Timestamp("2012-12-31T21:00:00Z"))
+        self.assertEqual(labels.interval_start.iloc[-1], pd.Timestamp("2013-01-01T04:30:00Z"))
+        self.assertTrue((labels.safe_share == 1.0).all())
+        self.assertTrue((labels.binding == "none").all())
         self.assertTrue((labels.provenance == "simulated").all())
+
+    def test_output_is_what_the_ml_side_loads(self):
+        write_csv(self.source, controlled={5: {"01/01/2013", "02/01/2013"}})
+        data = Path(self.directory.name) / "data"
+        generate(self.source, data / "labels" / "B", "2013-01-01", 1, scenario="B")
+        with mock.patch.dict(os.environ, {"DATA_DIR": str(data)}):
+            labels = labels_io.load("B")
+            houses = labels_io.load_station_houses("B")
+        self.assertEqual(list(labels.columns), list(labels_io.COLUMNS))
+        self.assertTrue((labels.pt_id == "PT-B").all())
+        self.assertTrue(labels.source_ref.str.startswith("grid/labels.py@").all())
+        step = labels.available_at - labels.interval_start
+        self.assertTrue((step == pd.Timedelta("30min")).all())
+        self.assertEqual(int(labels.n_houses.iloc[0]), 210)
+        self.assertAlmostEqual(float(labels.kwp_total.iloc[0]), 210 * 5.0)
+        # 12:00 local: every house makes 1 kW; house 5 also has 0.4 kW of controlled load
+        noon = labels.set_index("interval_start").loc[pd.Timestamp("2013-01-01T01:00:00Z")]
+        self.assertAlmostEqual(noon.pv_kw, 210 * 1.0)
+        self.assertAlmostEqual(noon.load_kw, 210 * 0.2 + 0.4)
+        self.assertAlmostEqual(noon.net_kw, noon.load_kw - noon.pv_kw)
+        self.assertEqual(list(houses.columns), list(labels_io.HOUSE_COLUMNS))
+        self.assertEqual(houses.source_house_id.iloc[0], "AG-0001")
+        self.assertEqual(len(houses), 210)
+
+    def test_a_binding_limit_is_named_when_the_share_is_below_one(self):
+        write_csv(self.source)
+        output = Path(self.directory.name) / "A"
+        generate(self.source, output, "2013-01-01", 1, transformer_kva=100)
+        labels = pd.read_parquet(output / "labels.parquet")
+        below = labels[labels.safe_share < 1]
+        self.assertFalse(below.empty)
+        self.assertTrue(below.binding.isin(["voltage", "line", "trafo"]).all())
+        houses = pd.read_parquet(output / "station_houses.parquet")
+        self.assertTrue((houses.pv_scale == 1.0).all())
+
+    def test_pv_scale_is_kept_in_station_houses(self):
+        write_csv(self.source)
+        output = Path(self.directory.name) / "A"
+        generate(self.source, output, "2013-01-01", 1, pv_scale=2.0)
+        houses = pd.read_parquet(output / "station_houses.parquet")
+        labels = pd.read_parquet(output / "labels.parquet")
+        self.assertTrue((houses.pv_scale == 2.0).all())
+        self.assertAlmostEqual(float(houses.kwp.iloc[0]), 10.0)
+        self.assertAlmostEqual(float(labels.kwp_total.iloc[0]), 210 * 10.0)
+
+    def test_unknown_scenario_is_rejected(self):
+        write_csv(self.source)
+        with self.assertRaises(ValueError):
+            generate(self.source, Path(self.directory.name) / "Z", "2013-01-01", 1, scenario="Z")
 
     def test_labels_are_identical_with_one_or_two_workers(self):
         write_csv(self.source, controlled={5: {"01/01/2013"}})
         outputs = []
         for workers in (1, 2):
-            output = Path(self.directory.name) / f"labels-{workers}.parquet"
+            output = Path(self.directory.name) / f"labels-{workers}"
             generate(self.source, output, "2013-01-01", 1, workers=workers)
-            outputs.append(pd.read_parquet(output))
+            outputs.append(pd.read_parquet(output / "labels.parquet"))
         pd.testing.assert_frame_equal(outputs[0], outputs[1])
 
     def test_invalid_grid_fails_in_the_parent_with_workers(self):

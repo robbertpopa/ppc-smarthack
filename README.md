@@ -73,7 +73,13 @@ This writes `DATA_DIR/raw/ausgrid/` and `DATA_DIR/profiles.parquet` (about 40 s)
 ```bash
 python -m src.ml.labels mock --scenario A
 ```
-This writes mock labels with the real schema to `DATA_DIR/labels/A/`. The scenarios are `A`, `B` and `B-VAR`. Real labels come from the power flow (`python -m src.grid.labels`), but its output does not yet match the schema the training reads. Until it does, training runs on mock labels and its numbers are not results.
+This writes mock labels with the real schema to `DATA_DIR/labels/A/`. The scenarios are `A`, `B` and `B-VAR`. Real labels come from the power flow and are written in the same schema, next to their `station_houses.parquet`:
+
+```bash
+python -m src.grid.labels --source "data/raw/ausgrid/Solar home 2010-2011.csv" --output data/labels/A --scenario A --start 2010-07-01 --days 365 --workers 8
+```
+
+Until real labels cover training and validation, training runs on mock labels and its numbers are not results.
 
 ### 7. Train
 ```bash

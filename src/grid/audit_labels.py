@@ -1,4 +1,5 @@
 import argparse
+from pathlib import Path
 
 import pandas as pd
 
@@ -6,13 +7,19 @@ from .ausgrid import day_profiles, half_hour_columns, house_readings, read_perio
 from .twin import build_grid, limit_violations, solve
 
 
-def audit(source, labels_path):
-    labels = pd.read_parquet(labels_path)
+def audit(source, labels_dir, transformer_kva=400):
+    """Re-solve sampled boundary labels of a ``generate`` output folder.
+
+    ``transformer_kva`` must be the value the labels were generated with.
+    """
+    labels_dir = Path(labels_dir)
+    labels = pd.read_parquet(labels_dir / "labels.parquet")
+    houses = pd.read_parquet(labels_dir / "station_houses.parquet")
     if labels.empty or labels[["pt_id", "interval_start"]].duplicated().any():
         raise ValueError("Labels are empty or contain duplicate intervals")
-    if labels.pv_scale.nunique() != 1 or labels.transformer_kva.nunique() != 1:
+    if houses.pv_scale.nunique() != 1:
         raise ValueError("Expected one consistent scenario")
-    scale = float(labels.pv_scale.iloc[0])
+    scale = float(houses.pv_scale.iloc[0])
     local = pd.to_datetime(labels.interval_start, utc=True).dt.tz_convert("Australia/Sydney")
     days_local = local.dt.tz_localize(None).dt.normalize()
     start, days = days_local.min(), (days_local.max() - days_local.min()).days + 1
@@ -24,10 +31,10 @@ def audit(source, labels_path):
             "houses": [
                 {"house_id": str(c), "kwp": float(capacity.loc[c]) * scale} for c in eligible
             ],
-            "transformer_kva": float(labels.transformer_kva.iloc[0]),
+            "transformer_kva": float(transformer_kva),
         }
     )
-    boundary = labels[labels.safe_cap_share.notna() & (labels.safe_cap_share < 0.998)]
+    boundary = labels[labels.safe_share.notna() & (labels.safe_share < 0.998)]
     if boundary.empty:
         raise ValueError("No finite boundary labels available to audit")
     samples = boundary.sample(n=min(12, len(boundary)), random_state=42)
@@ -38,8 +45,8 @@ def audit(source, labels_path):
         slot = t.hour * 2 + t.minute // 30
         houses = house_readings(eligible, load[slot], pv[slot] * scale)
         for share, expected in (
-            (row.safe_cap_share, True),
-            (min(1, row.safe_cap_share + 0.002), False),
+            (row.safe_share, True),
+            (min(1, row.safe_share + 0.002), False),
         ):
             reading = {
                 "interval_start": row.interval_start,
@@ -64,6 +71,7 @@ def audit(source, labels_path):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", required=True)
-    parser.add_argument("--labels", required=True)
+    parser.add_argument("--labels", required=True, help="folder written by src.grid.labels")
+    parser.add_argument("--transformer-kva", type=float, default=400)
     args = parser.parse_args()
-    audit(args.source, args.labels)
+    audit(args.source, args.labels, args.transformer_kva)
