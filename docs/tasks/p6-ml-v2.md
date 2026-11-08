@@ -364,11 +364,27 @@ and where the model limit was applied (not abstained):
 ### 08 · Run: labels, training, final evaluation
 **Why (theme):** the model trained by the team on our data; results from our script.
 **Context:** sections 3, 6; step 00.
-1. P3 generates labels for A, B, B-VAR over 2010-07 → 2012-06 with the step 10 option and the mapping agreed in 00, into `DATA_DIR/labels/<scenario>/` (about 85 minutes per scenario on 4 workers).
+1. P3 generates labels for A, B, B-VAR over 2010-07 → 2012-06 with the step 10 option and the mapping agreed in 00, into `DATA_DIR/labels/<scenario>/` (measured on 2026-11-08: about 2 s per day with 8 workers, so roughly 25 minutes per scenario for two years). Only A is agreed so far (see the training record below).
 2. `python -m src.ml.weather download`, then `python -m src.ml.train --scenario all` (v2) and the PV/load forecast retrain.
 3. Read the fold report: any change that does not help on the folds is turned off for v2, and the hand-off says so.
 4. **Final evaluation, once:** P3 generates the test-year labels; `python -m src.ml.data download --include-held-out`, `python -m src.ml.data profiles`, then `python -m src.eval.run --scenario all --run-id final`.
 5. Numbers for slides come only from `ARTIFACT_URI/eval/final/`.
+
+### Training record: what the first real training uses (2026-11-08)
+Written before the first real training, so that everyone knows what the model is trained on. Update it when something changes, and copy the final numbers from `ARTIFACT_URI/eval/final/`, never by hand.
+
+| Item | Value |
+|---|---|
+| Code | `main` at `cdddf01` (scenario A settings) on top of the P6 code of `2b0134f` |
+| Model | `safe-cap-qgb-v2`: quantile gradient boosting, four expanding quarterly folds over 2011-07 → 2012-06 choose the settings, then refit on 2010-07 → 2012-06 |
+| Household data | Ausgrid Solar Home, `profiles.parquet`: 300 houses, 2010-07 → 2012-06, **0 rows in the test year** (checked 2026-11-08) |
+| Labels | scenario **A only**, from the power flow of `src.grid.labels`, station `PT-A`, schema of `src/ml/labels.py`. Settings: **400 kVA, PV scale 4** (the "transformer binds" scenario). Probed on three summer days (2011-12-19 to 21): at PV ×1 or ×2 every label is 1 (nothing binds, a constant target); at PV ×4, 74% of labels are 1 and the transformer binds in 26%. Voltage and line limits did not bind in any probed setting |
+| Label commands | `python -m src.grid.labels --source "$DATA_DIR/raw/ausgrid/Solar home 2011-2012.csv" --scenario A --start 2011-07-01 --days 366 --workers 8`, then the same with `Solar home 2010-2011.csv`, `--start 2010-07-01 --days 365` (the later file first, as the README explains) |
+| Weather | **not in this first training.** `weather_hourly.parquet` does not exist yet: `weather fetch` needs the geo file `ausgrid_postcodes_geo.csv`, which was not on the machine. Training warns and leaves the weather features NaN, so this first v2 is "v2 without weather" and must be called that on slides |
+| Targets | violation target 2% (`VIOLATION_TARGET`), crew budget 20 cases per day (`CREW_CASES_PER_DAY`), not yet confirmed by the team |
+| Not trained | scenarios B and B-VAR (no agreed settings; the twin has no reactive-power control, and in the probes voltage never bound) |
+| Sealed | the test year 2012-07 → 2013-06: no data, no labels, no weather read. First read at the final evaluation, with `--include-held-out` and `--final-eval` |
+| Known open items that affect the numbers | `docs/14-ml-audit.md`: M2 (violation rate diluted by unconstrained intervals), M3 (daylight-only labels make mornings abstain), S1 (the label generator does not clean readings like the ML profiles), m3 (`weather fetch` defaults to `--end-year 2013`) |
 
 ### 09 · `docs/p6-results` and requests to P1
 **Why (theme):** reproducibility, concrete actions, idea and relevance.
