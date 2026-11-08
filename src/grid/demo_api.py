@@ -16,6 +16,7 @@ from src.agent.sources import make_source
 from src.common.config import Settings
 from src.grid.agent_guard import make_grid_guard
 from src.grid.demo_station import load_station
+from src.pricing.source import price_source_for
 
 settings = Settings.from_env()
 _station, _station_grid = load_station()
@@ -35,5 +36,6 @@ app = create_app(
         log=open_log(settings.log_uri),
         guard=make_grid_guard(_station, _source, _grid_config),
         source=_source,
+        prices=price_source_for(settings),
     ),
 )

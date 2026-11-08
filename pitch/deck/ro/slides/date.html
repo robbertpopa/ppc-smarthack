@@ -1,0 +1,36 @@
+<section id="date" data-transition="fade" style="background:#F7F5EF;color:#12202F;font-family:'DM Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:24px">
+<div style="display:flex;flex-direction:column;gap:8px">
+<p style="font-size:24px;font-weight:700;letter-spacing:2px;color:#17706A">03 · MODELUL</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">Antrenăm pe trecut, testăm pe un an închis</h2>
+</div>
+<div style="display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;height:96px">
+<div style="width:971px;background:#2F5FA5;border-radius:16px 0 0 16px;display:flex;align-items:center;padding:0 28px"><p style="font-size:32px;font-weight:700;color:#F7F5EF">Antrenare · 21 de luni</p></div>
+<div style="width:139px;background:#F0A030;display:flex;align-items:center;justify-content:center"><p style="font-size:26px;font-weight:700;color:#12202F">Validare</p></div>
+<div style="width:554px;background:#12202F;border-radius:0 16px 16px 0;display:flex;align-items:center;padding:0 28px"><p style="font-size:32px;font-weight:700;color:#F7F5EF">Test sigilat · 12 luni</p></div>
+</div>
+<div style="display:flex">
+<div style="width:971px"><p style="font-size:24px;color:#55616D">iul 2010</p></div>
+<div style="width:139px"><p style="font-size:24px;color:#55616D">apr 2012</p></div>
+<div style="width:554px;display:flex;justify-content:space-between"><p style="font-size:24px;color:#55616D">iul 2012</p><p style="font-size:24px;color:#55616D">iun 2013</p></div>
+</div>
+</div>
+<p style="font-size:28px;line-height:1.4;color:#55616D">Anul de test se deschide o singură dată, la evaluarea finală. Până atunci nu intră în nicio decizie de dezvoltare.</p>
+<div style="display:flex;gap:24px">
+<div style="flex:1;display:flex;flex-direction:column;gap:10px;background:#FFFDF8;border:1px solid #DAD6CA;border-top:6px solid #2F5FA5;border-radius:16px;padding:28px 32px">
+<h3 style="font-size:36px;font-weight:700">Date</h3>
+<p style="font-size:28px;line-height:1.4;color:#33424F">Ausgrid: 300 de case din Sydney, 2010–2013, consum și producție solară. Licență CC BY 3.0 AU. Rețeaua vine din SimBench și pandapower.</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:10px;background:#FFFDF8;border:1px solid #DAD6CA;border-top:6px solid #F0A030;border-radius:16px;padding:28px 32px">
+<h3 style="font-size:36px;font-weight:700">Etichete</h3>
+<p style="font-size:28px;line-height:1.4;color:#33424F">Cea mai mare limită sigură, calculată cu fluxul de putere pandapower. Sintetice, dar comparate cu OpenDSS pe stația sintetică.</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:10px;background:#FFFDF8;border:1px solid #DAD6CA;border-top:6px solid #17706A;border-radius:16px;padding:28px 32px">
+<h3 style="font-size:36px;font-weight:700">Fără scurgeri din viitor</h3>
+<p style="font-size:28px;line-height:1.4;color:#33424F">Fiecare înregistrare are available_at. Antrenarea și evaluarea folosesc doar ce exista la momentul deciziei.</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1300px;font-size:24px;color:#55616D">Surse: Ausgrid (copie Pierre Haessig), SimBench, pandapower. Detalii: src/ml/DATA.md</p>
+<p style="position:absolute;right:128px;bottom:64px;width:200px;text-align:right;font-size:24px;color:#55616D">08</p>
+<aside>Separarea în timp este regula de bază. Antrenăm din iulie 2010 până în martie 2012, validăm în aprilie–iunie 2012 și păstrăm un an întreg, iulie 2012–iunie 2013, închis pentru evaluarea finală. Datele de consum și producție sunt Ausgrid, 300 de case din Sydney, licență CC BY 3.0 AU. Etichetele sunt sintetice: le calculează fluxul nostru de putere și le-am comparat cu OpenDSS. Fiecare înregistrare are un câmp available_at ca să nu folosim niciodată informație din viitor. Atenție: validarea acoperă doar trei luni de toamnă și început de iarnă, de aceea la test am văzut deriva calibrării; modelul v2 propune validare pe toate anotimpurile.</aside>
+</section>

@@ -8,9 +8,10 @@ from threading import RLock
 from src.agent.explain import add_factors, ensure_grounded
 from src.agent.guard import Guard
 from src.agent.log import ActionLog
-from src.agent.planner import make_plan
+from src.agent.planner import make_plan, plan_id_for
 from src.agent.sources import Source, floor_to_half_hour
 from src.common.contract import ActionEvent, AwareDatetime, EventType, Plan, StationConfig
+from src.pricing.source import PriceSource
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,7 @@ class AgentService:
         source: Source,
         clock: Callable[[], datetime] = _utcnow,
         thresholds: Callable[[str], float | None] | None = None,
+        prices: PriceSource | None = None,
     ):
         self.station = station
         self.log = log
@@ -48,6 +50,7 @@ class AgentService:
         self.source = source
         self.clock = clock
         self.thresholds = thresholds
+        self.prices = prices
         self._plans: dict[str, Plan] = {}
         self._retryable: set[str] = set()
         self._reviews: list[datetime] = []
@@ -133,6 +136,18 @@ class AgentService:
         explanation = add_factors(plan.explanation, factors_of(pt_id, interval_start), LABELS)
         return plan.model_copy(update={"explanation": ensure_grounded(explanation)})
 
+    def price_view(self, when: AwareDatetime) -> dict:
+        """Day curve of the wholesale price and, if a plan exists, each house's price."""
+        when = floor_to_half_hour(when.astimezone(timezone.utc))
+        with self._lock:
+            plan = self._plans.get(plan_id_for(self.station.pt_id, when))
+        return {
+            "interval_start": when,
+            "mock": bool(self.prices and self.prices.mock),
+            "curve": self.prices.day_curve(when) if self.prices else [],
+            "houses": plan.prices if plan else [],
+        }
+
     def propose(self, interval_start: AwareDatetime, actor: str = "agent") -> Plan:
         with self._lock:
             interval_start = floor_to_half_hour(interval_start.astimezone(timezone.utc))
@@ -143,7 +158,16 @@ class AgentService:
             flags = checks_of(pt_id, interval_start) if checks_of else []
             station, forced = self._threshold_station()
             reasons = [*flags, *([forced] if forced else [])]
-            plan = make_plan(forecast, grid_state, station, interval_start, force_abstain=reasons)
+            wholesale = self.prices.wholesale(interval_start) if self.prices else None
+            plan = make_plan(
+                forecast,
+                grid_state,
+                station,
+                interval_start,
+                force_abstain=reasons,
+                wholesale_eur_mwh=wholesale,
+                adder_eur_mwh=self.prices.adder(interval_start) if self.prices else 0.0,
+            )
             plan = self._with_factors(plan, pt_id, interval_start)
             existing = self._plans.get(plan.plan_id)
             if existing is not None and not (

@@ -1,0 +1,53 @@
+<section id="ciclu" data-transition="fade" style="background:#F7F5EF;color:#12202F;font-family:'DM Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:28px">
+<div style="display:flex;flex-direction:column;gap:8px">
+<p style="font-size:24px;font-weight:700;letter-spacing:2px;color:#17706A">05 · SAFETY</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">The life of a plan, and the log</h2>
+</div>
+<!-- Proposed 0,0  Approved 672,0  Executed 1344,0  Rejected 672,240 ; pills 320x110 ; log card 1040,220 -->
+<div style="position:relative;width:1664px;height:500px">
+<div style="position:absolute;left:0px;top:0px;width:320px;height:110px;background:#DCE7F5;border:3px solid #2F5FA5;border-radius:16px;padding:14px 20px;display:flex;flex-direction:column;gap:4px">
+<h3 style="font-size:36px;font-weight:700">Proposed</h3>
+<p style="font-size:24px;color:#33424F">plan_proposed</p>
+</div>
+<div style="position:absolute;left:672px;top:0px;width:320px;height:110px;background:#FBE6C2;border:3px solid #9A5A00;border-radius:16px;padding:14px 20px;display:flex;flex-direction:column;gap:4px">
+<h3 style="font-size:36px;font-weight:700">Approved</h3>
+<p style="font-size:24px;color:#33424F">plan_approved</p>
+</div>
+<div style="position:absolute;left:1344px;top:0px;width:320px;height:110px;background:#D5ECE8;border:3px solid #17706A;border-radius:16px;padding:14px 20px;display:flex;flex-direction:column;gap:4px">
+<h3 style="font-size:36px;font-weight:700">Executed</h3>
+<p style="font-size:24px;color:#33424F">plan_executed</p>
+</div>
+<div style="position:absolute;left:672px;top:240px;width:320px;height:110px;background:#F6D9D5;border:3px solid #B3261E;border-radius:16px;padding:14px 20px;display:flex;flex-direction:column;gap:4px">
+<h3 style="font-size:36px;font-weight:700">Rejected</h3>
+<p style="font-size:24px;color:#33424F">plan_rejected</p>
+</div>
+<div style="position:absolute;left:1040px;top:220px;width:624px;height:280px;background:#FFFDF8;border:1px solid #DAD6CA;border-radius:16px;padding:24px 28px;display:flex;flex-direction:column;gap:10px">
+<h3 style="font-size:32px;font-weight:700">The log is the agent’s memory</h3>
+<ul style="font-size:26px;line-height:1.4;color:#33424F">
+<li>every event carries the time, plan, actor and plan fingerprint</li>
+<li>it is written before the state it describes</li>
+<li>at start-up, the agent rebuilds its plans from the log</li>
+</ul>
+</div>
+<x-connector x1="320" y1="55" x2="672" y2="55" style="color:#12202F;border-width:3px"></x-connector>
+<x-connector x1="992" y1="55" x2="1344" y2="55" style="color:#12202F;border-width:3px"></x-connector>
+<x-connector x1="160" y1="110" x2="672" y2="295" route="vh" style="color:#B3261E;border-width:3px"></x-connector>
+<x-connector x1="832" y1="110" x2="832" y2="240" style="color:#B3261E;border-width:3px"></x-connector>
+<p style="position:absolute;left:400px;top:12px;width:240px;text-align:center;font-size:24px;font-weight:700">a person approves</p>
+<p style="position:absolute;left:1070px;top:12px;width:240px;text-align:center;font-size:24px;font-weight:700">a person executes</p>
+<p style="position:absolute;left:100px;top:312px;width:540px;font-size:24px;line-height:1.4;color:#B3261E;font-weight:700">a person rejects, the guard blocks, or the kill switch</p>
+<p style="position:absolute;left:850px;top:150px;width:140px;font-size:24px;line-height:1.3;color:#B3261E;font-weight:700">kill switch</p>
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:10px">
+<p style="font-size:24px;font-weight:500;background:#E8E4D8;border-radius:10px;padding:8px 16px">plan_proposed</p>
+<p style="font-size:24px;font-weight:500;background:#E8E4D8;border-radius:10px;padding:8px 16px">guard_blocked</p>
+<p style="font-size:24px;font-weight:500;background:#E8E4D8;border-radius:10px;padding:8px 16px">abstained</p>
+<p style="font-size:24px;font-weight:500;background:#E8E4D8;border-radius:10px;padding:8px 16px">plan_approved</p>
+<p style="font-size:24px;font-weight:500;background:#E8E4D8;border-radius:10px;padding:8px 16px">plan_rejected</p>
+<p style="font-size:24px;font-weight:500;background:#E8E4D8;border-radius:10px;padding:8px 16px">plan_executed</p>
+<p style="font-size:24px;font-weight:500;background:#E8E4D8;border-radius:10px;padding:8px 16px">kill_switch</p>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1300px;font-size:24px;color:#55616D">Source: docs/09-contract.md, src/agent/service.py. A plan rejected by a person stays rejected.</p>
+<p style="position:absolute;right:128px;bottom:64px;width:200px;text-align:right;font-size:24px;color:#55616D">11</p>
+<aside>Every plan moves through clear states: proposed, approved, executed, or rejected. A plan blocked by the guard or cancelled by the kill switch can be proposed again; a plan rejected by a person stays rejected. Execution first needs approval and is refused while the kill switch is on. The log is an append-only JSONL file with seven event types. It is also the agent’s memory: at start-up the service rebuilds its plans, today’s review count and the kill switch state from the log. An event is written before the state it describes, so a failed write leaves the state unchanged. Every decision can be traced from the log back to the forecast that produced it.</aside>
+</section>

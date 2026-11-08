@@ -94,6 +94,23 @@ class HouseLimit(Strict):
     battery_kw: float = 0.0
 
 
+class HousePrice(Strict):
+    house_id: str
+    interval_start: AwareDatetime
+    wholesale_eur_mwh: float
+    hourly_eur_kwh: float = Field(ge=0)
+    adder_eur_kwh: float = Field(ge=0)
+    total_eur_kwh: float = Field(ge=0)
+    floor_applied: bool
+    reason: str
+
+    @model_validator(mode="after")
+    def _total_matches(self) -> "HousePrice":
+        if abs(self.total_eur_kwh - (self.hourly_eur_kwh + self.adder_eur_kwh)) > 1e-6:
+            raise ValueError("total_eur_kwh must equal hourly_eur_kwh + adder_eur_kwh")
+        return self
+
+
 class GuardResult(Strict):
     passed: bool
     v_max_pu: float | None = None
@@ -123,6 +140,7 @@ class Plan(Strict):
     reasons: list[str]
     guard: GuardResult | None = None
     explanation: Explanation | None = None
+    prices: list[HousePrice] = Field(default_factory=list)
     status: PlanStatus
 
 

@@ -25,7 +25,9 @@ STATIC = Path(__file__).parent / "static"
 MOCK_INSIGHT = Path(__file__).parent / "mocks" / "ai_insight.json"
 # One name or id: letters, digits, "_" and "-", optionally joined by single dots. No "." or "..".
 NAME = r"[\w\-]+(?:\.[\w\-]+)*"
-READ = re.compile(rf"(health|station|forecast|grid_state|plans|plan/{NAME}|queue|log|kill_switch)")
+READ = re.compile(
+    rf"(health|station|forecast|grid_state|prices|plans|plan/{NAME}|queue|log|kill_switch)"
+)
 WRITE = re.compile(rf"(plan/propose|plan/{NAME}/(approve|reject|execute)|kill_switch)")
 RUN_ID = re.compile(NAME)
 FORWARD_HEADERS = ("content-type", "x-demo-token")
