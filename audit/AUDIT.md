@@ -116,12 +116,21 @@ Agentul cu `SOURCE=model` citește pragul cu `abstention.threshold()`. Modelul s
 - Cum se manifestă: `labels.load()` aruncă „missing columns [...]”. Calea „etichete reale → antrenare” n-a funcționat niciodată cap-coadă. De aici și C1.
 - Cum se repară: un adaptor în `src/grid/labels.py` care scrie exact schema din `src/ml/labels.py`:
   ```python
-  rec = {"pt_id": pt_id, "interval_start": pd.Timestamp(utc), "safe_share": share,
-         "converged": share is not None, "binding": binding,  # din _share_is_safe
-         "load_kw": load[i].sum(), "pv_kw": pv[i].sum(),
-         "net_kw": load[i].sum() - pv[i].sum(), "kwp_total": sum(kwp), "n_houses": len(houses),
-         "available_at": pd.Timestamp(utc) + pd.Timedelta(minutes=30),
-         "provenance": "simulated", "source_ref": f"grid/labels.py@{git_sha()}"}
+  rec = {
+      "pt_id": pt_id,
+      "interval_start": pd.Timestamp(utc),
+      "safe_share": share,
+      "converged": share is not None,
+      "binding": binding,  # din _share_is_safe
+      "load_kw": load[i].sum(),
+      "pv_kw": pv[i].sum(),
+      "net_kw": load[i].sum() - pv[i].sum(),
+      "kwp_total": sum(kwp),
+      "n_houses": len(houses),
+      "available_at": pd.Timestamp(utc) + pd.Timedelta(minutes=30),
+      "provenance": "simulated",
+      "source_ref": f"grid/labels.py@{git_sha()}",
+  }
   ...
   labels_io.validate(df)  # înainte de to_parquet
   ```
@@ -137,7 +146,8 @@ Agentul cu `SOURCE=model` citește pragul cu `abstention.threshold()`. Modelul s
 - Cum se manifestă: `abstention.threshold("PT-A")` dă `ValueError: model PT-A has no abstention threshold`, iar `service.py:85-88` forțează abstenția pe fiecare plan. Demo-ul cu `SOURCE=model` arată doar limita fixă și „trimis la om”. Eșuează în siguranță, dar modelul nu face nimic.
 - Cum se repară: reantrenați (`python -m src.ml.train --scenario A`) după C1. Adăugați un `schema_version` în metadata, pe care `predict._load` și `abstention.threshold` îl verifică:
   ```python
-  if meta.get("schema_version") != METADATA_SCHEMA: raise ValueError("retrain: metadata schema")
+  if meta.get("schema_version") != METADATA_SCHEMA:
+      raise ValueError("retrain: metadata schema")
   ```
 
 **[MAJOR] M1: Pragul și hiper-parametrii se aleg pe 3 luni de toamnă și iarnă, dar se aplică pe un an întreg** — `src/ml/split.py:14-16`, `src/ml/train.py:122-152` — CONFIRMAT (validarea are doar lunile 4, 5, 6)
@@ -202,6 +212,34 @@ Agentul cu `SOURCE=model` citește pragul cu `abstention.threshold()`. Modelul s
 - Ce e greșit: 10:00 UTC înseamnă 20:00 sau 21:00 la Sydney. Cu modelul real, intervalul are flag-ul `night` și se abține.
 - Cum se manifestă: demo-ul „spread mic, modelul decide” merge doar pe forecast-ul mock.
 - Cum se repară: folosiți 02:00 UTC (12:00 sau 13:00 local), sau afișați ora locală a PT-ului.
+
+### Probleme de structură (a doua trecere)
+Aici nu e vorba de un bug într-un calcul, ci de felul în care e împărțit codul: din cauza asta au apărut C1–C4 și vor mai apărea. Fiecare are un prototip de reparație în `audit/proposals/` și un test în `audit/tests/` (`.venv/bin/python -m pytest audit/tests -q -s`: 43 de teste trec). Pașii de rezolvare sunt în [NEXT_STEPS.md](NEXT_STEPS.md).
+
+**[MAJOR] S1: Două cititoare Ausgrid, cu curățare diferită; power flow-ul primește citirile pe care ML le-a eliminat** — `src/grid/ausgrid.py:6-14,42-53` vs. `src/ml/ausgrid.py:143-194` — CONFIRMAT (`audit/tests/test_s1_parser_parity.py`)
+- Ce e greșit: generatorul de etichete recitește CSV-ul brut și nu aplică regulile din `src/ml/DATA.md:94-101` (PV > 1,2 × kWp, ora dublată la fall-back, `Row Quality`). Casele au alte ID-uri: `"3"` la grid, `"AG-0003"` la ML.
+- Cum se manifestă: doar în 2011-12, 1.111 citiri pe care ML le pune pe null intră în power flow. De exemplu, AG-0112 pe 2011-12-03 are 2,37 kW pe 1,92 kWp. Eticheta (`safe_share`) și exportul (`surplus_kw`) se calculează astfel pe date diferite. Într-o zi normală cele două căi dau exact aceleași valori (diferență 0 pe 48 × 30 de celule), deci curățarea e singura diferență.
+- Cum se repară: generatorul citește `profiles.parquet` prin `day_from_profiles` (`audit/proposals/parser_parity.py`), care returnează aceleași tablouri `(48, n)` ca `day_profiles`, și folosește ID-urile `AG-xxxx` peste tot.
+
+**[MAJOR] S2: `src.ml` și `src.eval` se importă reciproc, iar calea de servire trage după ea codul de antrenare** — `src/ml/train.py:23`, `src/ml/abstention.py:22`, `src/ml/baselines.py:21` ↔ `src/eval/metrics.py:15-16`; `src/ml/predict.py:88`, `src/ml/forecast_pv_load.py:27` — CONFIRMAT (`audit/tests/test_s2_import_graph.py`)
+- Ce e greșit: metrica „oficială” stă în `eval`, dar `ml` are nevoie de ea la antrenare, iar `eval` are nevoie de `ml`. `predict` importă `train` ca să ia `QUANTILES` și `predict_quantiles`.
+- Cum se manifestă: `src.ml.predict` ajunge la 16 module, printre care `train`, `abstention`, `baselines`, `explain`, `labels` și `src.eval.metrics`. O schimbare în evaluare poate strica API-ul, iar orice modificare din `train` atinge calea de servire. Pachetele nu pot fi testate sau livrate separat.
+- Cum se repară: `src/eval/metrics.py` → `src/ml/metrics.py` și un modul mic `src/ml/quantiles.py` (`QUANTILES`, `rearrange`, `predict_quantiles`, `fit_quantile`, `BASE_PARAMS`). Testul simulează mutarea (`rewire`): ciclul dispare, iar `predict` nu mai ajunge nici la `train`, nici la `src.eval.*`. Un test de import-graph în `tests/` blochează revenirea.
+
+**[MAJOR] S3: Locul și fusul orar al postului sunt constante în cod; un PT din România ar primi soarele de la Sydney** — `src/ml/sun.py:11-12`, `src/ml/config.py:12`, plus literalul `"Australia/Sydney"` în `src/eval/plots.py:66`, `src/grid/labels.py:39`, `src/grid/audit_labels.py:16,35` — CONFIRMAT (`audit/tests/test_s3_station_geo.py`)
+- Ce e greșit: `features.build` și `build_frame` nu au cum să primească o locație. Ora, ziua din an, weekendul, split-ul și metricile folosesc toate fusul orar al Sydney-ului.
+- Cum se manifestă: la amiaza din București (21 iunie, 09:00 UTC), codul de azi calculează soarele sub orizont, deci flag-ul `night` și abstenție. Pentru Ausgrid efectul e mic: centrul PT-A e la −33,44°, 151,39°, iar răsăritul variază cu 5 minute între codurile poștale. Pentru produsul propus (PPC, România), modelul ar fi greșit în fiecare interval.
+- Cum se repară: `StationGeo(lat, lon, tz)` în configurația postului (`StationConfig`) și `time_features(target, horizon, geo)` (`audit/proposals/station_geo.py`). Testul arată că pentru Sydney prototipul dă exact coloanele de azi, deci înlocuirea nu schimbă nimic pe datele existente.
+
+**[MAJOR] S4: Schema fișierului de etichete nu face parte din contractul comun, iar granița P3 → P2 nu e testată nicăieri** — `src/common/contract.py` (nu are tip pentru etichete), `docs/09-contract.md:138`, `tests/test_grid_labels.py:6-7`, `.github/workflows/ci.yml:21` — CONFIRMAT (`audit/tests/test_s4_label_contract.py`)
+- Ce e greșit: schema există doar în docstring-ul și în `validate` din `src/ml/labels.py`. Contractul din docs îi dă lui P3 doar `safe_share(grid, injections) -> float`. Testele grid se sar singure fără pandapower: local se sar, iar jobul `test` din CI instalează `dev,ml,report`, fără `sim`. Niciun test nu trece ieșirea generatorului prin loader-ul ML.
+- Cum se manifestă: așa a apărut C2. Fiecare echipă și-a scris schema ei, testele fiecăreia trec, iar integrarea nu a rulat niciodată.
+- Cum se repară: modelul `LabelRow` (`audit/proposals/label_contract.py`) mutat în `src/common/contract.py`. Câmpurile lui sunt exact `labels_io.COLUMNS` (testat). Adăugați un test de contract fără pandapower, care construiește rânduri în forma pe care o scrie generatorul și le trece prin adaptor (`audit/proposals/label_adapter.py`) și prin `LabelRow`.
+
+**[MINOR] S5: Două definiții pentru „intervalele etichetate și punctate”** — `src/ml/split.py:37-40` (soarele peste orizont) vs. `src/grid/labels.py:37` (ora locală în [6, 20) și PV > 0) — CONFIRMAT, impact mic (`audit/tests/test_s5_scoring_domain.py`)
+- Ce e greșit: `evaluate` punctează doar intervalele care au etichetă, deci domeniul evaluării îl stabilește filtrul din grid, nu regula documentată de ML. Cele două pot diverge la orice schimbare (DST, altă țară, alt fus).
+- Cum se manifestă: pe PT-A, 56 de intervale de zi cu PV (0,32 %, toate la ora 5 locală, vara) nu primesc niciodată etichetă, adică 0,001 % din energia PV. Azi e neglijabil. Cu S3 reparat (alt fus orar), filtrul fix „6–20 h” ar tăia ore întregi.
+- Cum se repară: o singură funcție, `domain()` (`audit/proposals/scoring_domain.py`: soarele sus sau PV > 0), folosită și de generator, și de `split.daylight`.
 
 ---
 
