@@ -181,6 +181,7 @@ a{color:var(--ink)}
     <button class="tab" role="tab" id="tab-decision" aria-controls="p-decision" aria-selected="false" tabindex="-1" type="button">Decision</button>
     <button class="tab" role="tab" id="tab-log" aria-controls="p-log" aria-selected="false" tabindex="-1" type="button">Log</button>
     <button class="tab" role="tab" id="tab-compare" aria-controls="p-compare" aria-selected="false" tabindex="-1" type="button">Comparison</button>
+    <button class="tab" role="tab" id="tab-prices" aria-controls="p-prices" aria-selected="false" tabindex="-1" type="button">Prices</button>
   </nav>
 
   <section class="panel" id="p-houses" role="tabpanel" aria-labelledby="tab-houses">
@@ -234,13 +235,25 @@ a{color:var(--ink)}
     <div class="scroll"><table id="cmp" hidden><thead></thead><tbody></tbody></table></div>
   </section>
 
+  <section class="panel" id="p-prices" role="tabpanel" aria-labelledby="tab-prices" hidden>
+    <h2 class="h">Price for injected energy <span class="tag" id="priceTag" hidden>Mock</span></h2>
+    <p class="sub" id="priceNote">Loading prices…</p>
+    <svg id="priceChart" viewBox="0 0 960 120" preserveAspectRatio="none" role="img" aria-label="Wholesale price over the day"></svg>
+    <div class="scroll"><table id="priceTable" hidden><thead><tr><th>House</th><th>Hourly price</th><th>Solar adder</th><th>Total</th><th>Why</th></tr></thead><tbody></tbody></table></div>
+    <h2 class="h" style="margin-top:18px">What prosumers with a battery earn, and PPC's margin</h2>
+    <p class="sub" id="revNote">Loading evaluation output…</p>
+    <div class="scroll"><table id="rev" hidden><thead></thead><tbody></tbody></table></div>
+    <h2 class="h" style="margin-top:18px">Imbalance savings on top <span class="sub" style="text-transform:none;letter-spacing:0;font-weight:400">(spreads are scenarios)</span></h2>
+    <div class="scroll"><table id="imb" hidden><thead></thead><tbody></tbody></table></div>
+  </section>
+
   <footer>Simulated data. The grid is a model, not PPC's network, and nothing here controls real inverters. · <a href="/simulation">210-house simulation viewer</a></footer>
 </div>
 
 <script>
 "use strict";
 const $ = id => document.getElementById(id);
-const state = {station: null, plan: null, plans: [], fc: null, kill: false, busy: false, selected: null, geo: null, insight: null, insightFor: null,
+const state = {prices: null, station: null, plan: null, plans: [], fc: null, kill: false, busy: false, selected: null, geo: null, insight: null, insightFor: null,
   allowed: {approve: false, reject: false, execute: false}};
 let gen = 0; // generation of the latest refresh: results of older ones are dropped
 const pct = v => v == null ? "—" : (v * 100).toFixed(0) + "%";
@@ -280,7 +293,7 @@ function intervalStart() {
 const slotOf = iso => Number(iso.slice(11, 13)) * 2 + (iso.slice(14, 16) === "30" ? 1 : 0);
 
 /* ---------- tabs ---------- */
-const TABS = ["houses", "queue", "decision", "log", "compare"];
+const TABS = ["houses", "queue", "decision", "log", "compare", "prices"];
 function showTab(name, focus) {
   if (!TABS.includes(name)) name = "houses";
   TABS.forEach(t => {
@@ -694,6 +707,78 @@ async function loadComparison() {
   if (!body.children.length) note.textContent += " The summary has no rows.";
 }
 
+/* ---------- prices ---------- */
+const SVGNS = "http://www.w3.org/2000/svg";
+function svgEl(tag, attrs) {
+  const n = document.createElementNS(SVGNS, tag);
+  Object.entries(attrs).forEach(([k, v]) => n.setAttribute(k, v));
+  return n;
+}
+const signed = (v, d = 1, unit = "") => v == null ? "—" : (v >= 0 ? "+" : "") + Number(v).toFixed(d) + unit;
+const ctKwh = v => v == null ? "—" : (v * 100).toFixed(2) + " ct/kWh";
+
+function fillTable(table, headers, rows) {
+  const head = table.tHead, body = table.tBodies[0]; head.replaceChildren(); body.replaceChildren();
+  const hr = el("tr"); headers.forEach(h => hr.append(el("th", h))); head.append(hr);
+  rows.forEach(cells => { const r = el("tr"); cells.forEach(c => r.append(el("td", c))); body.append(r); });
+  table.hidden = !rows.length;
+}
+
+function drawPriceChart(d) {
+  const box = $("priceChart"); box.replaceChildren();
+  const pts = d.curve.map((c, i) => [i, c.wholesale_eur_mwh]).filter(p => p[1] != null);
+  if (!pts.length) return;
+  const lo = Math.min(0, ...pts.map(p => p[1])), hi = Math.max(1, ...pts.map(p => p[1]));
+  const x = i => (i / 23) * 940 + 10, y = v => 105 - ((v - lo) / (hi - lo)) * 95;
+  box.append(svgEl("line", {x1: 10, x2: 950, y1: y(0), y2: y(0), stroke: "currentColor", "stroke-opacity": ".25"}));
+  box.append(svgEl("polyline", {points: pts.map(p => x(p[0]) + "," + y(p[1])).join(" "), fill: "none", stroke: "currentColor", "stroke-width": "2", "vector-effect": "non-scaling-stroke"}));
+  const hour = new Date(d.interval_start).getUTCHours();
+  box.append(svgEl("line", {x1: x(hour), x2: x(hour), y1: 0, y2: 115, stroke: "var(--rev)", "stroke-width": "2", "vector-effect": "non-scaling-stroke"}));
+}
+
+function renderPrices() {
+  const d = state.prices; if (!d) return;
+  $("priceTag").hidden = !d.mock;
+  const note = $("priceNote");
+  if (!d.curve.length) { note.textContent = "This agent has no price source."; $("priceChart").replaceChildren(); $("priceTable").hidden = true; return; }
+  const at = d.interval_start.slice(0, 10) + " " + d.interval_start.slice(11, 16) + " UTC";
+  const now = d.curve.find(c => c.ts.slice(0, 13) === d.interval_start.slice(0, 13));
+  note.textContent = "Wholesale (day-ahead) price at " + at + ": " + (now && now.wholesale_eur_mwh != null ? num(now.wholesale_eur_mwh, 0) + " EUR/MWh. " : "not available. ") +
+    (d.mock ? "Illustrative curve, not market data. " : "") + (d.houses.length ? "" : "Propose a plan to see each house's price.");
+  drawPriceChart(d);
+  fillTable($("priceTable"), ["House", "Hourly price", "Solar adder", "Total", "Why"],
+    d.houses.map(h => [h.house_id, ctKwh(h.hourly_eur_kwh), ctKwh(h.adder_eur_kwh), ctKwh(h.total_eur_kwh), h.reason]));
+}
+
+async function loadPrices(t, my) {
+  let data;
+  try { data = await api("prices?interval_start=" + encodeURIComponent(t)); }
+  catch (e) { if (my === gen) $("priceNote").textContent = "Prices are not available: " + e.message; return; }
+  if (my !== gen) return;
+  state.prices = data; renderPrices();
+}
+
+async function loadPricingEval() {
+  const note = $("revNote");
+  $("rev").hidden = true; $("imb").hidden = true;
+  let res;
+  try { res = await fetch("/eval/summary"); } catch (_) { note.textContent = "The screen server did not answer."; return; }
+  if (!res.ok) { note.className = "empty"; note.textContent = "No evaluation output yet. Run python -m src.eval.run --pricing, then reload."; return; }
+  const s = (await res.json()).summary, scenarios = s.scenarios || {};
+  const rows = [], imb = [];
+  Object.keys(scenarios).forEach(k => {
+    const block = scenarios[k].pricing; if (!block) return;
+    block.rows.forEach(r => rows.push([k + " · " + r.name, num(r.prosumer_eur, 0), signed(r.prosumer_vs_today_pct, 1, "%"), num(r.ppc_margin_eur, 0), signed(r.ppc_improvement_eur, 0)]));
+    ((block.imbalance || {}).scenarios || []).forEach(i => imb.push([k + " · " + num(i.spread_eur_mwh, 0) + " EUR/MWh", num(i.group_saving_eur, 0), num(i.prosumer_bonus_eur, 0), signed(i.prosumer_total_vs_today_pct, 1, "%"), signed(i.ppc_improvement_total_eur, 0)]));
+  });
+  fillTable($("rev"), ["Station · policy", "Prosumer (EUR)", "vs today", "PPC margin (EUR)", "PPC improvement (EUR)"], rows);
+  fillTable($("imb"), ["Station · spread", "Saved (EUR)", "Prosumer bonus (EUR)", "Prosumer total vs today", "PPC improvement incl. savings (EUR)"], imb);
+  note.className = "sub";
+  note.textContent = rows.length
+    ? (s.mock ? "MOCK, NOT A RESULT. " : "") + "Run " + s.run_id + ". Numbers come from the evaluation output; prices are matched to the Ausgrid year by season and hour, so this shows the shape of the effect, not a forecast in euros. Prices: euenergy.live (CC-BY-4.0)."
+    : "This evaluation run has no price block. Run python -m src.eval.run --pricing.";
+}
+
 /* ---------- map slot (filled by P4) ----------
    Contract: src/ui/static/map/README.md. A map module registers window.StationMap with
    mount(el, host), update(view) and optionally onShow() and destroy(). The screen never
@@ -736,7 +821,7 @@ async function refresh() {
   renderStrip();
   try {
     if (!state.station) await loadStation();
-    await Promise.all([loadKill, loadForecast, loadGrid, loadQueue, loadLog].map(f => f(t, my)));
+    await Promise.all([loadKill, loadForecast, loadGrid, loadQueue, loadLog, loadPrices].map(f => f(t, my)));
     await loadPlan(t, my);
     if (my === gen) loadDay();
   } catch (e) {
@@ -790,6 +875,7 @@ $("date").value = new Date().toISOString().slice(0, 10);
 showTab(location.hash.slice(1));
 renderStrip();
 loadComparison();
+loadPricingEval();
 loadMapModule();
 refresh();
 </script>
