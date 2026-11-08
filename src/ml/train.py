@@ -26,7 +26,7 @@ from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.metrics import mean_pinball_loss
 
 from src.eval.metrics import evaluate, load_profiles, surplus_kw
-from src.ml import abstention, baselines, calibration, features, model_io
+from src.ml import abstention, baselines, calibration, features, model_io, online_calibration
 from src.ml import labels as labels_io
 from src.ml.config import crew_cases_per_day, violation_target
 from src.ml.explain import build_artifacts, save_artifacts
@@ -150,11 +150,59 @@ def _fold_report(name, fit, valid, valid_labels, pred, surplus, kwp) -> dict:
     }
 
 
-def _decision_layer(labels, val_labels, val_rows, pred, surplus, kwp) -> tuple[dict, pd.DataFrame]:
-    """q05 as the limit, the baselines and the abstention threshold on one out-of-sample set."""
+def _oos_frame(val_rows, pred) -> pd.DataFrame:
+    """What ``online_calibration.replay`` needs: q05, the outcome and when each is known."""
+    index = pd.DatetimeIndex(val_rows["target_start"])
+    return pd.DataFrame(
+        {
+            "q05": pred[:, 0],
+            "safe_share": val_rows["safe_share"].to_numpy(),
+            "decision_time": pd.DatetimeIndex(val_rows["decision_time"]),
+            "available_at": index + features.STEP,  # a label is known when its interval ends
+        },
+        index=index,
+    )
+
+
+def _choose_offset(val_rows, val_labels, pred, surplus, kwp) -> tuple[dict, np.ndarray]:
+    """Step size ``gamma`` of the online offset, replayed on the out-of-sample year.
+
+    Returns the record for ``metadata.json`` and the offset limits of every interval. The
+    final ``c`` of the replay is the start value for the test year and live use.
+    """
+    alpha = violation_target()
+    frame = _oos_frame(val_rows, pred)
+    chosen = online_calibration.choose_gamma(frame, val_labels, surplus, kwp, alpha)
+    run = online_calibration.replay(frame, chosen["gamma"], alpha)
+    record = {
+        "gamma": chosen["gamma"],
+        "alpha": alpha,
+        "c_start": run.c_final,
+        "c_bounds": [online_calibration.C_MIN, online_calibration.C_MAX],
+        "reachable": bool(chosen["reachable"]),
+        "violation_rate": chosen["violation_rate"],
+        "export_index": chosen["export_index"],
+        "period": [str(val_rows["target_start"].min()), str(val_rows["target_start"].max())],
+        "table": chosen["table"].to_dict(orient="records"),
+        "reason": (
+            "gamma with the highest export index whose violation rate on the out-of-sample "
+            "year is at most alpha; if none, the lowest violation rate (reachable is false)"
+        ),
+    }
+    return record, run.limit.to_numpy()
+
+
+def _decision_layer(
+    labels, val_labels, val_rows, pred, surplus, kwp, limit=None
+) -> tuple[dict, pd.DataFrame]:
+    """The limit, the baselines and the abstention threshold on one out-of-sample set.
+
+    The limit is ``q05`` unless ``limit`` (the offset limit of v2) is given. The spread
+    ``q90 - q05`` stays on the raw quantiles: it measures the model's uncertainty.
+    """
     y_val = val_rows["safe_share"].to_numpy()
     index = pd.DatetimeIndex(val_rows["target_start"])
-    q05 = pd.Series(pred[:, 0], index=index)
+    q05 = pd.Series(pred[:, 0] if limit is None else limit, index=index)
     policy, base = _economics(labels, val_labels, q05, surplus, kwp)
     spread = pd.Series(pred[:, -1] - pred[:, 0], index=index)
     X_val = val_rows[features.FEATURES]
@@ -245,7 +293,10 @@ def train(
         models = best["models"][0]
 
     surplus, kwp = _optional_surplus(scenario)
-    decision, curve = _decision_layer(labels, val_labels, val_rows, pred, surplus, kwp)
+    offset, limit = (
+        _choose_offset(val_rows, val_labels, pred, surplus, kwp) if folded else (None, None)
+    )
+    decision, curve = _decision_layer(labels, val_labels, val_rows, pred, surplus, kwp, limit)
     report = {
         "pt_id": pt_id,
         "n_train": len(fit_set),
@@ -255,6 +306,7 @@ def train(
         **decision,
     }
     if folded:
+        report["offset"] = offset
         report["folds"] = [
             _fold_report(name, fit, valid, vlabels, fold_pred, surplus, kwp)
             for name, (fit, valid), (_, vlabels), fold_pred in zip(
@@ -294,6 +346,7 @@ def train(
         }
         if folded:
             meta["folds"] = report["folds"]
+            meta["offset"] = offset
             meta["fold_note"] = (
                 "val_period is the four out-of-sample quarters; the final models are refitted "
                 "on train_period"

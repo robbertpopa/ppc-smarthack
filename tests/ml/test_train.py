@@ -162,3 +162,27 @@ def test_v2_leaves_the_v1_model_alone(env, report, report_v2):
 def test_unknown_version_is_an_error(env):
     with pytest.raises(ValueError, match="unknown model version"):
         train.train("A", grid=FAST, version="safe-cap-qgb-v9")
+
+
+def test_v2_chooses_the_offset_step_on_the_out_of_sample_year(env, report_v2):
+    from src.ml import online_calibration as oc
+
+    _, meta = model_io.load(V2, "PT-A")
+    offset = meta["offset"]
+    assert offset["gamma"] in oc.GAMMAS
+    assert offset["alpha"] == 0.02 and offset["reachable"] in (True, False)
+    assert oc.C_MIN <= offset["c_start"] <= oc.C_MAX
+    assert [row["gamma"] for row in offset["table"]] == list(oc.GAMMAS)
+    assert offset["period"] == meta["val_period"]
+    json.dumps(meta)
+    assert "offset" not in model_io.load("safe-cap-qgb-v1", "PT-A")[1]
+
+
+def test_v2_threshold_is_chosen_on_the_offset_limit(env, report_v2):
+    # the report's limit economics are those of the offset limit, next to the raw q05
+    assert report_v2["offset"]["gamma"] > 0
+    assert (
+        report_v2["abstention"]["violation_rate_with_fallback"]
+        <= (report_v2["abstention"]["violation_target"] + 1e-9)
+        or not report_v2["abstention"]["reachable"]
+    )
