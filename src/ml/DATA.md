@@ -151,11 +151,11 @@ Where it fits (`src/ml/geo.py` loads and validates it; nothing uses it yet):
 3. **Regional feature or check**: whether the error depends on the coast, Sydney or Newcastle.
 
 ## Weather and solar radiation: NASA POWER (hourly, 2010–2013)
-Hourly weather for the 100 postcodes of the houses, from the NASA POWER hourly point API. Nothing else in the pipeline uses weather yet; it is meant for the PV forecast and for the station composition above.
+Hourly weather for the 100 postcodes of the houses, from the NASA POWER hourly point API. The model reads it through `src.ml.weather.load()` (below); no feature uses it yet (P6 step 02).
 
 ```
 python -m src.ml.weather fetch    # one request per postcode and year, cached, safe to rerun
-python -m src.ml.weather build [--csv]   # joins them into DATA_DIR/weather_hourly.parquet
+python -m src.ml.weather build [--csv]   # joins them into DATA_DIR/weather_hourly.parquet (+ .sha256)
 ```
 
 | | |
@@ -167,7 +167,7 @@ python -m src.ml.weather build [--csv]   # joins them into DATA_DIR/weather_hour
 | Request | `community=re`, `time-standard=utc`, 13 parameters, coordinates = the postcode coordinate of `src.ml.geo` |
 | Parameters | `ALLSKY_SFC_SW_DWN` (global horizontal, Wh/m²), `ALLSKY_SFC_SW_DIFF`, `ALLSKY_SFC_SW_DNI`, `CLRSKY_SFC_SW_DWN` (clear-sky), `ALLSKY_KT`, `CLOUD_AMT` (%), `SZA` (°), `T2M` (°C), `RH2M` (%), `WS10M` (m/s), `WD10M` (°), `PS` (kPa), `PRECTOTCORR` (mm/h) |
 
-`weather_hourly.parquet`: one row per postcode and UTC hour (`time_utc`, `postcode`, then the parameters). NASA's fill value −999 becomes null. The API refuses a JSON answer longer than about two years, hence one request per year (400 requests, none failed).
+`weather_hourly.parquet`: one row per postcode and UTC hour (`time_utc`, `postcode`, then the parameters). NASA's fill value −999 becomes null. `build` writes its SHA-256 to `weather_hourly.parquet.sha256`; the file built on 2026-11-07 has `844a2f883b24220fb219c8b560fc70157b6121350c7030b15ca574f60d3495b8` (pyarrow 26.0.1). The API refuses a JSON answer longer than about two years, hence one request per year (400 requests, none failed).
 
 What was checked on 2026-11-07:
 - 100 postcodes × 35,064 hours (2010-01-01 00:00 to 2013-12-31 23:00 UTC), 3,506,400 rows; every request returned every parameter for every hour.
@@ -177,5 +177,12 @@ What was checked on 2026-11-07:
 Limits to keep in mind:
 - **Resolution is coarse.** POWER's cells are about 0.5° × 0.625° (meteorology) and 1° (clouds and radiation), so the 100 postcodes carry only **6 distinct radiation/cloud series and 7 temperature series**. Postcodes in the same cell have identical weather. The weather is regional, not per suburb; do not present it as measured at the house.
 - **Satellite and reanalysis estimates, not station measurements.**
-- **Timestamp meaning is not verified.** We have not checked whether the hour `HH` labels the start or the end of the hour; check this before joining to the half-hourly Ausgrid intervals.
+- **Timestamp: `HH` is the start of the hour, and the value is the mean over the hour** (checked 2026-11-08). In postcode 2008, over the daylight hours of 2010-07 → 2012-06, POWER's `SZA` differs from the zenith computed by `src.ml.sun` by 0.24° on average at `HH + 30 min`, against 4.6° at `HH` and 4.3° at `HH + 60 min`. So a value is known only when its hour ends: `load()` sets `available_at = time + 1 h`.
 - **2012-13 is the held-out test year.** The weather for it is downloaded (the file covers 2010–2013) but it is an input, not a label; keep it out of anything tuned before the final evaluation.
+
+### What the model reads: `load(house_ids=None)`
+`src.ml.weather.load()` returns one row per UTC hour with `time` (start of the hour), `ghi_wm2` (`ALLSKY_SFC_SW_DWN`, the mean W/m² over the hour), `t2m_c` (`T2M`, °C) and `available_at = time + 1 h`.
+- **Station series.** `house_ids` (`AG-0001` form) are the station's houses. Their postcodes' series are averaged, each weighted by its number of houses; a missing value is skipped, and an hour missing everywhere stays NaN, never 0. `None` uses all 300 houses. On 2026-11-08 the 210-house station of the label generator differed from the all-house series by at most 13 W/m² and 0.06 °C, because the grid is coarse.
+- **Leakage rule.** A feature for decision time `t` may only use rows with `available_at <= t`.
+- **History only.** POWER is a reanalysis published days later. Here it stands in for a live weather feed; in a deployment a live source (for example Open-Meteo or ANM, a team decision in P6) would replace it, with the same `available_at` rule.
+- **Not the Sydney point of the P6 brief.** Step 01 of `docs/tasks/p6-ml-v2.md` asked for one Sydney point in `raw/nasa_power/sydney.parquet`. The per-postcode download was already there and covers the houses' own cells, so `load()` builds the station series from it instead of a second download.

@@ -69,6 +69,15 @@ python -m src.ml.data profiles
 ```
 This writes `DATA_DIR/raw/ausgrid/` and `DATA_DIR/profiles.parquet` (about 40 s). `--from PATH` uses a local zip or folder instead of the network. The 2012–13 file is the sealed test year: it is skipped unless you pass `--include-held-out`, which is for the final evaluation only (section 9).
 
+Weather (NASA POWER, hourly, for the houses' postcodes; needs the geo table from `python -m src.ml.data geo`):
+```bash
+python -m src.ml.weather fetch
+```
+```bash
+python -m src.ml.weather build
+```
+This caches 400 answers under `DATA_DIR/raw/nasa_power/hourly/` (safe to rerun) and writes `DATA_DIR/weather_hourly.parquet` with its SHA-256. `src.ml.weather.load()` gives the station's hourly sunlight and temperature with `available_at = time + 1 h`; no model feature uses it yet.
+
 ### 6. Labels
 ```bash
 python -m src.ml.labels mock --scenario A
@@ -122,6 +131,7 @@ Activate with `.venv\Scripts\Activate.ps1`, and set variables before the command
 | Source | Use | Licence |
 |---|---|---|
 | Ausgrid "Solar home electricity data" (300 homes, Sydney, 2010–2013), [copy by Pierre Haessig](https://pierreh.eu/ausgrid-solar-data/) | household consumption and solar generation | CC BY 3.0 AU (as stated in the copy) |
+| [NASA POWER](https://power.larc.nasa.gov/) hourly point API (2010–2013, per postcode) | sunlight and temperature, history only | CC BY 4.0 |
 | [SimBench](https://github.com/e2nIEE/simbench) and [pandapower](https://github.com/e2nIEE/pandapower) | grid benchmark and power flow | see the projects |
 | Labels | the highest safe export share, computed by our power flow (synthetic) | ours |
 
