@@ -131,12 +131,18 @@ def test_input_checks_see_the_features_the_forecast_uses():
     assert seen["checked"]["t"] == DECISION  # built at the decision time, like the forecast
 
 
-def test_without_checks_or_with_broken_ones_there_are_no_flags():
+def test_without_checks_there_are_no_flags():
     assert source().input_checks("PT-A", NOON) == []
+
+
+def test_a_broken_checker_fails_closed(tmp_path):
     model = source()
     model.input_flags = lambda features: 1 / 0
-    assert model.input_checks("PT-A", NOON) == []
-    assert model.forecast("PT-A", NOON) is not None
+    assert model.input_checks("PT-A", NOON) == ["input_check_failed"]
+    plan = service(model, tmp_path).propose(NOON)
+    assert plan.abstain and plan.source == "fallback_static"
+    assert "input_check_failed" in plan.reasons
+    assert plan.explanation.text.startswith("The input checks could not run.")
 
 
 def test_an_input_flag_makes_the_agent_abstain_and_queue_the_case(tmp_path):
