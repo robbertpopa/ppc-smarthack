@@ -21,10 +21,14 @@ EPS = 1e-6
 STEP_HOURS = 0.5
 
 
-def load_profiles(station_houses: pd.DataFrame) -> pd.DataFrame:
-    """Read only the columns and source houses that ``surplus_kw`` needs."""
+def load_profiles(station_houses: pd.DataFrame, path=None) -> pd.DataFrame:
+    """Read only the columns and source houses that ``surplus_kw`` needs.
+
+    ``path`` defaults to ``profiles.parquet``; the dataset version passes the train file of
+    ``src.ml.dataset``, which has the same columns and cleaning.
+    """
     return pd.read_parquet(
-        profiles_path(),
+        profiles_path() if path is None else path,
         columns=["interval_start", "house_id", "gc_kw", "cl_kw", "gg_kw"],
         filters=[("house_id", "in", station_houses["source_house_id"].unique().tolist())],
     )

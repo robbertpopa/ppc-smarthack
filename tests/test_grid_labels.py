@@ -249,14 +249,14 @@ class SealedYearTests(unittest.TestCase):
 
     def test_a_run_into_the_test_year_needs_final_eval(self):
         output = Path(self.directory.name) / "A" / "labels.parquet"
-        for start, days in (("2012-07-01", 1), ("2012-06-30", 2), ("2013-01-01", 1)):
+        for start, days in (("2013-03-01", 1), ("2013-02-28", 2), ("2013-04-01", 1)):
             with self.assertRaisesRegex(ValueError, "sealed test year"):
                 generate(self.source, output, start, days)
         with self.assertRaisesRegex(ValueError, "start is required"):
             generate(self.source, output, None, 1)
         self.assertFalse(output.exists())
-        check_window("2012-06-29", 2)  # ends on 2012-06-30: allowed
-        check_window("2012-07-01", 1, final_eval=True)
+        check_window("2013-02-27", 2)  # ends on 2013-02-28: allowed
+        check_window("2013-03-01", 1, final_eval=True)
 
     def test_null_shares_are_counted_by_kind(self):
         output = Path(self.directory.name) / "A" / "labels.parquet"

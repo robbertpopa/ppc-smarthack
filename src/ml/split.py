@@ -74,6 +74,32 @@ def oos(df: pd.DataFrame) -> pd.DataFrame:
     return pd.concat([valid for _, valid in folds(df)])
 
 
+DS_VAL_START = pd.Timestamp("2013-01-01")
+DS_FIT_END = pd.Timestamp("2013-02-28")
+DS_FOLD_NAMES = ("2013 Jan-Feb",)
+Y2_VAL_START = pd.Timestamp("2012-05-01")
+Y2_FIT_END = pd.Timestamp("2012-06-30")
+Y2_FOLD_NAMES = ("2012 May-Jun",)
+
+
+def dataset_fold(
+    df: pd.DataFrame, val_start=DS_VAL_START, fit_end=DS_FIT_END
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """A split of the train period of ``src.ml.dataset``: fit before ``val_start``, validate after.
+
+    Defaults: fit before 2013-01-01, validate 2013-01-01 to 2013-02-28 (the end of train). The
+    first-two-years version passes ``Y2_VAL_START`` and ``Y2_FIT_END``. Nothing from the test
+    period (2013-03-01 on) is in either part.
+    """
+    date = local_date(df["interval_start"])
+    return df[date < val_start], df[(date >= val_start) & (date <= fit_end)]
+
+
+def dataset_fit_rows(df: pd.DataFrame, fit_end=DS_FIT_END) -> pd.DataFrame:
+    """Everything up to ``fit_end``: what a dataset version is finally refitted on."""
+    return df[local_date(df["interval_start"]) <= fit_end]
+
+
 def daylight(df: pd.DataFrame) -> np.ndarray:
     """Boolean mask: the sun is above the horizon at the middle of the interval."""
     middle = df["interval_start"] + pd.Timedelta(minutes=15)
