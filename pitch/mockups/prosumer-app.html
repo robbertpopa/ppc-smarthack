@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<title>PPC app mockup (illustrative)</title>
+<style>
+*{box-sizing:border-box;margin:0}
+html,body{width:921px;height:2000px;background:transparent;overflow:hidden;font-family:-apple-system,"SF Pro Display","Helvetica Neue",sans-serif;color:#0b0f14}
+.card{position:relative;width:921px;height:2000px;border-radius:110px;background:#fdc300;overflow:hidden}
+.phone{position:absolute;left:62px;top:690px;width:640px;height:1560px;transform:rotate(-9deg) scale(.9);transform-origin:50% 0;border-radius:112px;
+  background:linear-gradient(120deg,#f4f4f6 0%,#b9bbc0 45%,#e9eaee 70%,#8f9196 100%);padding:9px;box-shadow:-30px 40px 70px rgba(120,60,0,.35)}
+.bezel{width:100%;height:100%;border-radius:104px;background:#000;padding:13px}
+.screen{position:relative;width:100%;height:100%;border-radius:92px;overflow:hidden;background:#f2f3f5}
+.island{position:absolute;left:50%;top:24px;width:170px;height:50px;margin-left:-85px;border-radius:30px;background:#000;z-index:5}
+.status{position:absolute;top:26px;left:0;right:0;display:flex;justify-content:space-between;padding:0 62px 0 70px;font-weight:600;font-size:25px;z-index:4}
+.status .r{display:flex;gap:10px;align-items:center;font-size:21px}
+.batt{background:#000;color:#fff;border-radius:8px;padding:1px 8px;font-size:18px}
+.hdr{position:absolute;inset:0 0 auto 0;height:330px;background:linear-gradient(180deg,#ff2bd6 0%,#ff5a3d 38%,#ffa11a 70%,#ffd01a 100%)}
+.logo{position:absolute;left:44px;top:108px;font:900 62px/1 "Avenir Next","Avenir",sans-serif;letter-spacing:-5px;color:#0b0f14}
+.seg{position:absolute;right:38px;top:104px;display:flex;background:#fff;border-radius:18px;padding:5px;font-size:20px;font-weight:600}
+.seg span{padding:10px 20px;border-radius:14px}.seg .on{background:#0b0f14;color:#fff}
+.body{position:absolute;top:215px;left:0;right:0;bottom:0;background:#f2f3f5;border-radius:44px 44px 0 0;padding:30px 30px 0}
+.chips{display:flex;gap:12px;white-space:nowrap;overflow:hidden;margin-bottom:22px}
+.chip{border:2px solid #0b0f14;border-radius:16px;padding:12px 20px;font-weight:700;font-size:20px;background:#fff}.chip.on{background:#0b0f14;color:#fff}
+.box{background:#fff;border-radius:26px;padding:22px 24px;margin-bottom:16px}
+.row{display:flex;justify-content:space-between;align-items:center}
+.t{font-weight:700;font-size:23px}.s{color:#6b7480;font-size:18px;margin-top:3px;line-height:1.35}
+.tog{width:70px;height:40px;border-radius:20px;background:#12b76a;position:relative}.tog:after{content:"";position:absolute;right:4px;top:4px;width:32px;height:32px;border-radius:50%;background:#fff}
+.big{font:800 44px/1 "Avenir Next",sans-serif;white-space:nowrap;flex:none;margin-left:14px}
+.sl{position:relative;height:14px;border-radius:7px;background:#e3e5e9;margin:20px 0 8px}
+.sl i{position:absolute;left:0;top:0;bottom:0;border-radius:7px;background:linear-gradient(90deg,#ff2bd6,#ff7a1a,#ffc400)}
+.sl b{position:absolute;top:-9px;width:32px;height:32px;border-radius:50%;background:#fff;border:3px solid #0b0f14}
+.ends{display:flex;justify-content:space-between;color:#6b7480;font-size:16px;margin-top:14px}
+.hrs{display:flex;gap:10px;margin-top:14px}.hrs span{padding:9px 16px;border-radius:14px;background:#f2f3f5;font-weight:600;font-size:18px}.hrs .on{background:#fdc300}
+.earn{background:#0b0f14;color:#fff}.earn .s{color:#b8bec7}
+.btn{margin-top:6px;background:#0b0f14;color:#fff;text-align:center;border-radius:22px;padding:22px;font-weight:700;font-size:23px}
+
+/* lock screen */
+.lock{position:absolute;inset:0;background:radial-gradient(120% 70% at 20% 0%,#ff3bd9 0%,rgba(255,59,217,0) 60%),linear-gradient(175deg,#e91fd0 0%,#ff4f4f 48%,#ff9a1a 78%,#ffbf00 100%)}
+.lockico{position:absolute;top:118px;left:50%;margin-left:-14px;width:28px;height:30px;color:#fff;opacity:.95}
+.clock{position:absolute;top:166px;left:0;right:0;text-align:center;color:#fff}
+.clock .d{font-size:30px;font-weight:600;opacity:.92;letter-spacing:.2px}.clock .h{font:700 178px/1 "SF Pro Rounded","Avenir Next",-apple-system,sans-serif;letter-spacing:-3px;margin-top:2px}
+.pill{position:absolute;left:50%;top:24px;margin-left:-125px;width:250px;height:52px;border-radius:30px;background:#000;display:flex;align-items:center;justify-content:space-between;padding:0 18px 0 12px;color:#ffc400;font-weight:700;font-size:23px;z-index:5}
+.pill .ic{width:34px;height:34px;border-radius:10px;background:#fdc300;color:#000;font:900 17px/34px "Avenir Next",sans-serif;letter-spacing:-1.5px;text-align:center}
+.live{position:absolute;left:22px;right:22px;top:548px;border-radius:50px;background:rgba(38,32,40,.62);color:#fff;padding:26px 28px 26px;backdrop-filter:blur(40px) saturate(1.4);box-shadow:0 20px 50px rgba(120,20,60,.25),inset 0 0 0 1px rgba(255,255,255,.12)}
+.live .r1{display:flex;align-items:center;gap:18px}
+.icon{flex:none;width:76px;height:76px;border-radius:21px;background:#fdc300;color:#000;font:900 38px/76px "Avenir Next",sans-serif;text-align:center;letter-spacing:-3px;overflow:hidden}
+.live .tx{flex:1;min-width:0}.live .tt{font-size:25px;font-weight:700}.live .st{font-size:20px;color:rgba(255,255,255,.68);margin-top:3px}
+.live .kw{font:800 58px/1 "Avenir Next",sans-serif;letter-spacing:-1.5px;text-align:right;white-space:nowrap}.live .kw small{font-size:27px;font-weight:700;color:#ffc400;margin-left:5px;letter-spacing:0}
+.prog{position:relative;height:16px;border-radius:8px;background:rgba(255,255,255,.2);margin:26px 0 10px}
+.prog i{position:absolute;left:0;top:0;bottom:0;width:62%;border-radius:8px;background:linear-gradient(90deg,#ff2bd6,#ff7a1a,#ffc400)}
+.prog b{position:absolute;left:62%;top:-7px;margin-left:-15px;width:30px;height:30px;border-radius:50%;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.35)}
+.live .foot{display:flex;justify-content:space-between;font-size:20px;color:rgba(255,255,255,.7)}.live .foot b{color:#fff;font-weight:700}
+.fab{position:absolute;bottom:86px;width:104px;height:104px;border-radius:50%;background:rgba(40,30,40,.45);backdrop-filter:blur(30px);display:flex;align-items:center;justify-content:center;color:#fff;font-size:42px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
+.home{position:absolute;bottom:22px;left:50%;margin-left:-100px;width:200px;height:9px;border-radius:5px;background:rgba(255,255,255,.9);z-index:5}
+.v2 .phone{left:140px;top:220px;transform:rotate(-9deg) scale(.95);transform-origin:50% 50%}
+.v2 .live{top:auto;bottom:96px;left:26px;right:26px;border-radius:58px;padding:34px 34px 32px}
+.v2 .icon{width:96px;height:96px;border-radius:26px;font-size:48px;line-height:96px}
+.v2 .live .r1{gap:22px}.v2 .live .tt{font-size:32px}.v2 .live .st{font-size:25px}
+.v2 .live .kw{font-size:76px}.v2 .live .kw small{font-size:34px}
+.v2 .prog{height:20px;margin:32px 0 14px}.v2 .prog b{width:38px;height:38px;top:-9px;margin-left:-19px}
+.v2 .live .foot{font-size:25px}
+.v2 .live{background:rgba(28,22,34,.74)}
+.v2 .live .tt,.v2 .live .st{white-space:nowrap}
+.v2 .icon{width:88px;height:88px;line-height:88px;font-size:44px;border-radius:24px}
+.v2 .live .tt{font-size:30px}.v2 .live .st{font-size:22px}
+.v2 .live .kw{font-size:68px}.v2 .live .kw small{font-size:30px}
+.v2 .live .r1{gap:18px}
+.v1 .phone{left:140px;top:220px;transform:rotate(-9deg) scale(.95);transform-origin:50% 50%}
+.v1 .box{margin-bottom:20px;padding:28px 26px}.v1 .btn{margin-top:10px}
+.master{background:#0b0f14;color:#fff}.master .s{color:#b8bec7}.master .t{font-size:27px}
+.sw{display:flex;align-items:center;gap:14px;font-weight:800;font-size:22px;color:#4ade80}
+.master .tog{width:92px;height:52px;border-radius:26px}.master .tog:after{width:44px;height:44px;top:4px;right:4px}
+</style>
+</head>
+<body>
+<div class="card">
+ <div class="phone"><div class="bezel"><div class="screen" id="screen"></div></div></div>
+</div>
+<script>
+const v=location.hash.includes("v2")?2:1;document.body.className="v"+v;
+const bars=Array.from({length:30},(_,i)=>`<i style="height:${28+Math.round(34*Math.abs(Math.sin(i/3.2+.6)))}px"></i>`).join("");
+const s=document.getElementById("screen");
+s.innerHTML = v===1 ? `
+<div class="island"></div>
+<div class="status"><span>18:42</span><span class="r">5G <span class="batt">88</span></span></div>
+<div class="hdr"></div><div class="logo">ppc</div>
+<div class="seg"><span>Rezidențial</span><span class="on">Prosumator</span></div>
+<div class="body">
+ <div class="chips"><span class="chip on">Vânzare energie</span><span class="chip">Istoric</span><span class="chip">Contract</span><span class="chip">Compar…</span></div>
+ <div class="box master"><div class="row"><div><div class="t">Vânzare către PPC</div><div class="s">Activă acum · o poți opri oricând</div></div><div class="sw"><span>ON</span><div class="tog"></div></div></div></div>
+ <div class="box"><div class="row"><div class="t">Baterie disponibilă pentru vânzare</div><div class="big">60%</div></div>
+  <div class="sl"><i style="width:60%"></i><b style="left:calc(60% - 16px)"></b></div>
+  <div class="ends"><span>0%</span><span>Păstrezi 40% pentru casa ta</span><span>100%</span></div></div>
+ <div class="box"><div class="row"><div><div class="t">Notificare live pe ecranul blocat</div><div class="s">Vezi în timp real cât vinzi</div></div><div class="tog"></div></div></div>
+ <div class="box earn"><div class="row"><div><div class="t">Estimat luna aceasta</div><div class="s">din vânzarea către PPC</div></div><div class="big">148 lei</div></div></div>
+ <div class="btn">Salvează setările</div>
+</div>` : `
+<div class="lock"></div>
+<div class="pill"><span class="ic">ppc</span><span>2,8 kW</span></div>
+<div class="status" style="color:#fff"><span></span><span class="r">5G <span class="batt">88</span></span></div>
+<svg class="lockico" viewBox="0 0 28 30" fill="none" stroke="currentColor" stroke-width="3"><rect x="3" y="12" width="22" height="16" rx="4" fill="currentColor" stroke="none"/><path d="M8 12V9a6 6 0 0 1 12 0v3"/></svg>
+<div class="clock"><div class="d">duminică, 8 noiembrie</div><div class="h">18:42</div></div>
+<div class="live">
+ <div class="r1"><span class="icon">ppc</span>
+  <div class="tx"><div class="tt">Vinzi energie</div><div class="st">Din baterie</div></div>
+  <div class="kw">2,8<small>kW</small></div></div>
+ <div class="prog"><i></i><b></b></div>
+ <div class="foot"><span>Baterie <b>62%</b></span><span>Azi <b>+ 3,12 lei</b></span></div>
+</div>
+<div class="home"></div>`;
+</script>
+</body>
+</html>
