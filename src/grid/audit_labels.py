@@ -4,34 +4,40 @@ from pathlib import Path
 import pandas as pd
 
 from .ausgrid import day_profiles, half_hour_columns, house_readings, read_period, select_households
+from .labels import HOUSES_FILE, customer_number
 from .twin import build_grid, limit_violations, solve
 
 
-def audit(source, labels_dir, transformer_kva=400):
-    """Re-solve sampled boundary labels of a ``generate`` output folder.
-
-    ``transformer_kva`` must be the value the labels were generated with.
-    """
-    labels_dir = Path(labels_dir)
-    labels = pd.read_parquet(labels_dir / "labels.parquet")
-    houses = pd.read_parquet(labels_dir / "station_houses.parquet")
+def audit(source, labels_path):
+    """Re-solve sampled boundary labels with the grid settings of ``station_houses.parquet``."""
+    labels_path = Path(labels_path)
+    labels = pd.read_parquet(labels_path)
+    houses = pd.read_parquet(labels_path.parent / HOUSES_FILE)
     if labels.empty or labels[["pt_id", "interval_start"]].duplicated().any():
         raise ValueError("Labels are empty or contain duplicate intervals")
-    if houses.pv_scale.nunique() != 1:
+    if houses.pv_scale.nunique() != 1 or houses.transformer_kva.nunique() != 1:
         raise ValueError("Expected one consistent scenario")
     scale = float(houses.pv_scale.iloc[0])
+    customers = [customer_number(h) for h in houses.source_house_id]
     local = pd.to_datetime(labels.interval_start, utc=True).dt.tz_convert("Australia/Sydney")
     days_local = local.dt.tz_localize(None).dt.normalize()
-    start, days = days_local.min(), (days_local.max() - days_local.min()).days + 1
-    frame, cl_customers = read_period(source, start, days)
+    start, span = days_local.min(), (days_local.max() - days_local.min()).days + 1
+    frame, cl_customers = read_period(source, start, span)
+    # labels may come from several runs and files: audit the days this source holds
+    labelled = frame.date.isin(days_local.unique())
+    frame = frame[labelled]
+    labels = labels[days_local.isin(frame.date.unique()).to_numpy()]
+    if labels.empty:
+        raise ValueError(f"{source} holds none of the labelled days")
     hours = half_hour_columns(frame)
-    eligible, frame, capacity = select_households(frame, cl_customers, days)
+    days = frame.date.nunique()
+    eligible, frame, capacity = select_households(frame, cl_customers, days, customers)
     grid = build_grid(
         {
             "houses": [
                 {"house_id": str(c), "kwp": float(capacity.loc[c]) * scale} for c in eligible
             ],
-            "transformer_kva": float(transformer_kva),
+            "transformer_kva": float(houses.transformer_kva.iloc[0]),
         }
     )
     boundary = labels[labels.safe_share.notna() & (labels.safe_share < 0.998)]
@@ -71,7 +77,6 @@ def audit(source, labels_dir, transformer_kva=400):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", required=True)
-    parser.add_argument("--labels", required=True, help="folder written by src.grid.labels")
-    parser.add_argument("--transformer-kva", type=float, default=400)
+    parser.add_argument("--labels", required=True, help="labels.parquet written by src.grid.labels")
     args = parser.parse_args()
-    audit(args.source, args.labels, args.transformer_kva)
+    audit(args.source, args.labels)
