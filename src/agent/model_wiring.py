@@ -4,6 +4,7 @@ Heavy imports (ml, grid) stay inside the functions so the mock path loads none o
 """
 
 import logging
+from collections.abc import Sequence
 from datetime import datetime, timezone
 from functools import lru_cache
 
@@ -16,24 +17,50 @@ logger = logging.getLogger(__name__)
 
 UNCAPPED_KW = 1e6
 TRANSFORMER_KVA = 400.0  # the labels are generated for this transformer
-AMBIENT_C = 20.0  # assumed constant: no measured temperature in the data
+AMBIENT_C = 20.0  # assumed when no measured temperature is known at that time
 HISTORY_STEPS = 48  # 24 hours of half hours warm up the thermal state
 STEP_MIN = 30.0
 
 
-def hotspot_c(ratios: list[float], ambient_c: float = AMBIENT_C) -> float | None:
+def hotspot_c(ratios: list[float], ambient_c: float | Sequence[float] = AMBIENT_C) -> float | None:
     """Hot-spot temperature after a run of load ratios, starting from steady state.
 
     Uses the IEC 60076-7 model in ``src.grid.thermal`` with assumed parameters.
+    ``ambient_c`` is one temperature for every step or one per step (``ambient_at``).
     """
     from src.grid import thermal
 
     if not ratios:
         return None
-    state = thermal.steady_state(ratios[0], ambient_c)
-    for ratio in ratios[1:]:
-        state = thermal.step(state, ratio, ambient_c, STEP_MIN)
+    ambient = (
+        [float(ambient_c)] * len(ratios) if isinstance(ambient_c, (int, float)) else list(ambient_c)
+    )
+    if len(ambient) != len(ratios):
+        raise ValueError(f"{len(ratios)} load ratios but {len(ambient)} ambient temperatures")
+    state = thermal.steady_state(ratios[0], ambient[0])
+    for ratio, temperature in zip(ratios[1:], ambient[1:], strict=True):
+        state = thermal.step(state, ratio, temperature, STEP_MIN)
     return state.hotspot_c
+
+
+def ambient_at(weather, times) -> list[float]:
+    """Air temperature known at each time: the newest hour with ``available_at <= time``.
+
+    ``weather`` is ``src.ml.weather.load``'s table or None. Where nothing is known yet (no
+    weather, no hour that old, or a missing value) the answer is ``AMBIENT_C``, the assumed
+    constant of the grid state before measured temperature was used.
+    """
+    import pandas as pd
+
+    times = pd.DatetimeIndex(times)
+    if weather is None or weather.empty:
+        return [AMBIENT_C] * len(times)
+    known = weather.dropna(subset=["t2m_c"]).sort_values("available_at")
+    asked = pd.DataFrame({"at": times, "order": range(len(times))}).sort_values("at")
+    joined = pd.merge_asof(
+        asked, known[["available_at", "t2m_c"]], left_on="at", right_on="available_at"
+    ).sort_values("order")
+    return joined["t2m_c"].fillna(AMBIENT_C).astype(float).tolist()
 
 
 # ``night`` is not checked live: at night there is no PV, so no export limit can bind, and
@@ -70,10 +97,20 @@ def make_model_source(settings: Settings, station: StationConfig) -> ModelSource
     from src.ml import labels as labels_io
     from src.ml.explain import explain
     from src.ml.predict import predict
+    from src.ml.weather import load as load_weather
 
     @lru_cache(maxsize=1)
     def history():
         return labels_io.load(settings.scenario)
+
+    @lru_cache(maxsize=1)
+    def weather():
+        """Measured temperature of the station's houses, or None (then 20 C is assumed)."""
+        try:
+            return load_weather([h.house_id for h in station.houses])
+        except (OSError, ValueError, KeyError) as error:
+            logger.info("no weather for the hot-spot, assuming %.0f C: %s", AMBIENT_C, error)
+            return None
 
     houses = [h.model_dump(exclude_none=True) for h in station.houses]
     config = {"pt_id": station.pt_id, "houses": houses}
@@ -112,7 +149,10 @@ def make_model_source(settings: Settings, station: StationConfig) -> ModelSource
                 abs(float(r.load_kw) - float(r.pv_kw)) / TRANSFORMER_KVA
                 for r in recent.iloc[:-1].itertuples()
             ] + [state["trafo_loading_pct"] / 100]
-            state["trafo_hotspot_c"] = hotspot_c(ratios)
+            # the temperature known when each reading was complete; for the interval itself,
+            # the temperature known at its start
+            times = [*recent.iloc[:-1]["available_at"], interval_start.astimezone(timezone.utc)]
+            state["trafo_hotspot_c"] = hotspot_c(ratios, ambient_at(weather(), times))
         return GridState(interval_start=interval_start, **state)
 
     return ModelSource(

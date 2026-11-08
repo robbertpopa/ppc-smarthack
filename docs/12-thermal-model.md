@@ -58,3 +58,6 @@ Not done:
 - IEC 60076-7:2018, Power transformers, loading guide for mineral-oil-immersed transformers (equations, Table 4 parameters, limits)
 - [venu131995/transformer-dynamic-rating](https://github.com/venu131995/transformer-dynamic-rating): the equations written as differential equations, the 98 °C reference check and the 120 °C / 105 °C / 1.5 limits
 - [alliander-opensource/transformer-thermal-model](https://github.com/alliander-opensource/transformer-thermal-model): default parameters for a distribution ONAN transformer
+
+## Ambient temperature in the agent
+`src/agent/model_wiring.py` (`ambient_at`) gives every step of the hot-spot run the air temperature known at that time: the newest NASA POWER hour with `available_at <= time` (`src.ml.weather.load`). Where no weather file exists, no hour is that old, or the value is missing, the step uses the assumed 20 °C (`AMBIENT_C`), so a data folder without weather gives exactly the earlier numbers.
