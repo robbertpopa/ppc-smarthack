@@ -9,6 +9,8 @@ ROW_LABELS = {
     "model_q05": "Model (q05)",
     "model_fallback": "Model + fallback",
     "oracle": "Safe maximum (oracle)",
+    "model_v2_q05": "Model v2 (q05 with offset)",
+    "model_v2_fallback": "Model v2 + fallback",
 }
 COLUMNS = [
     ("export_index", "Export index (fixed = 100)"),
@@ -17,6 +19,8 @@ COLUMNS = [
     ("per_day_mean", "Flagged / day (mean)"),
     ("per_day_max", "Flagged / day (max)"),
     ("n_intervals", "Daylight intervals"),
+    ("skill_q05", "Skill of q05 vs last known"),
+    ("jain", "Fairness between houses (Jain)"),
 ]
 ACCOUNTING_NOTE = (
     "Export is counted at the applied limit even in an interval where the limit was unsafe; "

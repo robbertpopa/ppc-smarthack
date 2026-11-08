@@ -92,3 +92,35 @@ def test_surplus_from_profiles_uses_the_scales_and_keeps_missing():
     assert list(out["H1"]) == [2.0, 1.5, 0.0]  # no controlled load counts as 0; clipped at 0
     assert out["H2"].iloc[:2].tolist() == [0.0, 0.0]  # 1.0 - 2 * 0.5 = 0
     assert np.isnan(out["H2"].iloc[2])  # missing consumption stays missing
+
+
+def test_skill_score_is_positive_when_better_than_the_reference():
+    from src.eval.metrics import skill_score
+
+    y = np.array([0.5, 0.6, 0.7, 0.4])
+    assert skill_score(y, y - 0.05, y + 0.2) > 0
+    assert skill_score(y, y + 0.2, y - 0.05) < 0
+    assert skill_score(y, y, y) != skill_score(y, y, y)  # reference without loss: NaN
+    assert skill_score(y, np.full(4, np.nan), y) != skill_score(y, np.full(4, np.nan), y)
+
+
+def test_jain_index_is_one_for_equal_shares_and_lower_for_unequal_ones():
+    from src.eval.metrics import jain_index
+
+    assert jain_index([0.5, 0.5, 0.5]) == 1.0
+    assert jain_index([1.0, 0.0, 0.0, 0.0]) == 0.25  # one house gets everything: 1 / n
+    assert 0.25 < jain_index([1.0, 0.5, 0.2, 0.1]) < 1.0
+    assert jain_index([float("nan")]) != jain_index([float("nan")])
+
+
+def test_fairness_compares_the_share_of_exportable_energy_each_house_gets():
+    from src.eval.metrics import fairness
+
+    index = pd.date_range("2012-12-20 01:00", periods=4, freq="30min", tz="UTC")  # Sydney midday
+    surplus = pd.DataFrame({"a": [2.0] * 4, "b": [2.0] * 4}, index=index)
+    labels = pd.DataFrame({"interval_start": index, "safe_share": 0.5})
+    share = pd.Series(0.5, index=index)
+    assert fairness(share, labels, surplus, pd.Series({"a": 4.0, "b": 4.0})) == 1.0
+    # a house with a smaller installed power is held to a smaller limit: it keeps less
+    assert fairness(share, labels, surplus, pd.Series({"a": 4.0, "b": 1.0})) < 1.0
+    assert fairness(share, labels, None, None) != fairness(share, labels, None, None)

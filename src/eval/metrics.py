@@ -10,6 +10,7 @@ next to it, so a policy cannot look good by exporting unsafely.
 
 import numpy as np
 import pandas as pd
+from sklearn.metrics import mean_pinball_loss
 
 from src.common.contract import StationConfig
 from src.ml.config import SYDNEY, profiles_path
@@ -125,3 +126,49 @@ def evaluate(
         result["per_day_mean"] = float(per_day.mean()) if len(per_day) else float("nan")
         result["per_day_max"] = float(per_day.max()) if len(per_day) else float("nan")
     return result
+
+
+def skill_score(y, q05, reference, alpha: float = 0.05) -> float:
+    """``1 - pinball(q05) / pinball(reference)`` at level ``alpha``; positive beats the reference.
+
+    ``reference`` is the last known safe share (persistence). Intervals where any of the
+    three is missing are left out of both losses, so the two are scored on the same rows.
+    """
+    y, q05, reference = (np.asarray(v, dtype=float) for v in (y, q05, reference))
+    keep = np.isfinite(y) & np.isfinite(q05) & np.isfinite(reference)
+    if not keep.any():
+        return float("nan")
+    base = mean_pinball_loss(y[keep], reference[keep], alpha=alpha)
+    if base <= 0:
+        return float("nan")
+    return float(1 - mean_pinball_loss(y[keep], q05[keep], alpha=alpha) / base)
+
+
+def jain_index(x) -> float:
+    """Jain's fairness index ``(sum x)^2 / (n * sum x^2)``: 1 when all equal, 1/n at worst."""
+    x = np.asarray(x, dtype=float)
+    x = x[np.isfinite(x)]
+    if len(x) == 0 or (x**2).sum() == 0:
+        return float("nan")
+    return float(x.sum() ** 2 / (len(x) * (x**2).sum()))
+
+
+def fairness(share: pd.Series, labels: pd.DataFrame, surplus, kwp) -> float:
+    """Jain index over houses of the part of their exportable energy a policy let through.
+
+    For each house, ``sum min(surplus, share * kwp) / sum surplus`` over the scored daylight
+    intervals; houses that never had a surplus are left out. 1 means every house was allowed
+    the same share of what it could export. NaN without per-house surplus.
+    """
+    if surplus is None:
+        return float("nan")
+    lab = labels.set_index("interval_start")
+    scored = lab.index[daylight(labels) & lab["safe_share"].notna().to_numpy()]
+    scored = scored.intersection(surplus.index)
+    applied = share.reindex(scored).to_numpy()[:, None]
+    have = surplus.loc[scored]
+    cap = applied * kwp.reindex(have.columns).to_numpy()[None, :]
+    allowed = np.nansum(np.minimum(have.to_numpy(), cap), axis=0)
+    available = np.nansum(have.to_numpy(), axis=0)
+    some = available > 0
+    return jain_index(allowed[some] / available[some])
