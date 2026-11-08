@@ -193,10 +193,14 @@ class UiAppTests(unittest.TestCase):
         self.write_geo("{not json")
         self.assertEqual(client.get("/geo/station").status_code, 502)
 
-    def test_map_module_is_optional_and_its_folder_is_served(self):
+    def test_the_map_folder_is_served_and_revalidated(self):
         client = self.client()
-        self.assertEqual(client.get("/static/map/map.js").status_code, 404)
+        module = client.get("/static/map/map.js")
+        self.assertEqual(module.status_code, 200)
+        self.assertIn("window.StationMap", module.text)
+        self.assertEqual(module.headers["cache-control"], "no-cache")
         self.assertEqual(client.get("/static/map/README.md").status_code, 200)
+        self.assertEqual(client.get("/static/map/missing.js").status_code, 404)
         self.assertEqual(client.get("/static/map/../index.html").status_code, 404)
 
     def test_the_page_has_the_map_slot_and_keeps_the_simulation_notice(self):

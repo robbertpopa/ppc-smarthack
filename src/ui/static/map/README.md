@@ -1,23 +1,35 @@
-# Map slot (for P4)
+# Neighbourhood map (P4)
 
-The operator screen's **Houses** tab shows the house list on the left and a map slot on the right. The slot shows a placeholder until a map module is installed. P4 delivers that module. Nothing else in the screen has to change.
+The operator screen's **Houses** tab shows a map on the left and the houses, grouped by neighbourhood, on the right. `map.js` in this folder is the map module. It is a small slippy map with no library: OpenStreetMap tiles as images, outlines and feeders as SVG, houses and neighbourhoods as buttons. Without a network the tiles stay empty and everything else still works.
 
-## What P4 adds
+Zoomed out it shows one bubble per neighbourhood (name, number of houses, worst status). From zoom 12 it shows the houses, coloured by the plan's status, and the feeder of each neighbourhood. The chips at the top, the bubbles and the neighbourhood rows in the list all zoom to a neighbourhood; clicking a house on the map selects it in the list and the other way round.
 
-| File | Served at | Purpose |
-|---|---|---|
-| `src/ui/static/map/map.js` | `/static/map/map.js` | The map module. Loaded automatically on page load; a 404 is ignored. |
-| `<ARTIFACT_URI>/geo/station.geojson` | `/geo/station` | Geometry of the neighbourhood (optional). Download OpenStreetMap data once, do not call Overpass from the browser. |
+## Run the three-neighbourhood demo
 
-Libraries (for example Leaflet) and tiles are P4's choice. Keep every file under `static/map/`, which is mounted at `/static/map/`. Add a file pattern to `[tool.setuptools.package-data]` in `pyproject.toml` if a new extension is needed.
+The coordinates come from a customer table (`Customer, Generator Capacity, Postcode, lat, lon, localities`). Keep it out of git (`data/` is ignored).
+
+```sh
+python -m src.ui.geo_build --customers data/p4/customers.csv --out artifacts
+STATION_FILE=artifacts/station/demo_station.json ARTIFACT_URI=artifacts python -m uvicorn src.grid.demo_api:app --port 8000
+API_URL=http://127.0.0.1:8000 ARTIFACT_URI=artifacts python -m uvicorn src.ui.app:app --port 8001
+```
+
+`geo_build` writes `artifacts/geo/station.geojson` (the screen serves it at `/geo/station`) and `artifacts/station/demo_station.json` (the station for the agent API). It chooses the three neighbourhoods itself: three groups of nearby postcodes (`--radius-km`, default 4) with enough customers each (`--houses-per-neighbourhood`, default 15), as close together as possible. With the table of 300 customers this gives Normanhurst, Allambie and Balgowlah in northern Sydney, 15 houses each. Names come from the first locality of the biggest postcode of a group.
+
+What the data is and is not:
+
+- The coordinates are **postcode centroids**, not addresses. Every house gets a deterministic offset around its centroid (a spiral of 120 to about 500 m), so houses do not sit on top of each other. Rerunning gives the same positions.
+- The three neighbourhoods are the **three feeders** of the twin. The station lists houses neighbourhood by neighbourhood and passes `houses_per_neighborhood` to the twin, so house `i` is on feeder `i // 15` exactly as `build_grid` assigns it (tested). Five houses form a node.
+- **Positions never enter the physics.** The twin's line lengths are assumed values, not distances on the map, and one transformer serves all three neighbourhoods although they are kilometres apart. The screen says so under the map.
+- Generator capacity is the house's kWp. No contract caps are set, because the table has none.
 
 ## The module contract
 
-`map.js` registers one global before the page finishes loading:
+`map.js` registers one global before the page finishes loading. To replace it, keep this interface:
 
 ```js
 window.StationMap = {
-  // Called once, the first time the Houses tab is visible. `el` is an empty box that fills the slot (440 px high).
+  // Called once, the first time the Houses tab is visible. `el` is an empty box that fills the slot.
   // host.geo    the parsed GeoJSON from /geo/station, or null when there is none
   // host.select(houseId | null)  tell the screen a house was picked on the map
   mount(el, host) {},
@@ -25,8 +37,9 @@ window.StationMap = {
   // Called on every change of interval, plan, selection or kill switch. Must be cheap and idempotent.
   update(view) {},
 
-  onShow() {},   // optional: the Houses tab became visible again (for example Leaflet's invalidateSize)
-  destroy() {}   // optional
+  focus(groupId | null) {},  // optional: zoom to a neighbourhood, or to all of them
+  onShow() {},               // optional: the Houses tab became visible again
+  destroy() {}               // optional
 };
 ```
 
@@ -36,17 +49,19 @@ window.StationMap = {
 {
   pt_id: "PT-A",
   interval_start: "2025-06-21T10:00:00Z",   // UTC, null when no day is picked
-  selected: "H06" | null,                    // house picked in the list or on the map
+  selected: "109" | null,                    // house picked in the list or on the map
   kill_switch: false,
+  groups: [{id: "N1", name: "Normanhurst"}],
   houses: [
     {
-      id: "H06",
-      kwp: 25.0,
+      id: "109",
+      group: "N3" | null,                    // neighbourhood id from the geometry
+      kwp: 6.2,
       contract_cap_kw: 9.0 | null,
-      limit_kw: 9.0 | null,                  // null: no plan for this interval
-      share: 0.36 | null,                    // limit_kw / kwp
+      limit_kw: 2.17 | null,                 // null: no plan for this interval
+      share: 0.35 | null,                    // limit_kw / kwp
       status: "ok" | "review" | "blocked" | "none",
-      capped: true
+      capped: false
     }
   ]
 }
@@ -56,45 +71,26 @@ window.StationMap = {
 
 | `status` | Meaning | Colour | Symbol |
 |---|---|---|---|
-| `ok` | model limit, guard passed | `#1c7a5a` | ✓ |
+| `ok` | model limit, guard passed | `#2f7d5b` | ✓ |
 | `review` | fixed limit (case sent to a human) or contract cap | `#ffd978`, dark text | ! |
 | `blocked` | blocked by the guard | `#b3261e` | × |
 | `none` | no plan | `#e9eef1` | none |
 
-Colour is never the only signal: always add the symbol or the text. Markers need a hit area of at least 44 px.
+Colour is never the only signal: always add the symbol or the text. The module reads the page's CSS variables (`--ok`, `--rev`, `--bad`, `--ink`, `--bg`, `--line2`, `--soft`), so light and dark themes both work.
 
 ## Geometry (`/geo/station`)
 
-A GeoJSON `FeatureCollection` in WGS84. Properties the screen understands:
+A GeoJSON `FeatureCollection` in WGS84, with `meta.provenance: "assumed"`. Properties the screen and the module understand:
 
-- `kind: "house"` with `house_id` equal to a `house_id` of `GET /station`. Point or building polygon.
-- `kind: "transformer"` with `pt_id`.
-- `kind: "feeder"` (LineString), optional `name`.
+- `kind: "neighbourhood"` (Polygon) with `id` and `name`: the outline, one per feeder.
+- `kind: "house"` (Point) with `house_id` equal to a `house_id` of `GET /station`, `neighbourhood` (an `id` above) and `node`.
+- `kind: "feeder"` (LineString) with `neighbourhood`: the path through the nodes of a neighbourhood.
 
-Houses in the station without a geometry must still be reachable from the list below the map. The screen already shows a labelled house list in the schematic; P4 decides whether the map shows an "unplaced houses" note.
+Houses of the station without geometry are still listed on the right; with no geometry at all the list is flat and the module shows how to build it.
 
 ## Rules
 
-- The grid behind the map is synthetic. The screen prints "Illustrative layout. The grid behind this map is synthetic" under the map; keep the OpenStreetMap attribution visible inside the map.
+- The grid behind the map is synthetic. The screen prints that under the map; keep the OpenStreetMap attribution visible inside the map.
 - The map shows only what `view` gives it. It does not compute limits, statuses or loads.
-- A map error must not break the screen: the screen catches exceptions from `mount` and `update` and shows a message, but a module that throws on every update is still a broken demo, so test it with the kill switch on and with no plan.
-- Respect `prefers-color-scheme` or keep a neutral light basemap that reads well inside both themes.
-- Send a `User-Agent` header when downloading from Overpass, and commit no raw data (see `.gitignore`).
-
-## Try the contract without P4
-
-Save this as `src/ui/static/map/map.js`, reload the screen (do not commit it):
-
-```js
-window.StationMap = {
-  mount(el, host) { this.el = el; this.host = host; },
-  update(view) {
-    this.el.replaceChildren(...view.houses.map(h => {
-      const b = document.createElement("button");
-      b.textContent = h.id + " " + h.status;
-      b.onclick = () => this.host.select(h.id);
-      return b;
-    }));
-  }
-};
-```
+- A module error must not break the screen: the screen catches exceptions from `mount`, `update` and `focus`. Still, test with the kill switch on and with no plan.
+- Do not call Overpass or any API from the browser; build data files offline. Tiles from `tile.openstreetmap.org` are for light, demo use; switch to a tile provider before any real load.

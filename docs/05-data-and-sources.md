@@ -6,6 +6,7 @@ Hackathon rule: data must be public, synthetic, or collected by the team, **with
 | Dataset | Content | Role | Notes |
 |---|---|---|---|
 | **Ausgrid "Solar home electricity data"** (Sydney, 2010–2013) | 300 homes with panels, 30-minute: consumption, generation, export | Real consumption and generation profiles | The original was withdrawn by Ausgrid; we used an unofficial copy (pierreh.eu). Verified: 3 years, 300 homes, different format in 2010–2011 |
+| **NASA POWER** (hourly weather and solar radiation, 2010–2013) | 13 parameters per hour for the 100 postcodes of the houses: irradiance (all-sky, clear-sky, diffuse, direct), cloud, temperature, humidity, wind, pressure, rain | Weather inputs for the PV forecast | CC BY 4.0. Coarse grid (about 0.5° to 1°): the 100 postcodes share 6–7 distinct series. Details: `src/ml/DATA.md` |
 | **SimBench** (German test grids) | Realistic LV/MV grids in pandapower format | Grids on which we run the power flow | Open licence; cables and transformers are German, not Romanian |
 | **pandapower** | AC power flow | Computes the "ground truth": highest safe limit | Open source |
 
@@ -13,6 +14,7 @@ Hackathon rule: data must be public, synthetic, or collected by the team, **with
 - Ausgrid (unofficial copy used): https://pierreh.eu/downloads/Ausgrid_solar_home_data.zip (page: https://pierreh.eu/ausgrid-solar-data/)
 - Ausgrid, original page (withdrawn): https://www.ausgrid.com.au/Industry/Our-Research/Data-to-share/Solar-home-electricity-data
 - Ausgrid, archived page: http://web.archive.org/web/20240721012112/https://www.ausgrid.com.au/Industry/Our-Research/Data-to-share/Solar-home-electricity-data
+- NASA POWER: https://power.larc.nasa.gov/ (hourly API: https://power.larc.nasa.gov/api/temporal/hourly/point ; licence CC BY 4.0 ; how to cite: https://power.larc.nasa.gov/docs/referencing/)
 - SimBench: https://github.com/e2nIEE/simbench (docs: https://simbench.readthedocs.io/)
 
 Links were extracted from the exploration session and not re-checked. The README inside the Ausgrid copy states a Creative Commons Attribution 3.0 Australia licence; we have not verified that with Ausgrid. Details: `src/ml/DATA.md`.
