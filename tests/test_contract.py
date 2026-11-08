@@ -6,6 +6,7 @@ from src.common.contract import (
     ActionEvent,
     Forecast,
     GridState,
+    HousePrice,
     Plan,
     SafeCapShare,
     StationConfig,
@@ -60,3 +61,27 @@ def test_settings_defaults_and_env():
     s = Settings.from_env(env)
     assert (s.app_env, s.demo_token, s.log_uri) == ("cloud", "t", "/tmp/x.jsonl")
     assert Settings.from_env({"DEMO_TOKEN": ""}).demo_token is None
+
+
+def test_house_price_checks_its_total_and_refuses_negatives():
+    ok = {
+        "house_id": "H01",
+        "interval_start": "2025-06-21T10:00:00Z",
+        "wholesale_eur_mwh": 100.0,
+        "hourly_eur_kwh": 0.07,
+        "adder_eur_kwh": 0.04,
+        "total_eur_kwh": 0.11,
+        "floor_applied": False,
+        "reason": "hourly price: wholesale minus the fee, plus the solar adder",
+    }
+    assert HousePrice(**ok).total_eur_kwh == 0.11
+    with pytest.raises(ValidationError):
+        HousePrice(**{**ok, "total_eur_kwh": 0.5})
+    with pytest.raises(ValidationError):
+        HousePrice(**{**ok, "hourly_eur_kwh": -0.01, "total_eur_kwh": 0.03})
+    with pytest.raises(ValidationError):
+        HousePrice(**{**ok, "extra": 1})
+
+
+def test_plan_without_prices_still_loads():
+    assert load_mock("plan", Plan).prices == []

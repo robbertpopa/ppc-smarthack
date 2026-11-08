@@ -1,0 +1,53 @@
+<section id="ciclu" data-transition="fade" style="background:#F7F5EF;color:#12202F;font-family:'DM Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:28px">
+<div style="display:flex;flex-direction:column;gap:8px">
+<p style="font-size:24px;font-weight:700;letter-spacing:2px;color:#17706A">05 · SIGURANȚA</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">Ciclul unui plan și jurnalul</h2>
+</div>
+<!-- Propus 0,0  Aprobat 672,0  Executat 1344,0  Respins 672,240 ; pills 320x110 ; log card 1040,220 -->
+<div style="position:relative;width:1664px;height:500px">
+<div style="position:absolute;left:0px;top:0px;width:320px;height:110px;background:#DCE7F5;border:3px solid #2F5FA5;border-radius:16px;padding:14px 20px;display:flex;flex-direction:column;gap:4px">
+<h3 style="font-size:36px;font-weight:700">Propus</h3>
+<p style="font-size:24px;color:#33424F">plan_proposed</p>
+</div>
+<div style="position:absolute;left:672px;top:0px;width:320px;height:110px;background:#FBE6C2;border:3px solid #9A5A00;border-radius:16px;padding:14px 20px;display:flex;flex-direction:column;gap:4px">
+<h3 style="font-size:36px;font-weight:700">Aprobat</h3>
+<p style="font-size:24px;color:#33424F">plan_approved</p>
+</div>
+<div style="position:absolute;left:1344px;top:0px;width:320px;height:110px;background:#D5ECE8;border:3px solid #17706A;border-radius:16px;padding:14px 20px;display:flex;flex-direction:column;gap:4px">
+<h3 style="font-size:36px;font-weight:700">Executat</h3>
+<p style="font-size:24px;color:#33424F">plan_executed</p>
+</div>
+<div style="position:absolute;left:672px;top:240px;width:320px;height:110px;background:#F6D9D5;border:3px solid #B3261E;border-radius:16px;padding:14px 20px;display:flex;flex-direction:column;gap:4px">
+<h3 style="font-size:36px;font-weight:700">Respins</h3>
+<p style="font-size:24px;color:#33424F">plan_rejected</p>
+</div>
+<div style="position:absolute;left:1040px;top:220px;width:624px;height:280px;background:#FFFDF8;border:1px solid #DAD6CA;border-radius:16px;padding:24px 28px;display:flex;flex-direction:column;gap:10px">
+<h3 style="font-size:32px;font-weight:700">Jurnalul este memoria agentului</h3>
+<ul style="font-size:26px;line-height:1.4;color:#33424F">
+<li>fiecare eveniment are ora, planul, actorul și amprenta planului</li>
+<li>se scrie înainte de starea pe care o descrie</li>
+<li>la pornire, agentul își reface planurile din jurnal</li>
+</ul>
+</div>
+<x-connector x1="320" y1="55" x2="672" y2="55" style="color:#12202F;border-width:3px"></x-connector>
+<x-connector x1="992" y1="55" x2="1344" y2="55" style="color:#12202F;border-width:3px"></x-connector>
+<x-connector x1="160" y1="110" x2="672" y2="295" route="vh" style="color:#B3261E;border-width:3px"></x-connector>
+<x-connector x1="832" y1="110" x2="832" y2="240" style="color:#B3261E;border-width:3px"></x-connector>
+<p style="position:absolute;left:400px;top:12px;width:240px;text-align:center;font-size:24px;font-weight:700">omul aprobă</p>
+<p style="position:absolute;left:1070px;top:12px;width:240px;text-align:center;font-size:24px;font-weight:700">omul execută</p>
+<p style="position:absolute;left:100px;top:312px;width:540px;font-size:24px;line-height:1.4;color:#B3261E;font-weight:700">omul respinge, garda blochează sau kill switch</p>
+<p style="position:absolute;left:850px;top:150px;width:140px;font-size:24px;line-height:1.3;color:#B3261E;font-weight:700">kill switch</p>
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:10px">
+<p style="font-size:24px;font-weight:500;background:#E8E4D8;border-radius:10px;padding:8px 16px">plan_proposed</p>
+<p style="font-size:24px;font-weight:500;background:#E8E4D8;border-radius:10px;padding:8px 16px">guard_blocked</p>
+<p style="font-size:24px;font-weight:500;background:#E8E4D8;border-radius:10px;padding:8px 16px">abstained</p>
+<p style="font-size:24px;font-weight:500;background:#E8E4D8;border-radius:10px;padding:8px 16px">plan_approved</p>
+<p style="font-size:24px;font-weight:500;background:#E8E4D8;border-radius:10px;padding:8px 16px">plan_rejected</p>
+<p style="font-size:24px;font-weight:500;background:#E8E4D8;border-radius:10px;padding:8px 16px">plan_executed</p>
+<p style="font-size:24px;font-weight:500;background:#E8E4D8;border-radius:10px;padding:8px 16px">kill_switch</p>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1300px;font-size:24px;color:#55616D">Sursă: docs/09-contract.md, src/agent/service.py. Un plan respins de om rămâne respins.</p>
+<p style="position:absolute;right:128px;bottom:64px;width:200px;text-align:right;font-size:24px;color:#55616D">11</p>
+<aside>Fiecare plan trece prin stări clare: propus, aprobat, executat, sau respins. Un plan blocat de gardă sau anulat de kill switch poate fi propus din nou; un plan respins de om rămâne respins. Execuția cere întâi aprobarea și este refuzată dacă kill switch-ul este activ. Jurnalul este un fișier JSONL append-only cu șapte tipuri de evenimente. Este și memoria agentului: la pornire, serviciul reface planurile, numărul de revizuiri de azi și starea kill switch-ului din jurnal. Un eveniment se scrie înaintea stării pe care o descrie, deci o scriere eșuată lasă starea neschimbată. Fiecare decizie se poate urmări din jurnal până la prognoza care a produs-o.</aside>
+</section>

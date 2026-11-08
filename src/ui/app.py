@@ -25,7 +25,9 @@ STATIC = Path(__file__).parent / "static"
 MOCK_INSIGHT = Path(__file__).parent / "mocks" / "ai_insight.json"
 # One name or id: letters, digits, "_" and "-", optionally joined by single dots. No "." or "..".
 NAME = r"[\w\-]+(?:\.[\w\-]+)*"
-READ = re.compile(rf"(health|station|forecast|grid_state|plans|plan/{NAME}|queue|log|kill_switch)")
+READ = re.compile(
+    rf"(health|station|forecast|grid_state|prices|plans|plan/{NAME}|queue|log|kill_switch)"
+)
 WRITE = re.compile(rf"(plan/propose|plan/{NAME}/(approve|reject|execute)|kill_switch)")
 RUN_ID = re.compile(NAME)
 FORWARD_HEADERS = ("content-type", "x-demo-token")
@@ -35,6 +37,15 @@ def is_allowed(method: str, path: str) -> bool:
     """Whether the screen may forward this call. The whole path must match."""
     pattern = READ if method == "GET" else WRITE if method == "POST" else None
     return pattern is not None and pattern.fullmatch(path) is not None
+
+
+class RevalidatedFiles(StaticFiles):
+    """Static files the browser must revalidate: the map module changes while it is built."""
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
 
 
 def create_app(settings: Settings | None = None, run_id: str | None = None) -> FastAPI:
@@ -92,7 +103,7 @@ def create_app(settings: Settings | None = None, run_id: str | None = None) -> F
             raise HTTPException(status_code=502, detail="AI insight file is unreadable") from None
 
     # The map module (P4) lives in static/map/ and is optional: the screen works without it.
-    app.mount("/static/map", StaticFiles(directory=STATIC / "map"), name="map")
+    app.mount("/static/map", RevalidatedFiles(directory=STATIC / "map"), name="map")
 
     @app.api_route("/api/{path:path}", methods=["GET", "POST"])
     async def proxy(path: str, request: Request):

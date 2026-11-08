@@ -1,0 +1,49 @@
+<section id="demo" data-transition="fade" style="background:#12202F;color:#F7F5EF;font-family:'DM Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:28px">
+<div style="display:flex;flex-direction:column;gap:8px">
+<p style="font-size:24px;font-weight:700;letter-spacing:2px;color:#F0A030">07 · DEMO</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">Three scenes and a bonus, in five minutes</h2>
+</div>
+<p style="font-size:32px;line-height:1.4;color:#A9B6C2">We say it first: this is a model of one station, not PPC’s network, and nothing controls a real inverter.</p>
+<div style="display:flex;gap:24px">
+<div style="flex:1;display:flex;flex-direction:column;gap:14px;background:#1C3045;border:2px solid #34495E;border-radius:20px;padding:28px">
+<p style="font-size:24px;font-weight:700;color:#12202F;background:#F0A030;border-radius:20px;padding:6px 16px;align-self:flex-start">Scene 1 · 10:00 UTC</p>
+<h3 style="font-size:40px;font-weight:700">A normal day</h3>
+<ul style="font-size:28px;line-height:1.45;color:#DCE4EC">
+<li>propose a plan: green houses</li>
+<li>the guard passed</li>
+<li>approve, execute, log</li>
+</ul>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:14px;background:#1C3045;border:2px solid #34495E;border-radius:20px;padding:28px">
+<p style="font-size:24px;font-weight:700;color:#12202F;background:#F0A030;border-radius:20px;padding:6px 16px;align-self:flex-start">Scene 2 · 05:30 UTC</p>
+<h3 style="font-size:40px;font-weight:700">Uncertainty rises</h3>
+<ul style="font-size:28px;line-height:1.45;color:#DCE4EC">
+<li>the forecast band widens</li>
+<li>houses turn yellow</li>
+<li>back to the fixed 36% limit</li>
+</ul>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:14px;background:#1C3045;border:2px solid #34495E;border-radius:20px;padding:28px">
+<p style="font-size:24px;font-weight:700;color:#12202F;background:#F0A030;border-radius:20px;padding:6px 16px;align-self:flex-start">Scene 3 · the queue</p>
+<h3 style="font-size:40px;font-weight:700">A person decides</h3>
+<ul style="font-size:28px;line-height:1.45;color:#DCE4EC">
+<li>the case waits in “Not sure”</li>
+<li>review budget: 0 of 20</li>
+<li>reject, then the kill switch</li>
+</ul>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:14px;background:#1C3045;border:2px dashed #F0A030;border-radius:20px;padding:28px">
+<p style="font-size:24px;font-weight:700;color:#12202F;background:#5CC4BA;border-radius:20px;padding:6px 16px;align-self:flex-start">Bonus · 20 kVA trafo</p>
+<h3 style="font-size:40px;font-weight:700">The guard blocks</h3>
+<ul style="font-size:28px;line-height:1.45;color:#DCE4EC">
+<li>we start with a weak transformer</li>
+<li>plan blocked: loading over 100%</li>
+<li>physics says no</li>
+</ul>
+</div>
+</div>
+<p style="font-size:28px;line-height:1.4;color:#A9B6C2">“When the model is unsure, it does not guess: it applies today’s limit and asks a person.”</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1400px;font-size:24px;color:#A9B6C2">Full script: pitch/demo-script.md. Without the model connected the forecast is a mock, and we say so out loud.</p>
+<p style="position:absolute;right:128px;bottom:64px;width:200px;text-align:right;font-size:24px;color:#A9B6C2">13</p>
+<aside>Scene 1, a normal day, 10:00 UTC: show the forecast band and the fixed 36% limit, click Propose plan, see the green houses, the limit in kW per house, the explanation and “Guard passed”. Approve, execute and open the log. Scene 2, 05:30 UTC: the band widens, the spread passes the threshold, houses turn yellow and the limit falls back to 36%. Say: when the model is unsure, it does not guess. Scene 3: the case from scene 2 waits in the “Not sure” queue; show the review budget, reject, and optionally turn the kill switch on. Bonus: restart the API with TRANSFORMER_KVA=20; the plan is blocked with the reason “Transformer loading exceeds 100%”. If the comparison panel says “No evaluation output yet” or “MOCK”, quote no figure.</aside>
+</section>

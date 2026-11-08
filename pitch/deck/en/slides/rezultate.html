@@ -1,0 +1,59 @@
+<section id="rezultate" data-transition="fade" style="background:#F7F5EF;color:#12202F;font-family:'DM Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:24px">
+<div style="display:flex;flex-direction:column;gap:8px">
+<p style="font-size:24px;font-weight:700;letter-spacing:2px;color:#17706A">08 · RESULTS</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">Exploration results, not the final evaluation</h2>
+</div>
+<div style="display:flex;gap:48px">
+<div style="width:820px;display:flex;flex-direction:column;gap:10px">
+<p style="font-size:24px;font-weight:700;letter-spacing:2px;color:#55616D">EXPORT VS THE FIXED LIMIT (FIXED = 100)</p>
+<div style="position:relative;width:820px;height:430px">
+<svg aria-label="Bars: export index versus the fixed limit equal to 100. A: model 131, model with fixed-limit fallback 127, safe maximum 134. B: 105, 101, 110. B with reactive power: 128, 119, 132." width="820" height="400" viewBox="0 0 820 400">
+<rect x="0" y="380" width="820" height="3" fill="#55616D"/>
+<rect x="20" y="52" width="56" height="328" fill="#2F5FA5"/>
+<rect x="86" y="62" width="56" height="318" fill="#4DB8AD"/>
+<rect x="152" y="45" width="56" height="335" fill="#F7F5EF" stroke="#12202F" stroke-width="3"/>
+<rect x="310" y="117" width="56" height="263" fill="#2F5FA5"/>
+<rect x="376" y="127" width="56" height="253" fill="#4DB8AD"/>
+<rect x="442" y="105" width="56" height="275" fill="#F7F5EF" stroke="#12202F" stroke-width="3"/>
+<rect x="600" y="60" width="56" height="320" fill="#2F5FA5"/>
+<rect x="666" y="82" width="56" height="298" fill="#4DB8AD"/>
+<rect x="732" y="50" width="56" height="330" fill="#F7F5EF" stroke="#12202F" stroke-width="3"/>
+<line x1="0" y1="130" x2="820" y2="130" stroke="#12202F" stroke-width="3" stroke-dasharray="12 8"/>
+</svg>
+<p style="position:absolute;left:20px;top:22px;width:56px;text-align:center;font-size:24px;font-weight:700">131</p>
+<p style="position:absolute;left:86px;top:32px;width:56px;text-align:center;font-size:24px;font-weight:700">127</p>
+<p style="position:absolute;left:152px;top:12px;width:56px;text-align:center;font-size:24px;font-weight:700">134</p>
+<p style="position:absolute;left:310px;top:87px;width:56px;text-align:center;font-size:24px;font-weight:700">105</p>
+<p style="position:absolute;left:376px;top:97px;width:56px;text-align:center;font-size:24px;font-weight:700">101</p>
+<p style="position:absolute;left:442px;top:75px;width:56px;text-align:center;font-size:24px;font-weight:700">110</p>
+<p style="position:absolute;left:600px;top:30px;width:56px;text-align:center;font-size:24px;font-weight:700">128</p>
+<p style="position:absolute;left:666px;top:52px;width:56px;text-align:center;font-size:24px;font-weight:700">119</p>
+<p style="position:absolute;left:732px;top:18px;width:56px;text-align:center;font-size:24px;font-weight:700">132</p>
+<p style="position:absolute;left:14px;top:392px;width:200px;text-align:center;font-size:24px;color:#55616D">A · trafo</p>
+<p style="position:absolute;left:304px;top:392px;width:200px;text-align:center;font-size:24px;color:#55616D">B · voltage</p>
+<p style="position:absolute;left:594px;top:392px;width:200px;text-align:center;font-size:24px;color:#55616D">B + reactive</p>
+</div>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px">
+<div style="display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:center;gap:14px"><div style="width:26px;height:26px;background:#2F5FA5"></div><p style="font-size:26px">Model, cautious quantile (q05)</p></div>
+<div style="display:flex;align-items:center;gap:14px"><div style="width:26px;height:26px;background:#4DB8AD"></div><p style="font-size:26px">Model + fixed limit when unsure</p></div>
+<div style="display:flex;align-items:center;gap:14px"><div style="width:20px;height:20px;border:3px solid #12202F"></div><p style="font-size:26px">Safe maximum (oracle)</p></div>
+<div style="display:flex;align-items:center;gap:14px"><div style="width:26px;height:0px;border-top:4px dashed #12202F"></div><p style="font-size:26px">Fixed limit = 100</p></div>
+</div>
+<p style="font-size:24px;font-weight:700;letter-spacing:2px;color:#55616D">MODEL + FIXED-LIMIT FALLBACK</p>
+<table style="font-size:24px;width:100%">
+<tr><th style="width:44%;text-align:left">Scenario</th><th style="width:28%;text-align:right">Over limit</th><th style="width:28%;text-align:right">Flagged</th></tr>
+<tr><td style="width:44%">A · trafo binds</td><td style="width:28%;text-align:right">1.9%</td><td style="width:28%;text-align:right">6.4%</td></tr>
+<tr><td style="width:44%">B · voltage binds</td><td style="width:28%;text-align:right">1.7%</td><td style="width:28%;text-align:right">42.5%</td></tr>
+<tr><td style="width:44%">B + reactive power</td><td style="width:28%;text-align:right">2.0%</td><td style="width:28%;text-align:right">16.7%</td></tr>
+</table>
+</div>
+</div>
+<div style="background:#FBE6C2;border-left:8px solid #F0A030;border-radius:12px;padding:20px 32px">
+<p style="font-size:28px;line-height:1.4"><b>Where we really are:</b> these figures come from the exploration prototype (local code, outside the repository). The model in the repo has only run on mock labels, and the 2012–13 test year stays sealed. The final figures come from src.eval.run.</p>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1400px;font-size:24px;color:#55616D">Source: docs/04-chosen-idea.md, simulation on 1 Jul 2012 – 30 Jun 2013. “Over limit” = intervals above the safe limit.</p>
+<p style="position:absolute;right:128px;bottom:64px;width:200px;text-align:right;font-size:24px;color:#55616D">14</p>
+<aside>Present this slide with exactly this framing. The figures are from the exploration prototype built earlier, local code that is not in the repository; they are not the output of the evaluation script. The model in the repo has so far been trained on mock labels, so we do not yet have a final reproducible result. The 2012–13 test year is sealed and is opened once. What the exploration shows: export index versus the fixed limit = 100, in three scenarios. The gain depends on what binds the grid: large where the fixed limit is conservative, small where the grid is tight all the time. The model clearly beats “last known limit” and “same hour yesterday”: 4.2% versus 20–23% violations in scenario B, without the fixed-limit fallback. Before presenting: run python -m src.eval.run and replace these figures; if summary.json says mock: true, do not show this slide.</aside>
+</section>

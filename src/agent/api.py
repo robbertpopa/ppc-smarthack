@@ -73,6 +73,10 @@ def create_app(settings: Settings | None = None, service: AgentService | None = 
             raise HTTPException(status_code=404, detail="no grid state")
         return found
 
+    @app.get("/prices")
+    def prices(interval_start: AwareDatetime | None = Query(default=None)):
+        return service.price_view(interval_start or floor_to_half_hour())
+
     @app.post("/plan/propose", dependencies=[Depends(require_token)])
     def propose(body: ProposeRequest | None = None):
         body = body or ProposeRequest()

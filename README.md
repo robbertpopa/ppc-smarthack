@@ -1,73 +1,154 @@
-# PPC Smarthack XI 2026
+# PPC Smarthack XI 2026: dynamic export limits for prosumers
 
-Team preparation for the PPC challenge at Smarthack XI: **"24h to Power PPC: AI in energy, from data to action"**.
+Our project for the PPC theme **"24h to Power PPC: AI in energy, from data to action"**. An agent decides, every 30 minutes, how much each house under a transformer station may export to the grid. It uses an ML model we trained: quantile regression one hour ahead. When the model is unsure, the agent falls back to the fixed limit and sends the case to a person. Everything is simulated: the grid is synthetic and the household data is Australian (Ausgrid). Nothing controls real inverters.
 
-## Project status
-Hackathon prototype. Working today: the agent API with a review queue, kill switch and action log (P1); the grid twin, the guard and the operator screen (P3), all running on **mock forecasts**. Not yet connected: the trained model (P2), the evaluation table, and the shared `src.agent.api` still uses the stub guard (the grid guard is wired in `src.grid.demo_api`).
-
-Everything shown is simulated. The grid is synthetic (or a German SimBench benchmark), the profiles are Australian (Ausgrid), and nothing controls real inverters.
-
-## Run it
-
-Python 3.12. Install with `python -m pip install -e ".[sim,grid-tools,dev]"`.
-
-| What | Command |
+## What the theme asks for, and where it is
+| Theme requirement | Where |
 |---|---|
-| Tests, lint, smoke | `python -m pytest`, `python -m ruff check src tests`, `python -m src.smoke` |
-| Agent API with the grid guard | `python -m uvicorn src.grid.demo_api:app --port 8000` |
-| Operator screen | `API_URL=http://127.0.0.1:8000 python -m uvicorn src.ui.app:app --port 8001`, then open http://127.0.0.1:8001 |
-| Evaluation table | `python -m src.eval.run` (P2's script: **not in the repository yet**) |
+| ML model trained by the team, code in the repo, runs in our code | `src/ml/train.py`, `src/ml/predict.py` (scikit-learn, no external API) |
+| Separate test set, compared with a simple baseline | `src/eval/run.py`: test year 2012-07-01 → 2013-06-30; baselines fixed limit, last known, same hour yesterday |
+| The agent acts: prioritises, alerts, plans | `src/agent/`: plan per house, approve / reject / execute, review queue, kill switch, action log |
+| "I am not sure" sent to a person | `src/ml/abstention.py` and the review queue (`/queue`) |
+| Explainability | `src/ml/explain.py`: top factors and similar past cases, added to each plan's explanation |
+| Data sources stated | section "Data and sources" below |
+| Reproducible from the README with our evaluation script | sections 1–9 below |
 
-On Windows PowerShell set variables first: `$env:API_URL = "http://127.0.0.1:8000"`.
+## Run it locally
+Every command below was run on 2026-11-08 on macOS with Python 3.12.12; the times come from that machine. Commands are for macOS and Linux; Windows notes are at the end of this section.
 
-Environment: `API_URL` is the agent API the screen calls, `ARTIFACT_URI` and `EVAL_RUN_ID` (default `local`) tell the screen where to read `eval/<run id>/summary.json`, `LOG_URI` is the action log, and `DEMO_TOKEN` is required by the API for writes when set (type it in the screen's token field; it is not stored). See [docs/10-cloud.md](docs/10-cloud.md).
+### 1. Requirements
+- Python 3.12 and git.
+- About 1 GB of free disk for the data and models, and internet for the one-time data download.
 
-### The operator screen
-The first view shows only what needs you: one sentence on the state (needs your decision, blocked by the guard, executed, kill switch on) with the few buttons that apply, four station numbers, and the day at a glance (the forecast band for the safe export share against the fixed limit, and one dot per half-hour showing what happened to its plan). Everything else is behind tabs: **Houses** (limit per house, plus the neighbourhood map slot), **Queue** (the "not sure" cases), **Decision** (the path the agent took as a decision tree, the options it weighed, and what moved the forecast), **Log** (the action log and an agent trace) and **Comparison**. Status is never shown by colour alone. The kill switch is always in the top bar; the demo token and role are under "Session". `#decision`, `#log` and the other tab names work as links.
-
-The Houses tab has a slot for the neighbourhood map (P4). It shows a placeholder until `src/ui/static/map/map.js` exists; the contract (module interface, view model, colours, `/geo/station` geometry) is in [src/ui/static/map/README.md](src/ui/static/map/README.md). The decision tree is built from the real plan, forecast and guard result. The "what moved the forecast" bars and the agent trace come from `GET /ai/insight?plan_id=`: it reads `<ARTIFACT_URI>/ai/<plan id>.json` when the model side writes one, and otherwise returns `src/ui/mocks/ai_insight.json`, which the screen labels "Mock". The comparison panel (fixed limit versus ours) reads `summary.json` from the evaluation output; with no file it shows no numbers. A `mock: true` summary is labelled "MOCK, NOT A RESULT". The older CSV viewer for the 210-house simulation is at `/simulation`.
-
-### Grid twin and labels
-`python -m src.grid.compare_station` compares pandapower and OpenDSS voltages on the synthetic station. To generate a provisional label file:
-
-```sh
-python -m src.grid.labels --source "PATH_TO/Solar home 2012-2013.csv" --output labels.parquet --days 1 --workers 4
+### 2. Install
+```bash
+python3.12 -m venv .venv
+```
+```bash
+source .venv/bin/activate
+```
+```bash
+python -m pip install -e ".[dev,ml,sim,grid-tools]"
 ```
 
-The input data must be obtained separately; do not commit it. `--workers` runs power flows in parallel and gives the same file as one worker. Add `--pv-scale 4` for a synthetic stress scenario, not measured generation. The label schema and battery sign convention still require agreement with P2 and P1, and one day of labels is not enough for model training. `python -m src.grid.audit_labels --source PATH_TO_AUSGRID_CSV --labels PATH_TO_LABELS` audits sampled boundaries; null labels must not be treated as zero. `python -m src.grid.compare_recorded PATH_TO/simulare-case-detalii.csv` compares voltage against OpenDSS at five recorded intervals.
+### 3. Check that everything works
+| Check | Command | Expected |
+|---|---|---|
+| Tests | `python -m pytest -q` | all pass (353 tests, about 2 minutes) |
+| Lint | `python -m ruff check src tests` | `All checks passed!` |
+| Smoke | `python -m src.smoke` | `SMOKE OK` |
 
-The default twin is a synthetic three-feeder station. `build_grid({'topology': 'simbench', 'houses': [...]})` gives a separate SimBench benchmark (its 150-degree transformer phase shift needs DC initialization; this is regression tested). Limitations and every assumed parameter are in [src/grid/ASSUMPTIONS.md](src/grid/ASSUMPTIONS.md).
+### 4. Demo without any data
+Two terminals:
+```bash
+python -m uvicorn src.grid.demo_api:app --port 8000
+```
+```bash
+API_URL=http://127.0.0.1:8000 python -m uvicorn src.ui.app:app --port 8001
+```
+Open http://127.0.0.1:8001 (operator screen). The API uses mock forecasts and the real grid guard; its documentation is at http://127.0.0.1:8000/docs. Each plan also carries the product's price per house (hourly price plus a monthly solar adder); `GET /prices` returns the day's wholesale curve and those prices. The demo uses an illustrative curve, marked `mock`. The **Prices** tab shows the day's wholesale curve, each house's price for the selected half-hour, and, after `python -m src.eval.run --pricing`, what battery owners earn and PPC's margin under each price (start the screen with `EVAL_RUN_ID=<run id>` to pick the run).
 
-### What the guard checks
-`src.grid.agent_guard.make_grid_guard` runs its own power flow on the whole station with the plan's limits and rejects the plan on voltage, line or transformer overload, battery bounds or a limit above the contract cap. It runs two worst-case cases built from the forecast, export (PV p90, load p10) and import (PV p10, load p90), split across houses by an assumed rule, and the plan must pass both. With no PV and load forecast it rejects the plan as unverifiable instead of passing it. It is a simulation check, not a certified protection system.
+**With the neighbourhood map (three neighbourhoods, 45 houses).** Needs a customer table with coordinates (`Customer, Generator Capacity, Postcode, lat, lon, localities`; keep it in `data/`, which git ignores). Build the map data once, then start the API with that station:
+```bash
+python -m src.ui.geo_build --customers data/p4/customers.csv --out artifacts
+```
+```bash
+STATION_FILE=artifacts/station/demo_station.json python -m uvicorn src.grid.demo_api:app --port 8000
+```
+```bash
+API_URL=http://127.0.0.1:8000 ARTIFACT_URI=artifacts python -m uvicorn src.ui.app:app --port 8001
+```
+On Windows PowerShell set the variables first (`$env:STATION_FILE = "artifacts/station/demo_station.json"`). Open the **Houses** tab. The positions are postcode centroids with small offsets, not addresses, and the grid behind the map is synthetic; how the three neighbourhoods are chosen and what the map does is in [src/ui/static/map/README.md](src/ui/static/map/README.md). The map loads its tiles from openstreetmap.org, so it needs a network; without one the houses and neighbourhoods still show on an empty background.
 
-### Limitations
-Balanced three-phase grid, active power only, ideal inverters, a 1.05 pu limit taken from a press summary (the exact rule is unverified), a conservative 100% transformer limit, and no fairness analysis between houses. Figures from the exploration phase are not reproduced by this repository yet; use only what `src.eval.run` produces once it exists.
+### 5. Data
+```bash
+python -m src.ml.data download
+```
+```bash
+python -m src.ml.data profiles
+```
+This writes `DATA_DIR/raw/ausgrid/` and `DATA_DIR/profiles.parquet` (about 40 s). `--from PATH` uses a local zip or folder instead of the network. The 2012–13 file is the sealed test year: it is skipped unless you pass `--include-held-out`, which is for the final evaluation only (section 9).
 
-## Chosen direction
-**Dynamic export limits for prosumers, at the MV/LV transformer-station level.** An agent computes how much each house may export right now, instead of using the fixed limit from the grid connection approval. A team-trained ML model (quantile regression) predicts the highest safe limit one hour ahead; when it is unsure, the agent falls back to the fixed limit and sends the case to a human.
+Weather (NASA POWER, hourly, for the houses' postcodes; needs the geo table from `python -m src.ml.data geo`):
+```bash
+python -m src.ml.weather fetch
+```
+```bash
+python -m src.ml.weather build
+```
+This caches 400 answers under `DATA_DIR/raw/nasa_power/hourly/` (safe to rerun) and writes `DATA_DIR/weather_hourly.parquet` with its SHA-256. `src.ml.weather.load()` gives the station's hourly sunlight and temperature with `available_at = time + 1 h`; no model feature uses it yet.
 
-Why: the problem is real in Romania (overvoltage, 360,000+ prosumers), the solution exists in Australia, and it does not appear in PPC's AI portfolio. Extended variant: "3-in-1" (prosumers + consumers + transformers).
+### 6. Labels
+```bash
+python -m src.ml.labels mock --scenario A
+```
+This writes mock labels with the real schema to `DATA_DIR/labels/A/`. The scenarios are `A`, `B` and `B-VAR`. Real labels come from the power flow (`python -m src.grid.labels`), but its output does not yet match the schema the training reads. Until it does, training runs on mock labels and its numbers are not results.
 
-The figures from our exploration come from simulation (German SimBench grids, Australian Ausgrid data), not from PPC's network.
+### 7. Train
+```bash
+python -m src.ml.train --scenario A
+```
+```bash
+python -m src.ml.forecast_pv_load --scenario A
+```
+These take about 45 s and 40 s. The models and `metadata.json` go to `ARTIFACT_URI/models/<version>/PT-A/`.
 
-## Documentation
-| File | Content |
-|---|---|
-| [docs/01-theme-and-criteria.md](docs/01-theme-and-criteria.md) | Theme, mandatory requirements, scoring |
-| [docs/02-ppc-in-numbers.md](docs/02-ppc-in-numbers.md) | What we know about PPC, with confidence levels |
-| [docs/04-chosen-idea.md](docs/04-chosen-idea.md) | Concept, architecture, simulation results, limits |
-| [docs/05-data-and-sources.md](docs/05-data-and-sources.md) | Datasets, validation, pitfalls |
-| [docs/06-motivation-and-problems.md](docs/06-motivation-and-problems.md) | Real problems: Romania, Poland, Australia |
-| [docs/07-next-steps.md](docs/07-next-steps.md) | Steps before and during the hackathon, risks |
-| [docs/08-parallel-plan.md](docs/08-parallel-plan.md) | Parallel plan for three people, gates, git rules |
-| [docs/09-contract.md](docs/09-contract.md) | Shared interfaces and mock examples |
-| [docs/10-cloud.md](docs/10-cloud.md) | Docker, Terraform and Azure: services, CI/CD, runbook, cost and security |
-| [docs/11-commit-plan.md](docs/11-commit-plan.md) | Commit and merge plan: who commits what, on which branch, in which order |
-| [docs/tasks/](docs/tasks/) | Instructions per person: [P1 (platform, cloud, agent)](docs/tasks/p1-platform-agent.md), [P2 (ML)](docs/tasks/p2-ml.md) with [per-branch briefs](docs/tasks/p2/README.md), [P3 (grid, UI)](docs/tasks/p3-grid-ui.md) |
+### 8. The agent on the trained model
+```bash
+SOURCE=model SCENARIO=A python -m uvicorn src.agent.api:app --port 8000
+```
+Start the screen as in section 4. On the screen, pick a day inside the label period, for example 2012-01-15; the 02:00 UTC slot is 13:00 in Sydney. On other days the model has no recent readings, so its forecast means nothing.
 
-## Conventions
-- Branch: `main`.
-- Conventional commit messages: `docs: ...`, `feat: ...`, `fix: ...`, `chore: ...`.
-- Everything in the repository is written in English.
-- Exploration data and code stay local (ignored via `.gitignore`) until the hackathon starts.
+### 9. Reproduce the results (evaluation)
+The evaluation scores the test year, 2012-07-01 → 2013-06-30. Before running it:
+1. Download the held-out year: `python -m src.ml.data download --include-held-out`.
+2. Rebuild the profiles: `python -m src.ml.data profiles`.
+3. Generate labels that cover that year.
+
+Then run:
+```bash
+python -m src.eval.run --scenario all --run-id final --error-analysis
+```
+The output goes to `ARTIFACT_URI/eval/final/`. The screen's comparison panel reads its `summary.json` when started with `EVAL_RUN_ID=final`. Every number in the presentation comes from this output. `python -m src.common.pipeline --run-id final` runs training, the PV/load forecast and the evaluation in one command.
+
+### 10. Prices and the prosumer price comparison (optional)
+The evaluation can compare what battery owners earn today on an older compensation contract (the regulated monthly average price) and on PPC's MaxControl (the 15-minute spot price minus the injection tariff) with an hourly price plus a monthly solar adder, and what each does to PPC's margin. It needs one year of Romanian day-ahead prices from [euenergy.live](https://euenergy.live) (CC-BY-4.0, free token). Put `EUENERGY_TOKEN=<your token>` in `.env` (the file is not committed), then:
+```bash
+set -a; . ./.env; set +a
+python -m src.pricing.prices fetch --year 2025
+python -m src.eval.run --pricing
+```
+The first command saves `data/pzu/ro.parquet`. The second adds a `pricing` block to `summary.json`, a `pricing_<station>.md` table and a `pricing_day_<station>.png` chart. Prices are matched to the Ausgrid year by season (Sydney July with Bucharest January) and local hour, so the result shows the shape of the effect, not a forecast in euros. Fee, floor and bonus share are placeholders in `src/pricing/config.py`.
+
+If the PV/load forecast is trained (`python -m src.ml.forecast_pv_load --scenario A`), the table also shows the imbalance savings of that forecast against "same time yesterday" for three imbalance spreads (30, 60 and 120 EUR/MWh, scenario values, not market data) and the bonus prosumers would get. Without the trained model that part is skipped.
+
+### Environment variables
+| Variable | Default | Used for |
+|---|---|---|
+| `DATA_DIR` | `./data` | raw data, profiles, labels |
+| `ARTIFACT_URI` | `./artifacts` | models and evaluation output |
+| `LOG_URI` | `./artifacts/logs/actions.jsonl` | the agent's action log |
+| `API_URL` | `http://127.0.0.1:8000` | the agent API the screen calls |
+| `SOURCE` | `mock` | `mock` or `model` |
+| `SCENARIO` | `A` | station for `SOURCE=model` |
+| `MODEL_VERSION` | `safe-cap-qgb-v1` | which saved model is loaded |
+| `EVAL_RUN_ID` | `local` | which evaluation the screen shows |
+| `DEMO_TOKEN` | unset | when set, required for write actions |
+| `EUENERGY_TOKEN` | unset | `python -m src.pricing.prices fetch` |
+
+### Windows (PowerShell)
+Activate with `.venv\Scripts\Activate.ps1`, and set variables before the command, for example `$env:API_URL = "http://127.0.0.1:8000"`.
+
+## Data and sources
+| Source | Use | Licence |
+|---|---|---|
+| Ausgrid "Solar home electricity data" (300 homes, Sydney, 2010–2013), [copy by Pierre Haessig](https://pierreh.eu/ausgrid-solar-data/) | household consumption and solar generation | CC BY 3.0 AU (as stated in the copy) |
+| [NASA POWER](https://power.larc.nasa.gov/) hourly point API (2010–2013, per postcode) | sunlight and temperature, history only | CC BY 4.0 |
+| [SimBench](https://github.com/e2nIEE/simbench) and [pandapower](https://github.com/e2nIEE/pandapower) | grid benchmark and power flow | see the projects |
+| Labels | the highest safe export share, computed by our power flow (synthetic) | ours |
+| [euenergy.live](https://euenergy.live) hourly Romanian day-ahead prices | price comparison | CC BY 4.0, credit euenergy.live |
+
+Details and pitfalls: [src/ml/DATA.md](src/ml/DATA.md) and [docs/05-data-and-sources.md](docs/05-data-and-sources.md). The rest of the documentation is in [docs/](docs/).
+
+## Keeping this README current
+Every change that affects how the project runs updates this README in the same pull request. That includes a new or changed command, option, environment variable, dependency, data step, port, output path or expected time. The reviewer checks it before approving.

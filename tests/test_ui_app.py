@@ -16,12 +16,17 @@ OK = Response(b"{}", media_type="application/json")
 
 
 class AllowlistTests(unittest.TestCase):
+    def test_prices_is_read_only(self):
+        self.assertTrue(is_allowed("GET", "prices"))
+        self.assertFalse(is_allowed("POST", "prices"))
+
     def test_agent_reads_and_writes_are_allowed(self):
         for path in (
             "health",
             "station",
             "forecast",
             "grid_state",
+            "prices",
             "plans",
             "queue",
             "log",
@@ -188,10 +193,14 @@ class UiAppTests(unittest.TestCase):
         self.write_geo("{not json")
         self.assertEqual(client.get("/geo/station").status_code, 502)
 
-    def test_map_module_is_optional_and_its_folder_is_served(self):
+    def test_the_map_folder_is_served_and_revalidated(self):
         client = self.client()
-        self.assertEqual(client.get("/static/map/map.js").status_code, 404)
+        module = client.get("/static/map/map.js")
+        self.assertEqual(module.status_code, 200)
+        self.assertIn("window.StationMap", module.text)
+        self.assertEqual(module.headers["cache-control"], "no-cache")
         self.assertEqual(client.get("/static/map/README.md").status_code, 200)
+        self.assertEqual(client.get("/static/map/missing.js").status_code, 404)
         self.assertEqual(client.get("/static/map/../index.html").status_code, 404)
 
     def test_the_page_has_the_map_slot_and_keeps_the_simulation_notice(self):
@@ -225,3 +234,11 @@ class UiAppTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PricesTabTests(unittest.TestCase):
+    def test_screen_has_the_prices_tab_and_panel(self):
+        html = TestClient(create_app(Settings())).get("/").text
+        for needle in ('id="tab-prices"', 'id="p-prices"', 'id="priceChart"', 'id="rev"'):
+            self.assertIn(needle, html)
+        self.assertIn('"compare", "prices"]', html)

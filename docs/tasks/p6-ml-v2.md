@@ -1,8 +1,8 @@
 # P6: ML v2, a calibrated safe-cap model trained on real labels
 
-**Status:** proposal, written 2026-11-07 from a research session (three research rounds, then a review of `main` at `99fee37`). Step 03 changes rule 2 of [p2/README.md](p2/README.md) (the validation split): the team confirms that before 03 starts.
+**Status:** proposal, written 2026-11-07 from a research session (three research rounds, then a review of `main` at `99fee37`). Updated 2026-11-08 against `main` at `76be12f`: steps 10–12 and S3 added (label schema, live input checks, thermal ambient, house locations), the merge order with PR #25, and the README rule. Step 03 changes rule 2 of [p2/README.md](p2/README.md) (the validation split): the team confirms that before 03 starts.
 
-**Owns:** new `src/ml/weather.py`, `src/ml/online_calibration.py`; changes to `src/ml/features.py`, `src/ml/sun.py`, `src/ml/split.py`, `src/ml/train.py`, `src/ml/abstention.py`, `src/ml/explain.py`, `src/eval/run.py`, `src/eval/metrics.py`, `src/eval/robustness.py`, `src/eval/error_analysis.py`; tests under `tests/ml/` and `tests/eval/`. **Asks P1** for anything in `src/common/`, `src/agent/`, `Makefile`, `pyproject.toml`. **Asks P3** for the label files.
+**Owns:** new `src/ml/weather.py`, `src/ml/online_calibration.py`; changes to `src/ml/features.py`, `src/ml/sun.py`, `src/ml/split.py`, `src/ml/train.py`, `src/ml/abstention.py`, `src/ml/predict.py`, `src/ml/explain.py`, `src/eval/run.py`, `src/eval/metrics.py`, `src/eval/robustness.py`, `src/eval/error_analysis.py`; tests under `tests/ml/` and `tests/eval/`. **Asks P1** for anything in `src/common/`, `src/agent/`, `Makefile`, `pyproject.toml` (steps 11 and 12 touch `src/agent/`). **Asks P3** for the label files and `src/grid/labels.py` (step 10).
 
 ## Contents
 0. [How to use this file (people and AI sessions)](#0-how-to-use-this-file)
@@ -33,7 +33,9 @@
 4. Use the skills in section 9 at the moments listed there.
 5. A fact marked **reported** in sections 10–11 was not re-checked: check it before it goes into code, a test or a slide. Facts in section 12 are wrong; never use them.
 6. Hard rules: never read the sealed test year before step 08; never commit data; no `Co-Authored-By` or any other commit trailer; ask a person before any push, merge, force-push or Azure action; numbers on slides come only from the evaluation output.
-7. When a step is done, post its hand-off line and tick it in section 15.
+7. **README rule:** a step that changes how the project runs (a command, option, environment variable, dependency, data step, port, output path or expected time) updates `README.md` in the same pull request. The reviewer checks it ([../../README.md](../../README.md), "Keeping this README current").
+8. **Merge order:** start no step that edits `src/ml/train.py`, `abstention.py`, `predict.py`, `explain.py`, `forecast_pv_load.py`, `model_io.py` or `src/eval/` before PR #25 is merged (section 3).
+9. When a step is done, post its hand-off line and tick it in section 15.
 
 **For people.** Sections 1, 2, 5 and 14 are enough to decide. Section 7 is the work list; section 10 is the evidence.
 
@@ -46,7 +48,8 @@
 - The validation period is **April–June 2012** (Sydney autumn and early winter); the test is a **full year**. This is the likely cause of the violation drift seen in exploration (1.3–1.8% on validation, 2.3–3.5% on test).
 - P6 adds `safe-cap-qgb-v2` next to v1 with four changes backed by evidence: **weather and clear-sky features**, **validation over all four seasons**, an **online offset** on the limit that learns from recent misses, and **tuning on the violation rate** instead of quantile coverage. Plus three things the jury asks for: **skill against a baseline**, **fairness between houses**, and an error analysis that shows **what we tried to correct**.
 - No new dependency. v1 stays loadable; `MODEL_VERSION` switches between them.
-- Effort (team choice estimate): about 14 hours of code over 9 steps, plus the label generation runtime, which is unknown until measured.
+- **Blocker found on 2026-11-08:** the power-flow label generator writes a different schema from the one training reads, so v1 and v2 can only train on mock labels until step 10 is done. And the live agent does not run the existing input checks, so it does not abstain when readings are missing (step 11).
+- Effort (team choice estimate): about 17 hours of code over 13 steps, plus the label generation runtime (measured: about 7 s per day with 4 workers, section 3).
 
 | Change | Theme criterion it serves | Evidence |
 |---|---|---|
@@ -58,6 +61,8 @@
 | v1 → v2 in the error analysis | ML quality (25): "what you tried to correct" | the theme text |
 | Explanations of the offset and weather | Explainability (10) | the theme text; our `explain.py` |
 | Weather-missing robustness case | Robustness (10) | the theme text |
+| Live input checks: missing readings → "not sure" | Robustness (10), Agent (25) | the theme text; measured gap (section 3) |
+| Labels in the training schema | ML quality (25): "trained on our data" | measured gap (section 3) |
 
 ---
 
@@ -80,7 +85,7 @@ Source: the PPC document "Smarthack XI 2026: tema PPC" (summary in [../01-theme-
 | Model trained and evaluated correctly; error analysis: where it fails and **what we tried to correct** | folds over all seasons (03); v1 vs v2 in the "what we tried" table (07) |
 | Justified decision layer: thresholds with a reason, real constraints (**cases a crew can check per day**), confidence | offset and `τ` chosen on validation against `VIOLATION_TARGET`, with the crew budget `CREW_CASES_PER_DAY` checked and reported (04) |
 | Concrete actions | limit per house; "not sure" queue; calibration alert; stations to check (09, with P1) |
-| Difficult situations: missing data, rare cases, wrong inputs, uncertainty; "I am not sure" to a person | weather optional; existing input checks; weather-missing robustness case (05); abstention unchanged |
+| Difficult situations: missing data, rare cases, wrong inputs, uncertainty; "I am not sure" to a person | weather optional; input checks wired into the live agent (11); weather-missing robustness case (05); abstention unchanged |
 | Explainability: feature importance, similar past cases | new feature names in `explain.py`; the offset shown as its own factor (06) |
 | Reproducibility: README and the evaluation script | one command per stage; byte-identical evaluation; README updated (09) |
 
@@ -121,6 +126,26 @@ State at `99fee37` (2026-11-07), all merged by P2:
 Missing: **real labels** (`DATA_DIR/labels/` does not exist; only exploration files in `data/prepared/`). Local data folders also hold `data/ausgrid`, `data/simbench`, a GoiEner sample in `data/goiener` (not used) and empty `data/ukpn_*` folders.
 
 Label generator today (`src/grid/labels.py`, P3): one Ausgrid CSV per run (`--source`, `--start`, `--days`, `--transformer-kva`, `--pv-scale`, `--workers`); daylight 06:00–20:00 Sydney with PV > 0; it builds the **synthetic three-feeder station** by default (SimBench is optional through `build_grid({"topology": "simbench", ...})`) and names the station `PT-synthetic-<kVA>kVA`.
+
+### Since then (main at `76be12f`, 2026-11-08)
+| Change | What it means for P6 |
+|---|---|
+| `SOURCE=model` wiring (`src/agent/model_wiring.py`, `wiring.py`) | the agent uses `ml.predict`, the labels history, the grid guard and the model's abstention threshold; `SCENARIO` picks the station |
+| Hot-spot temperature in the grid state (`model_wiring.hotspot_c`) | IEC 60076-7 over the last 24 h of readings with an **assumed constant 20 °C ambient** (`AMBIENT_C`): step 12 replaces it with measured temperature |
+| `src.common.pipeline` | train, PV/load forecast and evaluation in one command |
+| README rewritten as the local run guide | every run-affecting change updates it (README rule, section 0) |
+
+### Open pull requests that touch P6
+| PR | Files | Effect on P6 |
+|---|---|---|
+| #25 `fix/p2-review-comments` | `src/ml/train.py`, `abstention.py`, `predict.py`, `explain.py`, `forecast_pv_load.py`, `model_io.py`, `src/eval/*`, `pyproject.toml`, `Makefile`, CI | the same files as steps 02–07 and 11: **merge it before those steps start**, or every P6 branch conflicts. Caches keyed on `metadata.json` time, so a retrained model is picked up by a running API |
+| #26 `ml/house-locations` | `src/ml/geo.py`, `src/ml/data.py`, `src/ml/DATA.md` | postcode, suburb, latitude and longitude per Ausgrid customer (`python -m src.ml.data geo --from <geo.csv>`, stored under `DATA_DIR/reference/`). Enables stretch S3 (weather and sun per location); also useful for the P4 map |
+
+### Measured on 2026-11-08 (clean data folder)
+- **Label schema mismatch.** One day of `src.grid.labels` (`--start 2012-01-15 --days 1 --workers 4`) wrote 28 labels in about 7 s with columns `pt_id, interval_start, safe_cap_share, provenance, n_houses, pv_scale, transformer_kva, source` and station id `PT-synthetic-400kVA`. `src.ml.labels.validate` rejects it: missing `safe_share`, `converged`, `binding`, `load_kw`, `pv_kw`, `net_kw`, `kwp_total`, `available_at`, `source_ref`; no `station_houses.parquet`. Step 10.
+- **Label runtime.** About 7 s per day with 4 workers: two training years ≈ 730 days ≈ 85 minutes per scenario on 4 workers (estimate; days differ in length).
+- **Live input checks not wired.** `abstention.quality_flags` (`missing_net_now`, `missing_share_last`, `stale_input`, `out_of_range_net`, `night`) is used only in training and evaluation. With `SOURCE=model` on a day without readings, `/forecast` returns q05 ≈ 0.74 with no flag and `/plan/propose` proposes limits. Step 11.
+- **Training on mock labels** (scenario A): about 45 s; PV/load forecast about 40 s; tests 353 pass in about 2 minutes.
 
 ---
 
@@ -169,7 +194,7 @@ Pitch only (idea and relevance): ANRE, German 60% rule, Kapacitet+, University o
 
 Not in P6: Open-Meteo, Meteostat, PVGIS, CAMS, Swiss profiles, GoiEner, Low Carbon London, ETT, ENTSO-E, UK DNO portals (section 10; reasons in section 13).
 
-**Limits to state.** One weather point for the whole Ausgrid area (Sydney coordinates in `src/ml/sun.py`). NASA POWER is history: a live system needs a live source (Open-Meteo or the Romanian ANM); the model must still work without weather. Australian homes, Romanian story: say it.
+**Limits to state.** One weather point for the whole Ausgrid area (Sydney coordinates in `src/ml/sun.py`); stretch S3 uses the house coordinates from PR #26 instead. NASA POWER is history: a live system needs a live source (Open-Meteo or the Romanian ANM); the model must still work without weather. Australian homes, Romanian story: say it.
 
 ---
 
@@ -177,26 +202,63 @@ Not in P6: Open-Meteo, Meteostat, PVGIS, CAMS, Swiss profiles, GoiEner, Low Carb
 | # | Branch | Depends on | Size | Hours (estimate) | Cut |
 |---|---|---|---|---|---|
 | 00 | — (setup) | — | — | 0.5 | never |
-| 01 | `ml/weather` | 00 | ~150 lines | 2 | never |
-| 02 | `ml/features-v2` | 01 | ~150 | 1.5 | never |
-| 03 | `ml/time-folds` | team OK on rule 2 | ~200 | 2 | never |
+| 10 | `grid/labels-ml-schema` (P3 with P2) | 00 | ~200 lines | 2 | never |
+| 11 | `agent/live-input-checks` (P1 with P2) | PR #25 | ~100 | 1 | never |
+| 01 | `ml/weather` | 00 | ~150 | 2 | never |
+| 02 | `ml/features-v2` | 01, PR #25 | ~150 | 1.5 | never |
+| 03 | `ml/time-folds` | team OK on rule 2, PR #25 | ~200 | 2 | never |
 | 04 | `ml/online-offset` | 03 | ~200 | 2 | never |
 | 05 | `eval/v2-columns` | 04 | ~200 | 2 | Jain 2nd |
 | 06 | `ml/explain-v2` | 02, 04 | ~100 | 1 | 3rd |
 | 07 | `eval/what-we-tried-v2` | 05 | ~100 | 1 | never |
-| 08 | run: labels, train, final evaluation | 02–07, P3 labels | — | label runtime unknown | never |
+| 12 | `agent/thermal-ambient` (P1) | 01 | ~60 | 0.5 | 2nd |
+| 08 | run: labels, train, final evaluation | 02–07, 10, 11 | — | about 85 min of labels per scenario on 4 workers | never |
 | 09 | `docs/p6-results` + P1 requests | 08 | ~100 | 1.5 | never |
 | S1 | `eval/feederbw-check` | 08 | ~200 | 4 | 1st |
-| S2 | second grid family for labels (P3) | P3 | — | 4–6 | 1st |
+| S2 | second grid family for labels (P3) | 10 | — | 4–6 | 1st |
+| S3 | `ml/weather-by-location` | 02, PR #26 | ~150 | 2 | 1st |
 
-Parallel: 01 and 03 touch different files and can run at the same time. 06 can start once 02 and 04 are merged.
+Rows are in working order; the numbers are stable ids (10–12 and S3 were added on 2026-11-08). Parallel: 10, 11, 01 and 03 touch different files and can run at the same time (10 in `src/grid/`, 11 in `src/agent/` and `predict.py`, 01 a new file, 03 `split.py` and `train.py`). 06 can start once 02 and 04 are merged. **PR #25 first:** 02–07 and 11 edit the files it changes.
 
 ### 00 · Setup and checks
 **Context:** sections 3 and 6; [p2/README.md](p2/README.md) "How to run a task".
-1. `git switch main && git pull`; `python -m pip install -e ".[ml,sim,dev]"`; `make smoke` must pass before any change.
+1. `git switch main && git pull`; install and check as in the README ("Run it locally", sections 2–3): `python -m pip install -e ".[dev,ml,sim,grid-tools]"`, then tests, lint and `python -m src.smoke`.
 2. `python -m src.ml.data download` and `python -m src.ml.data profiles` (2010–12 only; the test file stays sealed).
-3. With P3, agree the scenario mapping: which grid configuration (synthetic station or SimBench, transformer size, PV scale, reactive-power control for B-VAR) is `A`, `B`, `B-VAR`, and that the label file uses `PT-A`, `PT-B`, `PT-B-VAR` and the schema in `src/ml/labels.py`.
-4. With P3, measure label time: one scenario, `--days 7 --workers 8`. Extrapolate to two years × three scenarios. If it is too long for a laptop, ask the team before using the Azure batch job.
+3. Check that PR #25 is merged; if not, ask the team to merge it before 02–07 and 11 start.
+4. With P3, agree the scenario mapping: which grid configuration (synthetic station or SimBench, transformer size, PV scale, reactive-power control for B-VAR) is `A`, `B`, `B-VAR`. Step 10 implements it.
+5. Label time is already measured (section 3): about 7 s per day with 4 workers, about 85 minutes per scenario for two years. Run `--days 7 --workers 8` once on the target machine to confirm; if it is too long for a laptop, ask the team before using the Azure batch job.
+
+### 10 · `grid/labels-ml-schema` (P3, with P2)
+**Goal:** the power-flow labels load with `src.ml.labels.load(scenario)` and train the model; this is what turns mock numbers into results.
+**Why (theme):** "a model trained … on data prepared by the team"; without it every number is from mock labels.
+**Context:** section 3 ("Measured"), `src/ml/labels.py` (schema, `validate`, the mock writer as the reference), `src/grid/labels.py`, `src/grid/twin.py`, [p2/03-labels-io.md](p2/03-labels-io.md).
+**Files:** `src/grid/labels.py` (P3), tests under `tests/` for the grid labels.
+1. Add `--scenario {A,B,B-VAR}`: write `DATA_DIR/labels/<scenario>/labels.parquet` and `station_houses.parquet` in the ML schema (`pt_id` = `PT-<scenario>`, `safe_share`, `converged`, `binding`, `load_kw`, `pv_kw`, `net_kw`, `kwp_total`, `n_houses`, `available_at = interval_start + 30 min`, `provenance`, `source_ref = "grid/labels.py@<sha>"`, UTC times). Keep `--output` working as today.
+2. `safe_share` is null where the power flow did not converge, never 0. `binding` from the twin if it reports it, otherwise null.
+3. Several runs (one per Ausgrid file and day range) append to the same scenario folder without duplicates.
+4. The scenario mapping from step 00; if it is not agreed yet, implement `A` with today's defaults and leave `B` and `B-VAR` as clearly marked TODOs.
+5. README step 6 ("Labels"): replace the "does not yet match" note with the real command (README rule).
+**Acceptance:** a tiny in-test fixture written by the new option passes `src.ml.labels.validate`; null stays null; one real day loads with `labels.load("A")` and `python -m src.ml.train --scenario A` runs on it.
+
+### 11 · `agent/live-input-checks` (P1, with P2)
+**Goal:** the live agent says "I am not sure" when its inputs are missing, stale or wrong, as training and evaluation already assume.
+**Why (theme):** "difficult situations: missing data, wrong inputs … a good agent says 'I am not sure' and sends the case to a person"; Robustness (10), Agent (25).
+**Context:** section 3 ("Measured"), `src/ml/abstention.py` (`quality_flags`), `src/agent/service.py` (`force_abstain` passed to `make_plan`), `src/agent/planner.py`, `src/agent/model_source.py`, [../09-contract.md](../09-contract.md).
+**Files:** `src/agent/model_source.py` or `service.py` (P1), `src/ml/predict.py` if the flags travel with the forecast, tests.
+1. When `SOURCE=model`, compute `abstention.quality_flags(features)` for each decision with the same features `predict` used.
+2. Any flag forces abstention through the existing `force_abstain` path, with the flag names as the reasons (they appear in the plan, the queue and the log).
+3. If P1 prefers the flags on the `forecast` object (the optional `quality_flags` field discussed in P2 task 08), it is a contract change: P1 decides.
+4. Out-of-range days (no readings in the history) must give `missing_net_now` and `stale_input`, so the plan abstains instead of proposing limits.
+**Acceptance:** a test with an empty history gives an abstained plan whose reasons include `missing_net_now`; a normal day inside the label period is unchanged.
+
+### 12 · `agent/thermal-ambient` (P1)
+**Goal:** the transformer hot-spot uses measured temperature instead of a constant 20 °C.
+**Why (theme):** real constraints in the decision layer; honest physics.
+**Context:** `src/agent/model_wiring.py` (`hotspot_c`, `AMBIENT_C`), [../12-thermal-model.md](../12-thermal-model.md), step 01.
+**Files:** `src/agent/model_wiring.py`, its tests.
+1. When `weather.load()` has a temperature with `available_at <=` the decision time, pass it as the ambient for each step; otherwise keep 20 °C and say "assumed" in the grid state, as today.
+2. Same for the history steps used to warm up the thermal state.
+**Acceptance:** a hot day gives a higher hot-spot than the 20 °C default; missing weather gives exactly today's numbers.
 
 ### 01 · `ml/weather`
 **Goal:** hourly sunlight and temperature for Sydney, each with the time it becomes known.
@@ -207,6 +269,7 @@ Parallel: 01 and 03 touch different files and can run at the same time. 06 can s
 2. Send a `User-Agent` that names the project, no personal e-mail. Save `DATA_DIR/raw/nasa_power/sydney.parquet` and write its SHA-256 next to it.
 3. `load() -> DataFrame` with `time` (UTC), `ghi_wm2`, `t2m_c`, `available_at`. **Conservative rule:** `available_at = time + 1 h` whatever end of the hour the API labels, so no value can be used early. Fill values (for example −999) become NaN.
 4. Docstring: source URL, licence note, the availability rule, and that NASA POWER is for history only.
+5. README: the download command in "Run it locally" (section 5, Data) and NASA POWER in "Data and sources" (README rule).
 **Acceptance:** tests on a tiny in-test JSON: parsing, NaN for fill values, the `available_at` rule, UTC index; no network in tests.
 
 ### 02 · `ml/features-v2`
@@ -276,6 +339,7 @@ and where the model limit was applied (not abstained):
 3. **Jain's fairness index** in `metrics.py`: `J = (Σ x)² / (n · Σ x²)` over houses, `x` = share of a house's exportable energy it was allowed to export over the test year. 1 = every house kept the same share. Report it for fixed, model and oracle.
 4. `robustness.py`: add **weather missing** (all weather features NaN) next to missing readings, noise and censored production. If the cost is large, the fix is a training option that blanks weather on a fixed 10% of rows (fixed seed); decide from the numbers.
 5. `summary.json` keeps its schema for P3's comparison panel; new numbers go in new keys.
+6. README section 9 ("Reproduce the results"): any new option or output file (README rule).
 **Acceptance:** two runs give byte-identical outputs; Jain is 1 for equal shares and lower for unequal ones; v1 numbers unchanged by this branch.
 
 ### 06 · `ml/explain-v2`
@@ -300,7 +364,7 @@ and where the model limit was applied (not abstained):
 ### 08 · Run: labels, training, final evaluation
 **Why (theme):** the model trained by the team on our data; results from our script.
 **Context:** sections 3, 6; step 00.
-1. P3 generates labels for A, B, B-VAR over 2010-07 → 2012-06 with the mapping agreed in 00, into `DATA_DIR/labels/<scenario>/`.
+1. P3 generates labels for A, B, B-VAR over 2010-07 → 2012-06 with the step 10 option and the mapping agreed in 00, into `DATA_DIR/labels/<scenario>/` (about 85 minutes per scenario on 4 workers).
 2. `python -m src.ml.weather download`, then `python -m src.ml.train --scenario all` (v2) and the PV/load forecast retrain.
 3. Read the fold report: any change that does not help on the folds is turned off for v2, and the hand-off says so.
 4. **Final evaluation, once:** P3 generates the test-year labels; `python -m src.ml.data download --include-held-out`, `python -m src.ml.data profiles`, then `python -m src.eval.run --scenario all --run-id final`.
@@ -308,15 +372,16 @@ and where the model limit was applied (not abstained):
 
 ### 09 · `docs/p6-results` and requests to P1
 **Why (theme):** reproducibility, concrete actions, idea and relevance.
-1. README: the v2 commands (weather download, train, evaluate), `MODEL_VERSION=safe-cap-qgb-v2`, the weather source and licence, the limits from section 6.
+1. README: each step should already have updated it (README rule). Here, run every command in "Run it locally" once more on a clean `DATA_DIR`, set `MODEL_VERSION=safe-cap-qgb-v2` where v2 is the default to show, and fix anything that drifted.
 2. [../05-data-and-sources.md](../05-data-and-sources.md): add NASA POWER (and FeederBW if S1 runs).
-3. [../02-ppc-in-numbers.md](../02-ppc-in-numbers.md) and the README still say "360,000+" prosumers: replace with the ANRE figure (section 10.6), with its source.
+3. [../02-ppc-in-numbers.md](../02-ppc-in-numbers.md) still says "360,000+" prosumers: replace it with the ANRE figure (section 10.6), with its source.
 4. **Ask P1** (agent): keep the offset state per station; log the rolling violation and abstention rates; raise an **alert** when the rolling violation rate is above `α`; optionally a "stations to check today" list ordered by offset and abstentions. These are actions in the theme's sense.
 5. Pitch: the facts in section 10.6, marked with their sources.
 
 ### Stretch (cut first)
 - **S1 · `eval/feederbw-check`.** FeederBW (KIT and Netze BW): 200 real German low-voltage feeders, 1-minute active/reactive power, **voltage** and currents, April 2023 → March 2025, hourly weather per feeder, metadata with installed PV, batteries, EV chargers, heat pumps; CC BY 4.0; Zenodo 17831177 (five zips of 1.7 GB; one is enough); loaders at github.com/KIT-IAI/FeederBW. Use: retrain the PV/load forecast on one batch and report it next to Ausgrid; check measured voltage against the 1.05 pu rule. External test only, never mixed into training. Serves: ML quality, idea relevance (European data).
 - **S2 · second grid family (P3).** Labels on the ENWL / University of Manchester 25 real UK low-voltage networks (about 131 feeders, OpenDSS, released for research) or the CSIRO 23 representative Australian networks (OpenDSS, github.com/csiro-energy-systems/RepresentativeLVNetworks). Read the licence first. We already have `opendssdirect`. Serves: robustness across grids.
+- **S3 · `ml/weather-by-location`.** After PR #26 is merged, each Ausgrid house has a postcode, latitude and longitude (`DATA_DIR/reference/`). Download NASA POWER for the station's houses' centroid (or a few points) instead of one Sydney point, and compute sun position and clear-sky sunlight at that centroid. Keep the step 01 availability rule and the step 02 feature names, so nothing else changes. Measure on the folds; keep it only if it helps. Serves: ML quality, and removes a stated limit (section 6). README: the new download option (README rule).
 
 ---
 
@@ -330,6 +395,9 @@ Definition of done for P6 (adapted from Breck et al., "The ML Test Score", repor
 - [ ] The agent logs the rolling violation and abstention rates and alerts above `α` (P1).
 - [ ] Guard and kill switch unchanged: no limit is sent without the guard's pass.
 - [ ] Models are loaded once at API start (existing `predict` cache); artifacts come only from our own `ARTIFACT_URI` (joblib is fine for our own files; use skops if models ever come from elsewhere).
+- [ ] The live agent runs the input checks: missing, stale or out-of-range readings abstain (step 11).
+- [ ] Labels used for training come from the power flow in the ML schema (step 10); mock labels are never reported as results.
+- [ ] Every pull request that changes how the project runs updates `README.md` (README rule).
 - [ ] `make smoke`, `python -m pytest`, `python -m ruff check src tests` pass on every branch.
 
 ---
@@ -480,6 +548,10 @@ No open-source project predicts a one-hour-ahead safe export share with quantile
 | v1 → v2 "what we tried" | theme text; `error_analysis.py` | in repo |
 | Production checklist | Breck et al.; our `docs/10-cloud.md` | reported, in repo |
 | Hour estimates | team choice | team choice |
+| Step 10 (label schema), step 11 (live input checks), label runtime | measured on 2026-11-08 by running `src.grid.labels`, `src.ml.labels.validate` and the `SOURCE=model` API | checked |
+| Step 12 (thermal ambient) | `src/agent/model_wiring.py` (`AMBIENT_C = 20.0`, "assumed constant") | in repo |
+| Merge order with PR #25; S3 house locations | PR #25 and #26 descriptions and file lists (GitHub) | checked |
+| README rule | team decision, written in `README.md` | in repo |
 
 ---
 
@@ -529,14 +601,19 @@ Research agents reported these; checking showed them wrong or unsupported. Do no
 3. The scenario mapping and station ids with P3 (step 00).
 4. Where label generation runs: laptop or the Azure batch job (ask before any Azure run).
 5. The live weather source for the deployment story: Open-Meteo or ANM.
-6. Whether to run S1 (FeederBW) and S2 (second grid family).
+6. Whether to run S1 (FeederBW), S2 (second grid family) and S3 (weather by location).
+7. Merge PR #25 before steps 02–07 and 11; merge PR #26 if S3 or the P4 map will use the house locations.
+8. Who owns steps 10 (P3, `src/grid/`) and 11–12 (P1, `src/agent/`).
 
 ---
 
 ## 15. Hand-off
 Post one line per merged step, then the final line.
 
-- [ ] 00 setup: "labels take <…> per week of data per scenario; mapping A/B/B-VAR agreed: <…>."
+- [ ] 00 setup: "PR #25 merged; labels take <…> per week of data per scenario; mapping A/B/B-VAR agreed: <…>."
+- [ ] 10: "grid labels write the ML schema; one real day trains."
+- [ ] 11: "the live agent abstains on missing, stale or out-of-range readings."
+- [ ] 12: "hot-spot uses measured temperature when known."
 - [ ] 01: "weather for Sydney 2010–13 downloaded, SHA-256 <…>."
 - [ ] 02: "19 features; no-leak test passes."
 - [ ] 03: "v2 trains on four quarterly folds; per-quarter q05 violation rates <…>."
