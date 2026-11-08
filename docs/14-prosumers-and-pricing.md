@@ -68,36 +68,62 @@ Reading it:
 - New value comes only from (a) imbalance savings, capped at about 38–72 EUR/MWh, and (b) a battery shifting energy from midday to evening, about 88 EUR/MWh stored.
 - A prosumer without a battery cannot be made whole by a bonus: matching today's 133 needs about 118 EUR/MWh of savings at a 50% share, more than the whole estimated imbalance cost.
 
-## 5. What to charge, and how (proposal)
+## 5. What to charge, and how (proposal v2)
 
-Principle: **nobody is worse off than today; the gain goes to those who create the value.** The operator cannot dispatch prosumer batteries (section 6), so every part is opt-in and based on consent and prices.
+Principle: **nobody is worse off than today; the value created is shared.** The operator cannot dispatch prosumer batteries (section 6), so every part is opt-in and runs on consent and prices.
 
-**Who it is for.** Prosumers with a battery and a smart meter (SMI), about a third of residential prosumers and growing. Others stay on the regulated terms, unchanged. If the storage obligation turns out to be law, the addressable base grows.
+An earlier version of this section used a monthly "at least the regulated price" guarantee. The simulation in section 5b showed it fails: in months where the guarantee binds, shifting energy earns the prosumer nothing extra, so a battery owner gained only +2.4% and PPC captured about 94% of the value. It is replaced by the solar adder below.
 
-**What PPC pays for injected energy (settled monthly, shown as separate lines on the invoice, as PPC's offers already do):**
+**Who it is for.** Prosumers with a battery and a smart meter (SMI), about a third of residential prosumers and growing. Others stay on the regulated terms, unchanged (0% change for them and for PPC). If the storage obligation turns out to be law, the addressable base grows.
 
-1. **Hourly price.** Each exported kWh at the PZU price of its interval (15 minutes where the meter allows) minus the fee below, never below the floor.
-2. **No-regret guarantee.** At month end the prosumer receives at least `exported kWh × monthly weighted-average PZU`, the regulated price. For 200–400 kW this is probably a legal minimum anyway. If the hourly total is higher, the prosumer gets the hourly total.
-3. **Savings share (bonus).** A share (start at 50%) of the imbalance cost PPC measurably saved, paid pro rata to exported kWh of participants who share their data.
-4. **Floor** (minimum hourly price): start at 0, so the prosumer is never charged in negative-price hours. A positive floor is a PPC cost and only goes in if the savings fund it.
+**What PPC pays for injected energy (settled monthly, as separate invoice lines, as PPC's offers already do):**
+
+1. **Hourly price.** Each exported kWh at `max(0, PZU − fee)` for its interval (15 minutes where the meter allows). The prosumer is never charged in negative-price hours.
+2. **Solar adder.** A published per-kWh amount for each month, equal to that month's average PZU minus its generation-weighted PZU, computed from public data after the month ends. It is the same for everyone and does not depend on the prosumer's behaviour, so it does not dull the incentive to shift. It carries over today's regulated overpayment (about 50 EUR/MWh in March–August, about 0 in winter), so a prosumer who does not shift gets roughly today's money. Whether it is floored at 0 in winter months is a choice (January would be −14 EUR/MWh).
+3. **Savings share (bonus).** A share (start at 50%) of the imbalance cost PPC measurably saved, for participants who share their data and a day-ahead export schedule.
 
 **What the prosumer pays PPC.**
 
-1. **Aggregator fee** per exported MWh, covering admin and PPC's remaining imbalance risk. Two published levels: **lower if the prosumer shares data and a day-ahead export schedule, higher if not**, because PPC's imbalance is larger without it. The level is not guessed: the evaluation (spec phase 2) computes the break-even fee, and the sensitivity grid covers 10–40 EUR/MWh.
-2. **Nothing else:** no subscription, no access fee, no penalty for not taking part. A charge for deviating from a committed schedule (the imbalance spread times the deviation) is a later option.
+1. **Aggregator fee** per exported MWh, covering admin and PPC's remaining imbalance risk. Start at **30 EUR/MWh**: it splits the shifting value about evenly (section 5b). The range 20–40 is the negotiating room. A lower fee for prosumers who share data is possible. The evaluation (spec phase 2) will compute the break-even fee.
+2. **Nothing else:** no subscription, no access fee, no penalty for not taking part.
 
-**What PPC does not do.** It does not control inverters or batteries and does not change their software. It reads smart-meter data and, with consent, battery or inverter data, and it publishes the next day's prices and a recommended export window as information. The prosumer's own system, or the prosumer, decides. This answers the concerns in section 6.
+**What PPC does not do.** It does not control inverters or batteries and does not change their software. It reads smart-meter data and, with consent, battery or inverter data, and publishes the next day's prices and a recommended export window as information. The prosumer's own system, or the prosumer, decides. This answers the concerns in section 6.
 
-**Why this works for PPC.**
-- Per MWh, PPC pays the regulated price in the worst case (so no new loss) and the market value in the best case.
-- On shifted energy it earns the fee: about +9 EUR/MWh in the table.
-- Its real gain is the imbalance saving and the evening energy it does not have to buy.
-
-**What it does not fix.** The structural overpayment of about 49 EUR/MWh on unshifted midday injection (70 in sunny months) stays, because those prosumers keep the regulated price. Only regulation or batteries can change that. The pitch should say so.
-
-**Illustration for one battery (upper bound).** A 10 kWh battery with 9 kWh of usable range shifting 9 kWh a day earns about 79 EUR/MWh more than hourly export, roughly 0.7 EUR per day, about 180–260 EUR a year. Real value is lower: a household battery is usually worth more covering the home's own evening load, and the shifted export is only the surplus.
+**What it does not fix.** PPC still pays the adder, so its margin stays negative before imbalance (about −20% of the energy's value instead of −54%). The structural overpayment on unshifted midday energy remains for everyone not in the product. Only regulation can remove it. The pitch should say so.
 
 **Runway.** In 2030 quantity compensation ends and everyone sells at wholesale. Hourly settlement then becomes the default basis, and a product like this is ready.
+
+## 5b. Simulated year, one battery prosumer
+
+Stylised household: 10 kWp (13,000 kWh a year), 60% of generation exported (7,560 kWh), 10 kWh battery (9 kWh usable, 5 kW, 90% round trip) shifting exports from the cheapest solar hours to the best evening hours (18–22) each day. Prices: the 12 months in section 3. PPC's value of an exported kWh is the PZU price of its hour. Today's revenue is the regulated monthly-average price on the unshifted exports: **982 EUR a year**; PPC's margin before imbalance is **−343 EUR (−54% of the energy's value)**.
+
+Value created by the battery shifting: about **393 EUR a year**.
+
+| Design | Fee (EUR/MWh) | Prosumer revenue | Prosumer vs today | PPC margin before imbalance | PPC improvement (share of today's loss) | Split of the 393 (prosumer / PPC) |
+|---|---:|---:|---:|---:|---:|---:|
+| Guarantee (max of hourly and regulated), v1 | 10 | 1,006 | +2.4% | +27 | +370 (108%) | 6% / 94% |
+| Hourly + solar adder | 0 | 1,363 | +38.8% | −331 | +12 (4%) | 97% / 3% |
+| Hourly + solar adder | 10 | 1,296 | +32.0% | −264 | +79 (23%) | 80% / 20% |
+| Hourly + solar adder | 20 | 1,232 | +25.4% | −199 | +144 (42%) | 63% / 37% |
+| **Hourly + solar adder** | **30** | **1,169** | **+19.0%** | **−136** | **+207 (60%)** | **47% / 53%** |
+| Hourly + solar adder | 40 | 1,107 | +12.7% | −74 | +269 (78%) | 32% / 68% |
+| Hourly + solar adder | 50 | 1,046 | +6.5% | −14 | +329 (96%) | 16% / 84% |
+
+On top, the imbalance savings (an assumption until the evaluation measures it). Using a baseline imbalance cost of 55 EUR/MWh (middle of AFEER's 38–72) and a forecast that removes 50% of it: about 199 EUR a year saved, shared 50/50:
+
+- Prosumer: **+100 EUR, +10%** of today's revenue.
+- PPC: **+100 EUR**, another 29% of today's loss.
+- Range: with baseline 38–72 EUR/MWh and 30–70% removed, the prosumer's share is +4% to +19% of today's revenue.
+
+**Result at fee 30 plus the middle imbalance case:**
+
+| | Today | Proposed | Change |
+|---|---:|---:|---:|
+| Prosumer (battery owner) | 982 EUR | 1,269 EUR | **+29%** |
+| PPC margin before imbalance | −343 EUR | −36 EUR | loss reduced by about **90%** |
+| Prosumer without a battery | 982 EUR | 982 EUR | 0% (stays regulated) |
+
+Limits of this simulation: a synthetic generation shape (Romanian latitude, assumed monthly shares) with identical smooth days, so it ignores the correlation between sunny days and low prices (which would make the gain larger); a flat 60% export share; a greedy daily battery rule; no battery wear; shifted energy must be surplus (a home battery is often worth more covering its own evening load); regulated price taken as the simple monthly mean, not volume-weighted; PZU as PPC's value. Percentages are relative to one household. The script is `local-notes/pricing_sim.py` (not committed).
 
 ## 6. Operators cannot access prosumer batteries today (design constraint)
 
