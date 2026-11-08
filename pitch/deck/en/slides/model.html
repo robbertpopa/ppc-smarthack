@@ -1,0 +1,70 @@
+<section id="model" data-transition="fade" style="background:#F7F5EF;color:#12202F;font-family:'DM Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:24px">
+<div style="display:flex;flex-direction:column;gap:8px">
+<p style="font-size:24px;font-weight:700;letter-spacing:2px;color:#17706A">03 · THE MODEL</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">The highest safe limit, one hour ahead</h2>
+</div>
+<div style="display:flex;align-items:stretch;gap:16px">
+<div style="width:480px;display:flex;flex-direction:column;gap:14px">
+<p style="font-size:24px;font-weight:700;letter-spacing:2px;color:#55616D">14 INPUTS, ONLY WHAT WAS KNOWN</p>
+<div style="background:#DCE7F5;border-radius:14px;padding:12px 24px;display:flex;flex-direction:column;gap:4px">
+<p style="font-size:28px;font-weight:700">Net load</p>
+<p style="font-size:24px;line-height:1.4;color:#33424F">now, three earlier readings, yesterday at the same time</p>
+</div>
+<div style="background:#DCE7F5;border-radius:14px;padding:12px 24px;display:flex;flex-direction:column;gap:4px">
+<p style="font-size:28px;font-weight:700">Last safe limit</p>
+<p style="font-size:24px;line-height:1.4;color:#33424F">now and yesterday at the same time</p>
+</div>
+<div style="background:#DCE7F5;border-radius:14px;padding:12px 24px;display:flex;flex-direction:column;gap:4px">
+<p style="font-size:28px;font-weight:700">The sun</p>
+<p style="font-size:24px;line-height:1.4;color:#33424F">elevation at the target time and now</p>
+</div>
+<div style="background:#DCE7F5;border-radius:14px;padding:12px 24px;display:flex;flex-direction:column;gap:4px">
+<p style="font-size:28px;font-weight:700">Calendar</p>
+<p style="font-size:24px;line-height:1.4;color:#33424F">hour, day of year, weekend</p>
+</div>
+</div>
+<x-shape kind="arrow-right" style="align-self:center;width:56px;height:40px;background:#12202F"></x-shape>
+<div style="width:340px;display:flex;flex-direction:column;gap:14px;background:#2F5FA5;border-radius:20px;padding:32px">
+<p style="font-size:24px;font-weight:700;letter-spacing:2px;color:#FBE6C2">ML, TRAINED BY US</p>
+<h3 style="font-size:44px;font-weight:700;line-height:1.1;color:#F7F5EF">Quantile regression</h3>
+<p style="font-size:28px;line-height:1.4;color:#F7F5EF">gradient boosting (scikit-learn), five quantiles</p>
+<p style="font-size:24px;line-height:1.4;color:#DCE7F5">runs in our own code, no external API</p>
+<div style="flex:1"></div>
+<p style="font-size:24px;font-weight:500;color:#FBE6C2">src/ml/train.py</p>
+</div>
+<x-shape kind="arrow-right" style="align-self:center;width:56px;height:40px;background:#12202F"></x-shape>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px">
+<p style="font-size:24px;font-weight:700;letter-spacing:2px;color:#55616D">ONE-HOUR FORECAST (EXAMPLE)</p>
+<div style="position:relative;width:664px;height:470px">
+<svg aria-label="Five quantiles of the safe limit: q05 0.52, q10 0.55, q20 0.58, q50 0.64, q90 0.71, with a spread of 0.19 and the fixed limit at 0.36" width="664" height="470" viewBox="0 0 664 470">
+<line x1="170" y1="60" x2="170" y2="460" stroke="#8A95A0" stroke-width="4"/>
+<line x1="170" y1="117" x2="330" y2="117" stroke="#6F95C8" stroke-width="6"/>
+<line x1="170" y1="180" x2="330" y2="180" stroke="#6F95C8" stroke-width="6"/>
+<line x1="170" y1="234" x2="330" y2="234" stroke="#6F95C8" stroke-width="6"/>
+<line x1="170" y1="261" x2="330" y2="261" stroke="#6F95C8" stroke-width="6"/>
+<line x1="170" y1="288" x2="330" y2="288" stroke="#17706A" stroke-width="10"/>
+<circle cx="170" cy="117" r="9" fill="#2F5FA5"/>
+<circle cx="170" cy="180" r="9" fill="#2F5FA5"/>
+<circle cx="170" cy="234" r="9" fill="#2F5FA5"/>
+<circle cx="170" cy="261" r="9" fill="#2F5FA5"/>
+<circle cx="170" cy="288" r="12" fill="#17706A"/>
+<line x1="170" y1="432" x2="330" y2="432" stroke="#12202F" stroke-width="3" stroke-dasharray="12 8"/>
+<path d="M360 117 H376 V288 H360" fill="none" stroke="#12202F" stroke-width="3"/>
+</svg>
+<p style="position:absolute;left:0px;top:105px;width:150px;text-align:right;font-size:24px;line-height:24px">q90 · 0.71</p>
+<p style="position:absolute;left:0px;top:168px;width:150px;text-align:right;font-size:24px;line-height:24px">q50 · 0.64</p>
+<p style="position:absolute;left:0px;top:222px;width:150px;text-align:right;font-size:24px;line-height:24px">q20 · 0.58</p>
+<p style="position:absolute;left:0px;top:249px;width:150px;text-align:right;font-size:24px;line-height:24px">q10 · 0.55</p>
+<p style="position:absolute;left:0px;top:276px;width:150px;text-align:right;font-size:24px;line-height:24px;font-weight:700;color:#17706A">q05 · 0.52</p>
+<p style="position:absolute;left:0px;top:420px;width:150px;text-align:right;font-size:24px;line-height:24px">fixed · 0.36</p>
+<p style="position:absolute;left:396px;top:150px;width:268px;font-size:24px;line-height:1.4;font-weight:500">spread = q90 − q05 = 0.19</p>
+<p style="position:absolute;left:396px;top:262px;width:268px;font-size:24px;line-height:1.4;font-weight:700;color:#17706A">q05 = the limit applied</p>
+<p style="position:absolute;left:346px;top:420px;width:300px;font-size:24px;line-height:24px;color:#55616D">today’s fixed limit</p>
+</div>
+</div>
+</div>
+<p style="font-size:28px;line-height:1.4"><b>Why q05?</b> Errors do not cost the same: a limit that is too high causes violations, one that is too low wastes energy.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1300px;font-size:24px;color:#55616D">Chart values are the example in docs/09-contract.md. Inputs: artifacts/models/…/metadata.json</p>
+<p style="position:absolute;right:128px;bottom:64px;width:200px;text-align:right;font-size:24px;color:#55616D">07</p>
+<aside>The model predicts, one hour ahead, the highest export limit that will be safe, as a share of installed power. The inputs are the 14 columns in metadata.json: net load now and three earlier readings, yesterday at the same hour, the last safe limit, the sun’s elevation and the calendar. We use quantile regression (gradient boosting from scikit-learn) with five quantiles. The planner uses q05, the cautious quantile, because errors do not cost the same. The spread, q90 minus q05, is the uncertainty measure that abstention relies on. The chart values are the contract example, not a real forecast. Why a model and not only physics: physics needs the load and the sun of that moment, while the operator needs the limit in advance.</aside>
+</section>

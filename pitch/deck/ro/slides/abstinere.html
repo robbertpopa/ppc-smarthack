@@ -1,0 +1,50 @@
+<section id="abstinere" data-transition="fade" style="background:#F7F5EF;color:#12202F;font-family:'DM Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:28px">
+<div style="display:flex;flex-direction:column;gap:8px">
+<p style="font-size:24px;font-weight:700;letter-spacing:2px;color:#17706A">04 · ABSTINERE</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">Când nu e sigur, agentul nu ghicește</h2>
+</div>
+<div style="display:flex;align-items:center;gap:16px">
+<div style="width:640px;display:flex;flex-direction:column;gap:24px">
+<div style="background:#DCE7F5;border-radius:20px;padding:28px 32px;display:flex;flex-direction:column;gap:12px">
+<h3 style="font-size:36px;font-weight:700">Verificări de intrare</h3>
+<ul style="font-size:28px;line-height:1.4;color:#12202F">
+<li>consumul net lipsește</li>
+<li>ultima limită sigură lipsește</li>
+<li>citirea e mai veche de 60 de minute</li>
+<li>citirea e absurdă (peste 2× puterea instalată)</li>
+<li>este noapte</li>
+</ul>
+</div>
+<div style="background:#DCE7F5;border-radius:20px;padding:28px 32px;display:flex;flex-direction:column;gap:12px">
+<h3 style="font-size:36px;font-weight:700">Incertitudine</h3>
+<p style="font-size:28px;line-height:1.4">spread = q90 − q05 este mai mare decât pragul τ</p>
+<p style="font-size:24px;line-height:1.4;color:#33424F">τ se alege pe validare: cel mai mare prag cu cel mult 2% încălcări.</p>
+</div>
+</div>
+<x-shape kind="arrow-right" style="width:64px;height:44px;background:#12202F"></x-shape>
+<div style="width:260px;background:#12202F;border-radius:20px;padding:28px 24px;display:flex;flex-direction:column;gap:8px;align-items:center">
+<p style="font-size:36px;font-weight:700;line-height:1.15;text-align:center;color:#F7F5EF">Oricare e adevărată?</p>
+</div>
+<x-shape kind="arrow-right" style="width:64px;height:44px;background:#12202F"></x-shape>
+<div style="flex:1;display:flex;flex-direction:column;gap:24px">
+<div style="background:#FBE6C2;border:3px solid #9A5A00;border-radius:20px;padding:28px 32px;display:flex;flex-direction:column;gap:10px">
+<h3 style="font-size:36px;font-weight:700;color:#7A4600">DA · abstinere</h3>
+<ul style="font-size:28px;line-height:1.4">
+<li>limita fixă de 36%</li>
+<li>cazul intră în coada pentru om</li>
+<li>motivele merg în jurnal</li>
+</ul>
+</div>
+<div style="background:#D5ECE8;border:3px solid #17706A;border-radius:20px;padding:28px 32px;display:flex;flex-direction:column;gap:10px">
+<h3 style="font-size:36px;font-weight:700;color:#0F4F4A">NU · încrezător</h3>
+<ul style="font-size:28px;line-height:1.4">
+<li>limita = q05 × kWp</li>
+<li>încredere = 1 − spread / (2 × prag)</li>
+</ul>
+</div>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1300px;font-size:24px;color:#55616D">Sursă: src/ml/abstention.py, src/agent/planner.py. Pragul 2% este o alegere de confirmat de echipă.</p>
+<p style="position:absolute;right:128px;bottom:64px;width:200px;text-align:right;font-size:24px;color:#55616D">09</p>
+<aside>Cerința temei: agentul trebuie să poată spune „nu sunt sigur” și să trimită cazul la un om. Avem două feluri de motive. Primul: verificări de intrare, adică date lipsă, prea vechi sau imposibile, sau noapte. Al doilea: incertitudinea modelului, adică spread-ul q90 minus q05 peste un prag τ. Pragul nu e ales din burtă: îl alegem doar pe perioada de validare, ca cea mai mare valoare cu cel mult 2% încălcări. Dacă nici un prag nu atinge ținta, τ este minus infinit și agentul se abține mereu; nu relaxăm tăcut. Când se abține, aplică limita fixă de azi, deci nu e mai rău decât situația actuală. Echipa are un buget de 20 de cazuri pe zi, iar ecranul arată când e depășit.</aside>
+</section>

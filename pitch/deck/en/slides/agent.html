@@ -1,0 +1,68 @@
+<section id="agent" data-transition="fade" style="background:#F7F5EF;color:#12202F;font-family:'DM Sans', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:28px">
+<div style="display:flex;flex-direction:column;gap:8px">
+<p style="font-size:24px;font-weight:700;letter-spacing:2px;color:#17706A">02 · THE IDEA</p>
+<h2 style="font-size:64px;font-weight:700;line-height:1.1">One agent, four stages</h2>
+</div>
+<div style="position:relative;width:1664px;height:640px">
+<div style="position:absolute;left:0px;top:0px;width:360px;height:330px;background:#FFFDF8;border:2px solid #12202F;border-radius:20px;padding:24px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:center;gap:14px">
+<div style="width:52px;height:52px;border-radius:26px;background:#17706A;display:flex;align-items:center;justify-content:center"><p style="font-size:28px;font-weight:700;color:#F7F5EF">1</p></div>
+<h3 style="font-size:40px;font-weight:700">Perceive</h3>
+</div>
+<p style="font-size:26px;line-height:1.4;color:#55616D">Net load, time of day, the sun, the last safe limit</p>
+<div style="flex:1"></div>
+<p style="font-size:24px;font-weight:500;color:#2F5FA5">src/ml/features.py</p>
+</div>
+<div style="position:absolute;left:434px;top:0px;width:360px;height:330px;background:#FFFDF8;border:2px solid #12202F;border-radius:20px;padding:24px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:center;gap:14px">
+<div style="width:52px;height:52px;border-radius:26px;background:#2F5FA5;display:flex;align-items:center;justify-content:center"><p style="font-size:28px;font-weight:700;color:#F7F5EF">2</p></div>
+<h3 style="font-size:40px;font-weight:700">Estimate</h3>
+</div>
+<p style="font-size:26px;line-height:1.4;color:#55616D">Quantile model: the highest limit that will be safe in one hour</p>
+<div style="flex:1"></div>
+<p style="font-size:24px;font-weight:500;color:#2F5FA5">src/ml/train.py</p>
+</div>
+<div style="position:absolute;left:868px;top:0px;width:360px;height:330px;background:#FFFDF8;border:2px solid #12202F;border-radius:20px;padding:24px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:center;gap:14px">
+<div style="width:52px;height:52px;border-radius:26px;background:#F0A030;display:flex;align-items:center;justify-content:center"><p style="font-size:28px;font-weight:700;color:#12202F">3</p></div>
+<h3 style="font-size:40px;font-weight:700">Decide</h3>
+</div>
+<p style="font-size:26px;line-height:1.4;color:#55616D">A limit per house; if unsure, the fixed limit</p>
+<div style="flex:1"></div>
+<p style="font-size:24px;font-weight:500;color:#2F5FA5">src/agent/planner.py</p>
+</div>
+<div style="position:absolute;left:1302px;top:0px;width:360px;height:330px;background:#FFFDF8;border:2px solid #12202F;border-radius:20px;padding:24px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:center;gap:14px">
+<div style="width:52px;height:52px;border-radius:26px;background:#12202F;display:flex;align-items:center;justify-content:center"><p style="font-size:28px;font-weight:700;color:#F7F5EF">4</p></div>
+<h3 style="font-size:40px;font-weight:700">Act</h3>
+</div>
+<p style="font-size:26px;line-height:1.4;color:#55616D">The guard checks, a person approves, the plan is executed</p>
+<div style="flex:1"></div>
+<p style="font-size:24px;font-weight:500;color:#2F5FA5">src/agent/service.py</p>
+</div>
+<x-shape kind="arrow-right" style="position:absolute;left:369px;top:145px;width:56px;height:40px;background:#12202F"></x-shape>
+<x-shape kind="arrow-right" style="position:absolute;left:803px;top:145px;width:56px;height:40px;background:#12202F"></x-shape>
+<x-shape kind="arrow-right" style="position:absolute;left:1237px;top:145px;width:56px;height:40px;background:#12202F"></x-shape>
+<x-shape kind="arrow-up" style="position:absolute;left:594px;top:342px;width:40px;height:56px;background:#12202F"></x-shape>
+<x-shape kind="arrow-up" style="position:absolute;left:1462px;top:342px;width:40px;height:56px;background:#12202F"></x-shape>
+<div style="position:absolute;left:0px;top:410px;width:394px;height:230px;background:#12202F;border-radius:20px;padding:24px;display:flex;flex-direction:column;gap:8px">
+<h3 style="font-size:36px;font-weight:700;color:#F7F5EF">Digital twin</h3>
+<p style="font-size:26px;line-height:1.4;color:#A9B6C2">pandapower: deterministic physics, not ML. It does two things:</p>
+</div>
+<div style="position:absolute;left:434px;top:410px;width:360px;height:230px;background:#DCE7F5;border-radius:20px;padding:24px;display:flex;flex-direction:column;gap:8px">
+<h3 style="font-size:36px;font-weight:700;color:#12202F">Labels</h3>
+<p style="font-size:26px;line-height:1.4;color:#12202F">Computes the safe limit from history, for training.</p>
+</div>
+<div style="position:absolute;left:868px;top:410px;width:360px;height:230px;border:2px dashed #55616D;border-radius:20px;padding:24px;display:flex;flex-direction:column;gap:8px">
+<h3 style="font-size:36px;font-weight:700;color:#12202F">LLM, optional</h3>
+<p style="font-size:26px;line-height:1.4;color:#55616D">Only writes explanations from numbers. It never decides.</p>
+</div>
+<div style="position:absolute;left:1302px;top:410px;width:360px;height:230px;background:#FBE6C2;border-radius:20px;padding:24px;display:flex;flex-direction:column;gap:8px">
+<h3 style="font-size:36px;font-weight:700;color:#12202F">Guard</h3>
+<p style="font-size:26px;line-height:1.4;color:#12202F">Recomputes the station with the plan’s limits and blocks what violates.</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1300px;font-size:24px;color:#55616D">Perceive, estimate, decide, act: the theme’s requirement. Details: docs/08-parallel-plan.md</p>
+<p style="position:absolute;right:128px;bottom:64px;width:200px;text-align:right;font-size:24px;color:#55616D">05</p>
+<aside>There are not five agents, there is one with four stages, exactly what the theme asks for: perceive, estimate, decide, act. Perceive: the station’s net load, time of day, sun position, last safe limit. Estimate: our quantile model. Decide: the planner picks a limit per house and may abstain. Act: the guard checks, a person approves, the plan is executed and logged. Underneath is the digital twin of the grid, which is not ML: it produces the training labels and also checks every plan before execution. The LLM is optional and only rewrites explanations from numbers.</aside>
+</section>
