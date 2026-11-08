@@ -22,6 +22,7 @@ INPUT_CHECK_TEXT = {
     "missing_share_last": "The last known safe share is missing",
     "stale_input": "The newest reading is too old",
     "out_of_range_net": "A net reading is out of range",
+    "input_check_failed": "The input checks could not run",
 }
 
 
