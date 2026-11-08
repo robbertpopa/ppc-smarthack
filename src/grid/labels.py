@@ -22,8 +22,8 @@ import numpy as np
 import pandas as pd
 
 from src.ml import labels as labels_io
+from src.ml.dataset import TEST_START
 from src.ml.model_io import git_sha
-from src.ml.split import TEST_START
 
 from .ausgrid import day_profiles, half_hour_columns, house_readings, read_period, select_households
 from .twin import binding_limit, build_grid, null_share_reason, safe_share
@@ -213,7 +213,7 @@ def check_window(start, days, final_eval=False):
     """Refuse a run that reaches the sealed test year unless it is the final evaluation.
 
     ``start`` and ``days`` are Sydney local dates, as in the Ausgrid files. The test year
-    starts at ``src.ml.split.TEST_START`` (2012-07-01).
+    starts at ``src.ml.dataset.TEST_START`` (2013-03-01).
     """
     if start is None:
         raise ValueError("start is required")
@@ -339,7 +339,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--final-eval",
         action="store_true",
-        help="allow days from 2012-07-01 on (the sealed test year): final evaluation only",
+        help="allow days from 2013-03-01 on (test and demo periods): final evaluation only",
     )
     args = parser.parse_args()
     generate(

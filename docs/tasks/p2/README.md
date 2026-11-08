@@ -8,7 +8,7 @@ Read once before any task: [../../08-parallel-plan.md](../../08-parallel-plan.md
 These come from the PPC brief ([../../01-theme-and-criteria.md](../../01-theme-and-criteria.md)) and from our git rules. A task that breaks one is not done.
 
 1. **The model is ours and runs in our code.** Train with scikit-learn inside the repository. No external model API, no pretrained model used as is.
-2. **Separate test period, never tuned on.** Train until 2012-03-31, validation 2012-04-01 → 2012-06-30, test 2012-07-01 → 2013-06-30 (dates in Sydney local time). Thresholds and hyper-parameters are chosen on validation only.
+2. **Separate test and demo periods, never tuned on.** Train 2010-07-01 → 2013-02-28, test 2013-03-01 → 2013-04-30, demo 2013-05-01 → 2013-06-30 (Sydney local dates; built by `python -m src.ml.dataset`). Thresholds and hyper-parameters are chosen on a validation slice cut from the end of train, never on test or demo. The test period is scored once per model version; the demo period is used only for the demo evaluation. (Replaces the earlier rule that sealed all of 2012-13; the old `split.py` split is kept until the new ML replaces it.)
 3. **Every model is compared with a simple baseline** in the same table, computed by the same script.
 4. **No leakage from the future.** A feature for decision time `t` uses only records with `available_at <= t`. Tests check it.
 5. **Missing stays missing.** `null`/`NaN`, never 0.

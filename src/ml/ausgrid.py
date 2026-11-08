@@ -191,7 +191,7 @@ def _profiles_from_long(long: pd.DataFrame, rules: Counter) -> pd.DataFrame:
     return wide[OUTPUT_COLUMNS]
 
 
-def build_profiles(raw_dir: Path) -> pd.DataFrame:
+def build_profiles(raw_dir: Path, include_held_out: bool = False) -> pd.DataFrame:
     """All half-hourly files under ``raw_dir`` as one cleaned table, UTC.
 
     One row per house and half hour; kW, not kWh. ``interval_start`` is the start
@@ -199,7 +199,8 @@ def build_profiles(raw_dir: Path) -> pd.DataFrame:
     counts are in ``result.attrs["rules"]``. Whole missing days stay missing.
     """
     rules: Counter = Counter()
-    parts = [_profiles_from_long(parse_file(p), rules) for p in half_hourly_csvs(raw_dir)]
+    files = half_hourly_csvs(raw_dir, include_held_out)
+    parts = [_profiles_from_long(parse_file(p), rules) for p in files]
     if not parts:
         raise FileNotFoundError(f"no half-hourly Ausgrid CSV under {raw_dir}")
     out = pd.concat(parts, ignore_index=True)

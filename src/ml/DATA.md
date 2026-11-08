@@ -8,8 +8,8 @@ python -m src.ml.data download --from <dir|zip>  # offline: use a local copy
 python -m src.ml.data download --include-held-out  # final evaluation only, see below
 ```
 
-## Held-out test year
-`Solar home 2012-2013.csv` (July 2012 to June 2013) is the **test set** and is kept sealed until the final evaluation (rule 2 in `docs/tasks/p2/README.md`). `download` and `--from` skip it by default, so `DATA_DIR/raw/ausgrid/` and `profiles.parquet` contain 2010-11 and 2011-12 only. `--include-held-out` brings it back; use it only for the final evaluation run.
+## Held-out periods
+Decision 2026-11-08: all three years are used. Train 2010-07-01 to 2013-02-28, test 2013-03-01 to 2013-04-30, demo 2013-05-01 to 2013-06-30 (Sydney dates). Only the last four months stay unseen by training. `python -m src.ml.dataset` writes `train/test/demo.parquet` and `manifest.json` to `DATA_DIR/prepared/dataset/` for all 300 houses, with hourly weather per postcode joined on. The older file-level guard on `Solar home 2012-2013.csv` still applies to the legacy `profiles` command and `split.py`.
 
 Full disclosure: before this rule existed, the file was opened to check its format and its daylight-saving pattern, and the first `profiles` run included it. No model existed at that point and nothing was tuned on it. Its content is not described in this file beyond the layout the parser needs.
 

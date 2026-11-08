@@ -272,6 +272,42 @@ def load(house_ids: list[str] | None = None) -> pd.DataFrame:
     return out.sort_values("time", ignore_index=True)
 
 
+def load_prepared(house_ids: list[str] | None = None) -> pd.DataFrame:
+    """Same table as ``load``, from the hourly weather of the prepared dataset.
+
+    Uses ``DATA_DIR/raw/weather/weather_hourly_*.csv`` and the postcode of each house in
+    ``DATA_DIR/prepared/dataset/train.parquet`` (``src.ml.dataset``), so no geo table or
+    ``weather_hourly.parquet`` is needed.
+    """
+    from src.ml import dataset  # imported here: dataset imports modules that import this one
+
+    houses = pd.read_parquet(dataset.out_dir() / "train.parquet", columns=["house_id", "postcode"])
+    houses = houses.drop_duplicates("house_id")
+    if house_ids is not None:
+        wanted = set(house_ids)
+        unknown = sorted(wanted - set(houses["house_id"]))
+        if unknown:
+            raise ValueError(f"houses without a postcode in the dataset: {unknown[:5]}")
+        houses = houses[houses["house_id"].isin(wanted)]
+    weights = houses["postcode"].astype(str).value_counts()
+    frame = dataset.load_weather(dataset.raw_dir() / "weather")
+    frame = frame[frame["postcode"].isin(weights.index)]
+    missing = sorted(set(weights.index) - set(frame["postcode"]))
+    if missing:
+        raise ValueError(f"no weather for postcodes {missing[:5]}")
+    w = frame["postcode"].map(weights).astype("float64")
+    columns = {}
+    for source, name in MODEL_COLUMNS.items():
+        value = frame[source].astype("float64")
+        num = (value.fillna(0) * w).groupby(frame["hour"]).sum()
+        den = w.where(value.notna(), 0.0).groupby(frame["hour"]).sum()
+        columns[name] = (num / den).where(den > 0)
+    out = pd.DataFrame(columns).rename_axis("time").reset_index()
+    out["time"] = pd.to_datetime(out["time"], utc=True)
+    out["available_at"] = out["time"] + KNOWN_AFTER
+    return out.sort_values("time", ignore_index=True)
+
+
 def describe(out: pd.DataFrame) -> None:
     hours = out.groupby("postcode", observed=True).size()
     print(

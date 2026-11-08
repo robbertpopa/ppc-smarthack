@@ -26,17 +26,42 @@ from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.metrics import mean_pinball_loss
 
 from src.eval.metrics import evaluate, load_profiles, surplus_kw
-from src.ml import abstention, baselines, calibration, features, model_io, online_calibration
+from src.ml import (
+    abstention,
+    baselines,
+    calibration,
+    dataset,
+    features,
+    model_io,
+    online_calibration,
+)
 from src.ml import labels as labels_io
 from src.ml import weather as weather_io
 from src.ml.config import crew_cases_per_day, violation_target
 from src.ml.explain import build_artifacts, save_artifacts
-from src.ml.split import FOLD_NAMES, daylight, fit_rows, folds, oos, split
+from src.ml.split import (
+    DS_FIT_END,
+    DS_FOLD_NAMES,
+    FOLD_NAMES,
+    Y2_FIT_END,
+    Y2_FOLD_NAMES,
+    Y2_VAL_START,
+    dataset_fit_rows,
+    dataset_fold,
+    daylight,
+    fit_rows,
+    folds,
+    oos,
+    split,
+)
 
 QUANTILES: tuple[float, ...] = (0.05, 0.10, 0.20, 0.50, 0.90)
 MODEL_VERSION_V1 = "safe-cap-qgb-v1"
 MODEL_VERSION_V2 = "safe-cap-qgb-v2"
-VERSIONS = (MODEL_VERSION_V1, MODEL_VERSION_V2)
+MODEL_VERSION_V2_DATASET = "safe-cap-qgb-v2-dataset"
+MODEL_VERSION_V2_2Y = "safe-cap-qgb-v2-2y"  # first two years only, 2010-07 to 2012-06
+PREPARED_VERSIONS = (MODEL_VERSION_V2_DATASET, MODEL_VERSION_V2_2Y)
+VERSIONS = (MODEL_VERSION_V1, MODEL_VERSION_V2, *PREPARED_VERSIONS)
 MODEL_VERSION = MODEL_VERSION_V1  # what train(), the evaluation and the API use unless told
 BASE_PARAMS = {"max_iter": 300, "learning_rate": 0.05, "max_leaf_nodes": 31, "min_samples_leaf": 40}
 GRID: list[dict] = [
@@ -89,10 +114,10 @@ def _economics(labels, part, share, surplus, kwp):
     return policy, baselines.table(labels, surplus, kwp, part)
 
 
-def _optional_surplus(scenario: str):
+def _optional_surplus(scenario: str, prepared: bool = False):
     try:
         houses = labels_io.load_station_houses(scenario)
-        profiles = load_profiles(houses)
+        profiles = load_profiles(houses, dataset.out_dir() / "train.parquet" if prepared else None)
     except (FileNotFoundError, OSError) as error:
         print(f"warning: {scenario}: export numbers skipped ({error})", file=sys.stderr)
         return None, None
@@ -100,11 +125,12 @@ def _optional_surplus(scenario: str):
     return (surplus, houses.set_index("house_id")["kwp"]) if len(surplus) else (None, None)
 
 
-def _optional_weather(scenario: str):
+def _optional_weather(scenario: str, prepared: bool = False):
     """The station's hourly weather, or None (the weather features are then NaN and unused)."""
     try:
         houses = labels_io.load_station_houses(scenario)
-        return weather_io.load(sorted(houses["source_house_id"].astype(str).unique()))
+        load = weather_io.load_prepared if prepared else weather_io.load
+        return load(sorted(houses["source_house_id"].astype(str).unique()))
     except (FileNotFoundError, OSError, ValueError, KeyError) as error:
         print(f"warning: {scenario}: training without weather ({error})", file=sys.stderr)
         return None
@@ -259,6 +285,7 @@ def train(
     save: bool = True,
     out_root=None,
     version: str = MODEL_VERSION,
+    use_weather: bool = True,
 ) -> dict:
     """Train, report on out-of-sample data and save. Returns the report.
 
@@ -274,7 +301,8 @@ def train(
     """
     if version not in VERSIONS:
         raise ValueError(f"unknown model version {version!r}, expected one of {VERSIONS}")
-    folded = version == MODEL_VERSION_V2
+    prepared = version in PREPARED_VERSIONS  # the split of src.ml.dataset
+    folded = version == MODEL_VERSION_V2 or prepared
     grid = GRID if grid is None else grid
     labels = labels_io.load(scenario)
     stations = labels["pt_id"].unique()
@@ -283,9 +311,18 @@ def train(
     pt_id = stations[0]
 
     # v1 stays as it was trained: no weather. v2 uses the weather when it has been downloaded.
-    weather = _optional_weather(scenario) if folded else None
+    weather = _optional_weather(scenario, prepared) if folded and use_weather else None
     rows = training_rows(labels, weather)
-    if folded:
+    fold_names = FOLD_NAMES
+    if prepared:  # validate on the end of the fit period, then refit on all of it
+        two_years = version == MODEL_VERSION_V2_2Y
+        fold_names = Y2_FOLD_NAMES if two_years else DS_FOLD_NAMES
+        bounds = {"val_start": Y2_VAL_START, "fit_end": Y2_FIT_END} if two_years else {}
+        pairs = [dataset_fold(rows, **bounds)]
+        label_pairs = [dataset_fold(labels, **bounds)]
+        fit_set = dataset_fit_rows(rows, bounds.get("fit_end", DS_FIT_END))
+        val_rows, val_labels = pairs[0][1], label_pairs[0][1]
+    elif folded:
         pairs = folds(rows)
         label_pairs = folds(labels)
         fit_set, val_rows, val_labels = fit_rows(rows), oos(rows), oos(labels)
@@ -308,7 +345,7 @@ def train(
     else:
         models = best["models"][0]
 
-    surplus, kwp = _optional_surplus(scenario)
+    surplus, kwp = _optional_surplus(scenario, prepared)
     offset, limit = (
         _choose_offset(val_rows, val_labels, pred, surplus, kwp) if folded else (None, None)
     )
@@ -326,7 +363,7 @@ def train(
         report["folds"] = [
             _fold_report(name, fit, valid, vlabels, fold_pred, surplus, kwp)
             for name, (fit, valid), (_, vlabels), fold_pred in zip(
-                FOLD_NAMES, pairs, label_pairs, best["fold_pred"], strict=True
+                fold_names, pairs, label_pairs, best["fold_pred"], strict=True
             )
         ]
 
@@ -414,7 +451,13 @@ def main(argv: list[str] | None = None) -> None:
         "--model-version",
         default=MODEL_VERSION,
         choices=VERSIONS,
-        help="v2 chooses the settings on four quarterly folds over 2011-07 to 2012-06",
+        help=(
+            "v2 chooses the settings on four quarterly folds over 2011-07 to 2012-06; "
+            "v2-dataset fits before 2013-01 and validates on 2013-01 to 2013-02"
+        ),
+    )
+    parser.add_argument(
+        "--no-weather", action="store_true", help="v2 versions: leave the weather features out"
     )
     args = parser.parse_args(argv)
     names = list(labels_io.SCENARIOS) if args.scenario == "all" else [args.scenario]
@@ -423,7 +466,7 @@ def main(argv: list[str] | None = None) -> None:
         if not (labels_io.labels_path(name) / "labels.parquet").exists():
             print(f"skip {name}: no labels file", file=sys.stderr)
             continue
-        report = train(name, args.seed, version=args.model_version)
+        report = train(name, args.seed, version=args.model_version, use_weather=not args.no_weather)
         done += 1
         print(
             f"{name} ({report['pt_id']}): trained on {report['n_train']} rows, "
