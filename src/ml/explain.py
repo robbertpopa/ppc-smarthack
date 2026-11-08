@@ -164,8 +164,24 @@ def _names(models: dict) -> list[str]:
     return list(models[0.05].feature_names_in_)
 
 
-def explain_with(models: dict, art: dict, feats: dict) -> dict:
-    """Top factors and similar cases for one decision (pure: no disk, no clock)."""
+def offset_factor(c: float | None) -> dict | None:
+    """The online offset as a factor of its own, or None when there is none to report.
+
+    ``c > 0`` lowers the limit below ``q05`` (recent limits were too high); ``c < 0`` raises
+    it (recent limits were all safe). ``points`` is the size in percentage points of the
+    kWp share.
+    """
+    if c is None or not np.isfinite(c) or round(abs(c) * 100) == 0:
+        return None
+    return {"c": float(c), "points": round(abs(float(c)) * 100), "lowers": bool(c > 0)}
+
+
+def explain_with(models: dict, art: dict, feats: dict, offset_c: float | None = None) -> dict:
+    """Top factors and similar cases for one decision (pure: no disk, no clock).
+
+    ``offset_c`` is the current online offset of the station (model v2); it is returned as
+    ``offset`` next to the model's own factors, because the limit sent is ``q05 - c``.
+    """
     names = _names(models)
     target = pd.Timestamp(feats["target_start"]).tz_convert("UTC")
     decision = pd.Timestamp(feats["decision_time"]).tz_convert("UTC")
@@ -193,6 +209,7 @@ def explain_with(models: dict, art: dict, feats: dict) -> dict:
         "figures": figures,
         "missing": missing,
         "q05": actual,
+        "offset": offset_factor(offset_c),
         "similar": _similar(art, values, decision, names),
     }
 
@@ -237,7 +254,10 @@ def _similar(art: dict, values: dict, decision: pd.Timestamp, names: list[str]) 
 
 
 def explain(feats: dict) -> dict:
-    """``{"figures": [...], "similar": [...], "missing": [...], "q05": float}``."""
+    """``{"figures": [...], "similar": [...], "missing": [...], "q05": float, "offset": ...}``.
+
+    ``offset`` is None for v1 and whenever the offset rounds to zero points.
+    """
     from src.ml.predict import _load, model_version
 
     pt_id = feats.get("pt_id")
@@ -247,9 +267,11 @@ def explain(feats: dict) -> dict:
         if feats.get(key) is None:
             raise ValueError(f"features must include {key}")
     version = model_version()
-    models, _ = _load(version, pt_id)
+    models, meta = _load(version, pt_id)
     folder = model_io.model_dir(version, pt_id)
-    return explain_with(models, model_io.cached("explain", folder, load_artifacts), feats)
+    # the live offset if the caller tracks one, else the start value the model was saved with
+    offset_c = feats.get("offset_c", meta.get("offset", {}).get("c_start"))
+    return explain_with(models, model_io.cached("explain", folder, load_artifacts), feats, offset_c)
 
 
 def clear_cache() -> None:

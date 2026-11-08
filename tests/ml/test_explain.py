@@ -154,3 +154,28 @@ def test_explanation_data_from_an_older_version_asks_for_a_retrain(tmp_path, toy
         explain_module.load_artifacts(tmp_path)
     explain_module.save_artifacts(toy[1], tmp_path)  # current data loads fine
     assert "in_sample" in explain_module.load_artifacts(tmp_path)["index"].columns
+
+
+def test_the_offset_is_reported_as_its_own_factor(toy):
+    plain = explain_module.explain_with(*toy, feats(net_now=1.0))
+    assert plain["offset"] is None  # v1, or an offset that rounds to zero points
+    lowered = explain_module.explain_with(*toy, feats(net_now=1.0), offset_c=0.043)
+    assert lowered["offset"] == {"c": 0.043, "points": 4, "lowers": True}
+    raised = explain_module.explain_with(*toy, feats(net_now=1.0), offset_c=-0.02)
+    assert raised["offset"]["lowers"] is False and raised["offset"]["points"] == 2
+    assert explain_module.explain_with(*toy, feats(net_now=1.0), offset_c=0.001)["offset"] is None
+    assert lowered["figures"] == plain["figures"] and lowered["q05"] == plain["q05"]
+
+
+def test_v2_explanations_carry_the_live_offset_or_the_saved_start_value(trained, monkeypatch):
+    from src.ml import model_io
+
+    train.train("A", grid=FAST, version=train.MODEL_VERSION_V2)
+    monkeypatch.setenv("MODEL_VERSION", train.MODEL_VERSION_V2)
+    predict_module.clear_cache()
+    feats_ = features.build(trained, pd.Timestamp("2012-05-10 00:00", tz="UTC"))
+    saved = model_io.load_metadata(train.MODEL_VERSION_V2, "PT-A")["offset"]["c_start"]
+    assert explain_function(feats_)["offset"] == explain_module.offset_factor(saved)
+    live = explain_function({**feats_, "offset_c": 0.1})["offset"]
+    assert live == {"c": 0.1, "points": 10, "lowers": True}
+    assert "offset" in explain_function(feats_) and explain_function(feats_)["figures"]

@@ -84,6 +84,14 @@ def add_factors(
             f"the cautious limit by {effect} points"
         )
     text = explanation.text + " Main factors: " + "; ".join(parts) + "."
+    offset = factors.get("offset")
+    if offset:
+        figures.append(Figure(name="offset_points", value=offset["points"]))
+        text += (
+            f" The online offset {'lowers' if offset['lowers'] else 'raises'} the limit by "
+            f"{offset['points']} points because recent limits were "
+            f"{'too high' if offset['lowers'] else 'all safe'}."
+        )
     similar = factors.get("similar") or []
     if similar:
         realised = sorted(round(c["safe_share"] * 100) for c in similar)
