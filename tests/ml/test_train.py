@@ -87,3 +87,78 @@ def test_unknown_labels_are_an_error(env):
 
 def test_hyperparameter_search_has_at_most_four_settings():
     assert len(train.GRID) <= 4
+
+
+V2 = train.MODEL_VERSION_V2
+TWO = [FAST[0], {**FAST[0], "max_leaf_nodes": 7, "min_samples_leaf": 80}]
+
+
+@pytest.fixture(scope="module")
+def report_v2(env):
+    return train.train("A", grid=TWO, version=V2)
+
+
+def test_v1_is_still_the_default_version_and_loads(env, report):
+    assert train.MODEL_VERSION == "safe-cap-qgb-v1"
+    _, meta = model_io.load("safe-cap-qgb-v1", "PT-A")
+    assert meta["model_version"] == "safe-cap-qgb-v1" and "folds" not in meta
+
+
+def test_v2_reports_each_quarter(env, report_v2):
+    _, meta = model_io.load(V2, "PT-A")
+    assert meta["model_version"] == V2
+    names = [fold["name"] for fold in meta["folds"]]
+    assert names == list(train.FOLD_NAMES) and len(names) == 4
+    for fold in meta["folds"]:
+        assert fold["n_train"] > 0 and fold["n_val"] > 0
+        assert set(fold["pinball"]) == {str(q) for q in train.QUANTILES}
+        assert 0.0 <= fold["q05_coverage"] <= 1.0
+        assert 0.0 <= fold["q05_violation_rate"] <= 1.0
+    sizes = [fold["n_train"] for fold in meta["folds"]]
+    assert sizes == sorted(sizes)  # each quarter has more history than the last
+
+
+def test_v2_picks_the_setting_with_the_lowest_mean_pinball(env, report_v2):
+    _, meta = model_io.load(V2, "PT-A")
+    search = meta["hyperparameter_search"]
+    assert len(search) == len(TWO)
+    best = min(search, key=lambda item: item["mean_pinball_oos"])
+    assert meta["hyperparameters"] == best["params"]
+
+
+def test_v2_refits_on_the_whole_fit_period_and_never_reads_the_test_year(env, report_v2):
+    _, meta = model_io.load(V2, "PT-A")
+    assert pd.Timestamp(meta["train_period"][1]) < pd.Timestamp("2012-06-30 14:00", tz="UTC")
+    assert pd.Timestamp(meta["val_period"][0]) >= pd.Timestamp("2011-06-30 14:00", tz="UTC")
+    assert pd.Timestamp(meta["val_period"][1]) < pd.Timestamp("2012-06-30 14:00", tz="UTC")
+    # the final models saw the last quarter too: more rows than the largest fold's history
+    assert meta["validation"]["n_train"] > meta["folds"][-1]["n_train"]
+
+
+def test_v2_saves_the_out_of_sample_predictions(env, report_v2):
+    path = model_io.model_dir(V2, "PT-A") / "oos_predictions.parquet"
+    oos = pd.read_parquet(path)
+    assert {"target_start", "fold", "safe_share", "q05", "q10", "q20", "q50", "q90"} <= set(
+        oos.columns
+    )
+    assert sorted(oos["fold"].unique()) == [0, 1, 2, 3]
+    assert (oos[["q05", "q10", "q20", "q50", "q90"]].diff(axis=1).dropna(axis=1) >= 0).all().all()
+    assert oos["target_start"].max() < pd.Timestamp("2012-06-30 14:00", tz="UTC")
+    assert len(oos) == report_v2["n_val"]
+
+
+def test_v2_same_seed_gives_byte_identical_metadata(env, report_v2):
+    path = model_io.model_dir(V2, "PT-A") / "metadata.json"
+    first = path.read_bytes()
+    train.train("A", grid=TWO, version=V2)
+    assert path.read_bytes() == first
+
+
+def test_v2_leaves_the_v1_model_alone(env, report, report_v2):
+    assert model_io.model_dir(V2, "PT-A") != model_io.model_dir(train.MODEL_VERSION, "PT-A")
+    assert (model_io.model_dir(train.MODEL_VERSION, "PT-A") / "metadata.json").exists()
+
+
+def test_unknown_version_is_an_error(env):
+    with pytest.raises(ValueError, match="unknown model version"):
+        train.train("A", grid=FAST, version="safe-cap-qgb-v9")

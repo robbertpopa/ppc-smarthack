@@ -91,7 +91,7 @@ python -m src.ml.train --scenario A
 ```bash
 python -m src.ml.forecast_pv_load --scenario A
 ```
-These take about 45 s and 40 s. The models and `metadata.json` go to `ARTIFACT_URI/models/<version>/PT-A/`.
+These take about 45 s and 40 s. Add `--model-version safe-cap-qgb-v2` to the first one to choose the settings on four quarterly folds over 2011-07 → 2012-06 instead of the three validation months (about 3 minutes: 80 model fits; the default stays `safe-cap-qgb-v1`). The models and `metadata.json` go to `ARTIFACT_URI/models/<version>/PT-A/`.
 
 ### 8. The agent on the trained model
 ```bash

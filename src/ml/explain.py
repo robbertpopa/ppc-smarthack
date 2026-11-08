@@ -78,8 +78,14 @@ def global_importance_of(model, X_val: pd.DataFrame, y_val, seed: int = 0) -> pd
     )
 
 
-def build_artifacts(models: dict, train_rows: pd.DataFrame, val_rows: pd.DataFrame, seed: int = 0):
-    """Everything ``explain`` needs besides the models; written next to them by ``save``."""
+def build_artifacts(
+    models: dict, train_rows: pd.DataFrame, val_rows: pd.DataFrame, seed: int = 0, val_q05=None
+):
+    """Everything ``explain`` needs besides the models; written next to them by ``save``.
+
+    ``val_q05``: out-of-sample ``q05`` of the validation rows, when ``models`` were fitted
+    on them too (v2 refits on everything). Without it ``q05`` is predicted by ``models``.
+    """
     from src.ml.train import predict_quantiles
 
     names = feature_set.FEATURES
@@ -93,6 +99,8 @@ def build_artifacts(models: dict, train_rows: pd.DataFrame, val_rows: pd.DataFra
     past = pd.concat([train_rows, val_rows], ignore_index=True)
     index = past[[*names, "target_start", "safe_share"]].copy()
     index["q05"] = predict_quantiles(models, past[names])[:, 0]
+    if val_q05 is not None:
+        index.loc[index.index[len(train_rows) :], "q05"] = np.asarray(val_q05)
     # The models were fitted on the training rows, so their q05 there is an in-sample
     # prediction, tighter than on new decisions. It is only shown for validation cases.
     index["in_sample"] = [True] * len(train_rows) + [False] * len(val_rows)
