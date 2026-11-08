@@ -15,6 +15,7 @@ from src.common.config import Settings
 from src.common.contract import StationConfig
 from src.common.mock_data import load_mock
 from src.grid.agent_guard import make_grid_guard
+from src.pricing.source import price_source_for
 
 settings = Settings.from_env()
 _station = load_mock("station", StationConfig)
@@ -31,5 +32,6 @@ app = create_app(
         log=open_log(settings.log_uri),
         guard=make_grid_guard(_station, _source, _grid_config),
         source=_source,
+        prices=price_source_for(settings),
     ),
 )

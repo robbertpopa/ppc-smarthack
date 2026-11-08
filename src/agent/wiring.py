@@ -5,6 +5,7 @@ from src.agent.sources import make_source
 from src.common.config import Settings
 from src.common.contract import StationConfig
 from src.common.mock_data import load_mock
+from src.pricing.source import price_source_for
 
 
 def build_service(settings: Settings) -> AgentService:
@@ -21,10 +22,12 @@ def build_service(settings: Settings) -> AgentService:
             guard=make_grid_guard(station, source),
             source=source,
             thresholds=threshold,
+            prices=price_source_for(settings),
         )
     return AgentService(
         station=load_mock("station", StationConfig),
         log=open_log(settings.log_uri),
         guard=stub_guard,
         source=make_source(settings),
+        prices=price_source_for(settings),
     )
